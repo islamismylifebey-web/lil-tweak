@@ -34,7 +34,7 @@ Execution runner connected: No
 
 ## Verification
 
-- 247 unit, integration, API, repository, migration, concurrency, isolation-contract, and
+- 269 unit, integration, API, repository, migration, concurrency, isolation-contract, and
   adversarial tests pass.
 - Ruff lint and formatting checks pass.
 - All pre-Phase 7 deterministic tests and offline evaluation suites remain green.
@@ -76,10 +76,13 @@ memory, PID, disk, or inode enforcement; active cancellation/emergency terminati
 dispatch; remotely signed runner attestation; host mandatory-access-control policy; or
 crash-recovered orphan cleanup. Those are connection gates, not deferred documentation.
 
-Committed-tree ingestion is bounded by file, byte, output, and aggregate time ceilings, but the
-current reader starts per-object Git subprocesses. Large repositories therefore fail closed at
-the deadline rather than offering optimized batch ingestion; a persistent `git cat-file` batch
-reader is the next performance optimization.
+Committed-tree ingestion remains bounded by file, byte, output, and aggregate time ceilings. Each
+independent verification pass now inventories the tree, admits every declared object size through
+one fresh `git cat-file --batch-check` process, and only then streams exact blob bodies through one
+fresh `git cat-file --batch` process. The reader validates every response header, size, delimiter,
+object type, object ID, and recomputed Git object hash under one fixed deadline. It never caches
+content or trust decisions across the two passes. Local paired evidence is recorded in
+`docs/phase7-batch-ingestion-evidence.md`.
 
 No production behavior was enabled. A future dedicated runner must pass the adversarial
 qualification in `docs/phase7-security-boundaries.md` before the server may report

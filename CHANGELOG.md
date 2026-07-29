@@ -10,6 +10,11 @@
 - Added additive authenticated repository verification API routes.
 - Added migration, concurrency, replay, tamper, source-integrity, runner-contract, API, and
   compatibility tests.
+- Replaced per-object snapshot subprocesses with bounded two-stage `git cat-file --batch-check`
+  admission and `git cat-file --batch` content streaming while retaining two independent
+  verification passes.
+- Added a reproducible offline snapshot benchmark with source identity, raw samples, and direct
+  snapshot process counts.
 - Required at least one mandatory verification check at the recipe, plan, and outcome-gate
   boundaries.
 - Preserved cancellation, emergency-stop, and expiry truth across concurrent failure paths.
