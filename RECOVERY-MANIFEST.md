@@ -2,7 +2,7 @@
 
 Date: 2026-07-29 (America/Chicago)  
 Project: Lil Tweak the Super Geek  
-Release: Creator Model Foundation 0.5.0
+Release: Creator Model Foundation 0.6.0
 
 ## Provenance
 
@@ -17,6 +17,8 @@ Release: Creator Model Foundation 0.5.0
   `7b30469b2e95093f5b42a69265e0d553cee3d1df`
 - Creator Model implementation commit:
   `e9b09fc245bb593170abf2c255b2b655df47e2da`
+- Bounded live Creator implementation commit:
+  `0aab1700b6796c2e23df45752c95457c8bcdce08`
 
 The final packaging commit may be newer because this manifest is itself included in the release.
 Use the Git bundle’s `main` head as the authoritative complete release revision.
@@ -26,16 +28,23 @@ Use the Git bundle’s `main` head as the authoritative complete release revisio
 - Dependency lock: frozen and synchronized
 - Ruff lint: passed
 - Ruff formatting: passed
-- Tests: 174 passed
+- Tests: 190 passed
 - Legacy workflow evaluations: 15 passed
 - Offline hostile cases: 2 passed
 - Offline engineering cases: 3 passed
 - Creator routing simulations: 160 passed
 - Creator signed-brief tampering probes: 16 rejected
+- Phase 6 offline simulations: 120 passed
+- Phase 6 ready fixture runs: 80 passed
+- Phase 6 high-stakes proposals: 20 blocked
+- Phase 6 tampered live routes: 20 rejected
 - Phase 3 smoke: passed
 - Creator smoke: passed
-- Paid model calls: 0
-- API keys created or stored: 0
+- Paid model attempts: 2, each separately approved and limited to one request
+- Completed paid work orders: 0; both attempts failed closed on structured-output truncation
+- Aggregate approved model-spend ceilings: $0.07
+- Paid tool or sandbox calls: 0
+- API key: present only in ignored `.env.local`; excluded from Git and release artifacts
 - Real execution or deployment: 0
 
 ## Restore from the source ZIP
@@ -48,6 +57,7 @@ Use the Git bundle’s `main` head as the authoritative complete release revisio
 6. Run `uv run python evals/run_creator_benchmark.py`.
 7. Run `uv run python main.py smoke`.
 8. Run `uv run python main.py creator-smoke`.
+9. Run `uv run python evals/run_phase6_offline.py`.
 
 ## Restore from the Git bundle
 
