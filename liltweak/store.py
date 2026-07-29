@@ -10,8 +10,14 @@ import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, ClassVar
 
+from .execution_contract import (
+    ExecutionOutcomeRecord,
+    ExecutionRecord,
+    ExecutionStatus,
+    RepositoryExecutionApproval,
+)
 from .live_contract import (
     LiveProposalRecord,
     LiveProposalStatus,
@@ -52,6 +58,269 @@ def canonical_json(value: Any) -> str:
 
 
 class SQLiteStore:
+    SCHEMA_VERSION = 2
+    _BASELINE_SCHEMA_SHA256 = "541a7bda5a1a83515402badbbfa47c659f9e6d6c6f7ab25da917427875df0901"
+    _BASELINE_TABLES = frozenset(
+        {
+            "approvals",
+            "artifacts",
+            "budget_reservations",
+            "creator_execution_approvals",
+            "creator_learning",
+            "creator_live_approvals",
+            "creator_live_proposals",
+            "creator_live_results",
+            "creator_live_spend",
+            "evidence",
+            "evidence_anchors",
+            "idempotency",
+            "jobs",
+            "operation_idempotency",
+            "planning_claims",
+            "system_state",
+        }
+    )
+    _PHASE7_TABLES = frozenset(
+        {
+            "creator_repository_execution_approvals",
+            "creator_repository_execution_idempotency",
+            "creator_repository_execution_results",
+            "creator_repository_executions",
+        }
+    )
+    _REQUIRED_COLUMNS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "approvals": ("id", "job_id", "status", "record_json", "created_at"),
+        "artifacts": (
+            "id",
+            "job_id",
+            "status",
+            "record_json",
+            "storage_key",
+            "nonce_b64",
+            "created_at",
+        ),
+        "budget_reservations": (
+            "job_id",
+            "organization_id",
+            "amount_usd",
+            "created_at",
+        ),
+        "creator_execution_approvals": (
+            "id",
+            "plan_digest",
+            "signature",
+            "approved_by",
+            "status",
+            "expires_at",
+            "created_at",
+            "consumed_at",
+        ),
+        "creator_learning": (
+            "id",
+            "problem_signature",
+            "intervention_digest",
+            "outcome_digest",
+            "record_json",
+            "record_hash",
+            "created_at",
+        ),
+        "creator_live_approvals": (
+            "id",
+            "proposal_id",
+            "proposal_digest",
+            "signature",
+            "status",
+            "expires_at",
+            "created_at",
+            "consumed_at",
+        ),
+        "creator_live_proposals": (
+            "id",
+            "proposal_digest",
+            "status",
+            "record_json",
+            "expires_at",
+            "created_at",
+            "updated_at",
+        ),
+        "creator_live_results": (
+            "proposal_id",
+            "result_digest",
+            "result_json",
+            "created_at",
+        ),
+        "creator_live_spend": (
+            "id",
+            "proposal_id",
+            "organization_id",
+            "model",
+            "reserved_usd",
+            "actual_usd",
+            "input_tokens",
+            "output_tokens",
+            "created_at",
+            "reconciled_at",
+        ),
+        "creator_repository_execution_approvals": (
+            "id",
+            "execution_id",
+            "job_id",
+            "plan_digest",
+            "signature",
+            "approved_by",
+            "status",
+            "expires_at",
+            "created_at",
+            "consumed_at",
+        ),
+        "creator_repository_execution_idempotency": (
+            "organization_id",
+            "idempotency_key",
+            "request_hash",
+            "execution_id",
+            "created_at",
+        ),
+        "creator_repository_execution_results": (
+            "execution_id",
+            "result_digest",
+            "verifier_signature",
+            "result_json",
+            "created_at",
+        ),
+        "creator_repository_executions": (
+            "id",
+            "job_id",
+            "organization_id",
+            "project_id",
+            "plan_digest",
+            "status",
+            "attempt_count",
+            "record_json",
+            "expires_at",
+            "created_at",
+            "updated_at",
+        ),
+        "evidence": (
+            "id",
+            "job_id",
+            "sequence",
+            "event_type",
+            "payload_json",
+            "previous_hash",
+            "record_hash",
+            "created_at",
+        ),
+        "evidence_anchors": (
+            "job_id",
+            "sequence",
+            "head_hash",
+            "signature",
+            "updated_at",
+        ),
+        "idempotency": (
+            "organization_id",
+            "idempotency_key",
+            "request_hash",
+            "job_id",
+            "created_at",
+        ),
+        "jobs": (
+            "id",
+            "organization_id",
+            "project_id",
+            "status",
+            "record_json",
+            "created_at",
+            "updated_at",
+        ),
+        "operation_idempotency": (
+            "organization_id",
+            "operation_scope",
+            "idempotency_key",
+            "request_hash",
+            "result_id",
+            "created_at",
+        ),
+        "planning_claims": ("job_id", "created_at"),
+        "system_state": ("key", "value"),
+    }
+    _PHASE7_FOREIGN_KEYS: ClassVar[dict[str, set[tuple[str, str, str]]]] = {
+        "creator_repository_executions": {
+            ("job_id", "jobs", "id"),
+        },
+        "creator_repository_execution_approvals": {
+            ("execution_id", "creator_repository_executions", "id"),
+            ("job_id", "jobs", "id"),
+        },
+        "creator_repository_execution_results": {
+            ("execution_id", "creator_repository_executions", "id"),
+        },
+        "creator_repository_execution_idempotency": {
+            ("execution_id", "creator_repository_executions", "id"),
+        },
+    }
+    _PHASE7_COLUMN_SCHEMA: ClassVar[
+        dict[str, tuple[tuple[str, str, int, str | None, int], ...]]
+    ] = {
+        "creator_repository_executions": (
+            ("id", "TEXT", 0, None, 1),
+            ("job_id", "TEXT", 1, None, 0),
+            ("organization_id", "TEXT", 1, None, 0),
+            ("project_id", "TEXT", 1, None, 0),
+            ("plan_digest", "TEXT", 1, None, 0),
+            ("status", "TEXT", 1, None, 0),
+            ("attempt_count", "INTEGER", 1, "0", 0),
+            ("record_json", "TEXT", 1, None, 0),
+            ("expires_at", "TEXT", 1, None, 0),
+            ("created_at", "TEXT", 1, None, 0),
+            ("updated_at", "TEXT", 1, None, 0),
+        ),
+        "creator_repository_execution_approvals": (
+            ("id", "TEXT", 0, None, 1),
+            ("execution_id", "TEXT", 1, None, 0),
+            ("job_id", "TEXT", 1, None, 0),
+            ("plan_digest", "TEXT", 1, None, 0),
+            ("signature", "TEXT", 1, None, 0),
+            ("approved_by", "TEXT", 1, None, 0),
+            ("status", "TEXT", 1, None, 0),
+            ("expires_at", "TEXT", 1, None, 0),
+            ("created_at", "TEXT", 1, None, 0),
+            ("consumed_at", "TEXT", 0, None, 0),
+        ),
+        "creator_repository_execution_results": (
+            ("execution_id", "TEXT", 0, None, 1),
+            ("result_digest", "TEXT", 1, None, 0),
+            ("verifier_signature", "TEXT", 1, None, 0),
+            ("result_json", "TEXT", 1, None, 0),
+            ("created_at", "TEXT", 1, None, 0),
+        ),
+        "creator_repository_execution_idempotency": (
+            ("organization_id", "TEXT", 1, None, 1),
+            ("idempotency_key", "TEXT", 1, None, 2),
+            ("request_hash", "TEXT", 1, None, 0),
+            ("execution_id", "TEXT", 1, None, 0),
+            ("created_at", "TEXT", 1, None, 0),
+        ),
+    }
+    _PHASE7_INDEX_SCHEMA: ClassVar[dict[str, set[tuple[tuple[str, ...], bool]]]] = {
+        "creator_repository_executions": {
+            (("id",), True),
+            (("plan_digest",), True),
+            (("job_id", "status"), False),
+        },
+        "creator_repository_execution_approvals": {
+            (("id",), True),
+            (("execution_id",), True),
+        },
+        "creator_repository_execution_results": {
+            (("execution_id",), True),
+            (("result_digest",), True),
+        },
+        "creator_repository_execution_idempotency": {
+            (("organization_id", "idempotency_key"), True),
+        },
+    }
+
     def __init__(self, path: Path | str) -> None:
         self._path = str(path)
         self._database_path: Path | None = None
@@ -85,7 +354,11 @@ class SQLiteStore:
         flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(database_path, flags, 0o600)
+        try:
+            descriptor = os.open(database_path, flags, 0o600)
+        except FileExistsError:
+            SQLiteStore._secure_private_file(database_path)
+            return
         try:
             os.fchmod(descriptor, 0o600)
         finally:
@@ -119,11 +392,32 @@ class SQLiteStore:
 
     def _initialize(self) -> None:
         with self._lock, self._connection:
+            version = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
+            if version > self.SCHEMA_VERSION:
+                raise RuntimeError("database schema is newer than this Lil Tweak build")
+            existing_tables = {
+                str(row[0])
+                for row in self._connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                    """
+                ).fetchall()
+            }
+            if existing_tables and not existing_tables >= self._BASELINE_TABLES:
+                raise RuntimeError("database does not contain a complete Lil Tweak baseline schema")
+            existing_phase7 = existing_tables & self._PHASE7_TABLES
+            if existing_phase7 and existing_phase7 != self._PHASE7_TABLES:
+                raise RuntimeError("database contains a partial Phase 7 schema")
+            if version == self.SCHEMA_VERSION and not existing_tables >= self._PHASE7_TABLES:
+                raise RuntimeError("database schema version does not match its Phase 7 tables")
             self._connection.executescript(
-                """
+                f"""
                 PRAGMA foreign_keys = ON;
                 PRAGMA journal_mode = WAL;
                 PRAGMA busy_timeout = 30000;
+                BEGIN IMMEDIATE;
 
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY,
@@ -282,8 +576,152 @@ class SQLiteStore:
                     result_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS creator_repository_executions (
+                    id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    organization_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    plan_digest TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0
+                        CHECK (attempt_count >= 0 AND attempt_count <= 1),
+                    record_json TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS creator_repository_executions_job_status_idx
+                ON creator_repository_executions(job_id, status);
+
+                CREATE TABLE IF NOT EXISTS creator_repository_execution_approvals (
+                    id TEXT PRIMARY KEY,
+                    execution_id TEXT NOT NULL UNIQUE
+                        REFERENCES creator_repository_executions(id),
+                    job_id TEXT NOT NULL REFERENCES jobs(id),
+                    plan_digest TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    approved_by TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    consumed_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS creator_repository_execution_results (
+                    execution_id TEXT PRIMARY KEY
+                        REFERENCES creator_repository_executions(id),
+                    result_digest TEXT NOT NULL UNIQUE,
+                    verifier_signature TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS creator_repository_execution_idempotency (
+                    organization_id TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    execution_id TEXT NOT NULL
+                        REFERENCES creator_repository_executions(id),
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (organization_id, idempotency_key)
+                );
+                PRAGMA user_version = {self.SCHEMA_VERSION};
                 """
             )
+            self._validate_schema()
+            self._connection.commit()
+
+    def _validate_schema(self) -> None:
+        version = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
+        if version != self.SCHEMA_VERSION:
+            raise RuntimeError("database schema version was not installed atomically")
+        if int(self._connection.execute("PRAGMA foreign_keys").fetchone()[0]) != 1:
+            raise RuntimeError("database foreign-key enforcement is disabled")
+        for table, expected in self._REQUIRED_COLUMNS.items():
+            observed = tuple(
+                str(row["name"])
+                for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+            )
+            if observed != expected:
+                raise RuntimeError(f"database table schema is invalid: {table}")
+        if self._schema_fingerprint(self._BASELINE_TABLES) != self._BASELINE_SCHEMA_SHA256:
+            raise RuntimeError("database baseline constraints or indexes are invalid")
+        for table, expected in self._PHASE7_FOREIGN_KEYS.items():
+            observed = {
+                (str(row["from"]), str(row["table"]), str(row["to"]))
+                for row in self._connection.execute(f"PRAGMA foreign_key_list({table})").fetchall()
+            }
+            if observed != expected:
+                raise RuntimeError(f"database foreign-key schema is invalid: {table}")
+        for table, expected in self._PHASE7_COLUMN_SCHEMA.items():
+            observed = tuple(
+                (
+                    str(row["name"]),
+                    str(row["type"]),
+                    int(row["notnull"]),
+                    None if row["dflt_value"] is None else str(row["dflt_value"]),
+                    int(row["pk"]),
+                )
+                for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+            )
+            if observed != expected:
+                raise RuntimeError(f"database Phase 7 column constraints are invalid: {table}")
+        for table, expected in self._PHASE7_INDEX_SCHEMA.items():
+            observed: set[tuple[tuple[str, ...], bool]] = set()
+            for row in self._connection.execute(f"PRAGMA index_list({table})").fetchall():
+                index_name = str(row["name"])
+                columns = tuple(
+                    str(item["name"])
+                    for item in self._connection.execute(
+                        f"PRAGMA index_info({index_name})"
+                    ).fetchall()
+                )
+                observed.add((columns, bool(row["unique"])))
+            if observed != expected:
+                raise RuntimeError(f"database Phase 7 index schema is invalid: {table}")
+        sql_row = self._connection.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'creator_repository_executions'
+            """
+        ).fetchone()
+        normalized_sql = " ".join(str(sql_row["sql"]).split()) if sql_row is not None else ""
+        required_fragments = {
+            "plan_digest TEXT NOT NULL UNIQUE",
+            "CHECK (attempt_count >= 0 AND attempt_count <= 1)",
+        }
+        if not all(fragment in normalized_sql for fragment in required_fragments):
+            raise RuntimeError("database Phase 7 execution constraints are invalid")
+        if self._connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError("database contains a foreign-key integrity violation")
+
+    def _schema_fingerprint(self, tables: frozenset[str]) -> str:
+        ordered = tuple(sorted(tables))
+        placeholders = ", ".join("?" for _ in ordered)
+        rows = self._connection.execute(
+            f"""
+            SELECT type, name, tbl_name, sql
+            FROM sqlite_master
+            WHERE
+                (type = 'table' AND name IN ({placeholders}))
+                OR (type = 'index' AND tbl_name IN ({placeholders}))
+            ORDER BY type, name, tbl_name
+            """,
+            (*ordered, *ordered),
+        ).fetchall()
+        records = [
+            {
+                "type": str(row["type"]),
+                "name": str(row["name"]),
+                "table": str(row["tbl_name"]),
+                "sql": (None if row["sql"] is None else " ".join(str(row["sql"]).split())),
+            }
+            for row in rows
+        ]
+        return hashlib.sha256(canonical_json(records).encode("utf-8")).hexdigest()
 
     def close(self) -> None:
         with self._lock:
@@ -444,6 +882,609 @@ class SQLiteStore:
                 self._connection.rollback()
                 raise
         return cursor.rowcount == 1
+
+    def publish_repository_execution(
+        self,
+        record: ExecutionRecord,
+        *,
+        idempotency_key: str,
+        request_hash: str,
+    ) -> ExecutionRecord:
+        if record.status != ExecutionStatus.PENDING_APPROVAL:
+            raise ValueError("new repository executions must await approval")
+        plan = record.plan
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                existing = self._connection.execute(
+                    """
+                    SELECT request_hash, execution_id
+                    FROM creator_repository_execution_idempotency
+                    WHERE organization_id = ? AND idempotency_key = ?
+                    """,
+                    (plan.organization_id, idempotency_key),
+                ).fetchone()
+                if existing is not None:
+                    if str(existing["request_hash"]) != request_hash:
+                        raise IdempotencyConflictError(
+                            "idempotency key was already used for another execution request"
+                        )
+                    row = self._connection.execute(
+                        """
+                        SELECT record_json
+                        FROM creator_repository_executions
+                        WHERE id = ?
+                        """,
+                        (str(existing["execution_id"]),),
+                    ).fetchone()
+                    if row is None:
+                        raise StoreStateConflictError(
+                            "repository execution idempotency record is orphaned"
+                        )
+                    self._connection.commit()
+                    return ExecutionRecord.model_validate_json(row["record_json"])
+                self._connection.execute(
+                    """
+                    INSERT INTO creator_repository_executions (
+                        id, job_id, organization_id, project_id, plan_digest,
+                        status, attempt_count, record_json, expires_at,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                    """,
+                    (
+                        plan.id,
+                        plan.job_id,
+                        plan.organization_id,
+                        plan.project_id,
+                        plan.plan_digest,
+                        record.status.value,
+                        record.model_dump_json(),
+                        plan.expires_at.isoformat(),
+                        plan.created_at.isoformat(),
+                        plan.created_at.isoformat(),
+                    ),
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO creator_repository_execution_idempotency (
+                        organization_id, idempotency_key, request_hash,
+                        execution_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        plan.organization_id,
+                        idempotency_key,
+                        request_hash,
+                        plan.id,
+                        plan.created_at.isoformat(),
+                    ),
+                )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return record
+
+    def get_repository_execution_by_idempotency(
+        self,
+        *,
+        organization_id: str,
+        idempotency_key: str,
+        request_hash: str,
+    ) -> ExecutionRecord | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT request_hash, execution_id
+                FROM creator_repository_execution_idempotency
+                WHERE organization_id = ? AND idempotency_key = ?
+                """,
+                (organization_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        if str(row["request_hash"]) != request_hash:
+            raise IdempotencyConflictError(
+                "repository execution idempotency key was reused with a different request"
+            )
+        return self.get_repository_execution(str(row["execution_id"]))
+
+    def get_repository_execution(self, execution_id: str) -> ExecutionRecord:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT record_json
+                FROM creator_repository_executions
+                WHERE id = ?
+                """,
+                (execution_id,),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"repository execution not found: {execution_id}")
+        return ExecutionRecord.model_validate_json(row["record_json"])
+
+    def reconcile_repository_execution(
+        self,
+        execution_id: str,
+        *,
+        now: datetime,
+    ) -> ExecutionRecord:
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT record_json
+                    FROM creator_repository_executions
+                    WHERE id = ?
+                    """,
+                    (execution_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"repository execution not found: {execution_id}")
+                record = ExecutionRecord.model_validate_json(row["record_json"])
+                if record.status not in {
+                    ExecutionStatus.PENDING_APPROVAL,
+                    ExecutionStatus.APPROVED,
+                }:
+                    self._connection.commit()
+                    return record
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                canceled = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = ?",
+                    (f"cancel:{record.plan.job_id}",),
+                ).fetchone()
+                job_row = self._connection.execute(
+                    "SELECT status FROM jobs WHERE id = ?",
+                    (record.plan.job_id,),
+                ).fetchone()
+                next_status = None
+                failure_code = None
+                if emergency is not None and str(emergency["value"]) == "true":
+                    next_status = ExecutionStatus.CANCELED
+                    failure_code = "emergency_stop_active"
+                elif (
+                    (canceled is not None and str(canceled["value"]) == "true")
+                    or job_row is None
+                    or str(job_row["status"]) in {status.value for status in TERMINAL_STATES}
+                ):
+                    next_status = ExecutionStatus.CANCELED
+                    failure_code = "job_canceled"
+                elif record.plan.expires_at <= now:
+                    next_status = ExecutionStatus.EXPIRED
+                    failure_code = "plan_expired"
+                if next_status is None:
+                    self._connection.commit()
+                    return record
+                reconciled = record.model_copy(
+                    update={
+                        "status": next_status,
+                        "failure_code": failure_code,
+                    }
+                )
+                self._connection.execute(
+                    """
+                    UPDATE creator_repository_execution_approvals
+                    SET status = ?
+                    WHERE execution_id = ? AND status = 'approved'
+                    """,
+                    (next_status.value, execution_id),
+                )
+                self._update_repository_execution_locked(reconciled, now)
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return reconciled
+
+    def decide_repository_execution(
+        self,
+        *,
+        execution_id: str,
+        plan_digest: str,
+        decision: str,
+        approval: RepositoryExecutionApproval | None,
+        now: datetime,
+    ) -> tuple[ExecutionRecord, RepositoryExecutionApproval | None]:
+        if decision not in {"approve", "reject"}:
+            raise ValueError("repository execution decision is invalid")
+        if decision == "approve" and approval is None:
+            raise ValueError("repository execution approval is required")
+        if decision == "reject" and approval is not None:
+            raise ValueError("rejected repository execution cannot carry approval")
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT status, record_json
+                    FROM creator_repository_executions
+                    WHERE id = ?
+                    """,
+                    (execution_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"repository execution not found: {execution_id}")
+                record = ExecutionRecord.model_validate_json(row["record_json"])
+                if record.status != ExecutionStatus.PENDING_APPROVAL:
+                    raise StoreStateConflictError("repository execution is not pending approval")
+                if record.plan.plan_digest != plan_digest:
+                    raise StoreStateConflictError("repository execution plan digest changed")
+                if record.plan.expires_at <= now:
+                    expired = record.model_copy(
+                        update={
+                            "status": ExecutionStatus.EXPIRED,
+                            "failure_code": "plan_expired",
+                        }
+                    )
+                    self._update_repository_execution_locked(expired, now)
+                    self._connection.commit()
+                    return expired, None
+                status = (
+                    ExecutionStatus.APPROVED if decision == "approve" else ExecutionStatus.REJECTED
+                )
+                decided = record.model_copy(
+                    update={
+                        "status": status,
+                        "approval_id": approval.id if approval is not None else None,
+                    }
+                )
+                if approval is not None:
+                    if (
+                        approval.execution_id != execution_id
+                        or approval.job_id != record.plan.job_id
+                        or approval.plan_digest != plan_digest
+                    ):
+                        raise StoreStateConflictError(
+                            "repository execution approval does not match the plan"
+                        )
+                    self._connection.execute(
+                        """
+                        INSERT INTO creator_repository_execution_approvals (
+                            id, execution_id, job_id, plan_digest, signature,
+                            approved_by, status, expires_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?)
+                        """,
+                        (
+                            approval.id,
+                            approval.execution_id,
+                            approval.job_id,
+                            approval.plan_digest,
+                            approval.signature,
+                            approval.approved_by,
+                            approval.expires_at.isoformat(),
+                            approval.created_at.isoformat(),
+                        ),
+                    )
+                self._update_repository_execution_locked(decided, now)
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return decided, approval
+
+    def claim_repository_execution(
+        self,
+        *,
+        execution_id: str,
+        approval_id: str,
+        plan_digest: str,
+        approval_signature: str,
+        now: datetime,
+    ) -> ExecutionRecord:
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                if emergency is not None and str(emergency["value"]) == "true":
+                    raise EmergencyStopActiveError("Lil Tweak is emergency-stopped")
+                row = self._connection.execute(
+                    """
+                    SELECT record_json
+                    FROM creator_repository_executions
+                    WHERE id = ?
+                    """,
+                    (execution_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"repository execution not found: {execution_id}")
+                record = ExecutionRecord.model_validate_json(row["record_json"])
+                if (
+                    record.status != ExecutionStatus.APPROVED
+                    or record.attempt_count != 0
+                    or record.plan.plan_digest != plan_digest
+                    or record.plan.expires_at <= now
+                ):
+                    raise StoreStateConflictError(
+                        "repository execution is stale, unapproved, or already attempted"
+                    )
+                canceled = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = ?",
+                    (f"cancel:{record.plan.job_id}",),
+                ).fetchone()
+                job_row = self._connection.execute(
+                    "SELECT status FROM jobs WHERE id = ?",
+                    (record.plan.job_id,),
+                ).fetchone()
+                if job_row is None:
+                    raise StoreStateConflictError("repository execution job no longer exists")
+                if (canceled is not None and str(canceled["value"]) == "true") or str(
+                    job_row["status"]
+                ) in {status.value for status in TERMINAL_STATES}:
+                    raise StoreStateConflictError(
+                        "repository execution job is canceled or terminal"
+                    )
+                approval_row = self._connection.execute(
+                    """
+                    SELECT execution_id, job_id, plan_digest, signature, status, expires_at
+                    FROM creator_repository_execution_approvals
+                    WHERE id = ?
+                    """,
+                    (approval_id,),
+                ).fetchone()
+                if approval_row is None:
+                    raise NotFoundError(f"repository execution approval not found: {approval_id}")
+                if (
+                    str(approval_row["execution_id"]) != execution_id
+                    or str(approval_row["job_id"]) != record.plan.job_id
+                    or str(approval_row["plan_digest"]) != plan_digest
+                    or str(approval_row["signature"]) != approval_signature
+                    or str(approval_row["status"]) != "approved"
+                    or str(approval_row["expires_at"]) <= now.isoformat()
+                ):
+                    raise StoreStateConflictError(
+                        "repository execution approval is invalid or already consumed"
+                    )
+                running = record.model_copy(
+                    update={
+                        "status": ExecutionStatus.RUNNING,
+                        "attempt_count": 1,
+                    }
+                )
+                consumed = self._connection.execute(
+                    """
+                    UPDATE creator_repository_execution_approvals
+                    SET status = 'consumed', consumed_at = ?
+                    WHERE id = ? AND status = 'approved'
+                    """,
+                    (now.isoformat(), approval_id),
+                )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_repository_executions
+                    SET status = ?, attempt_count = 1, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ? AND attempt_count = 0
+                    """,
+                    (
+                        running.status.value,
+                        running.model_dump_json(),
+                        now.isoformat(),
+                        execution_id,
+                        ExecutionStatus.APPROVED.value,
+                    ),
+                )
+                if consumed.rowcount != 1 or updated.rowcount != 1:
+                    raise StoreStateConflictError(
+                        "repository execution claim lost a concurrent race"
+                    )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return running
+
+    def complete_repository_execution(
+        self,
+        outcome: ExecutionOutcomeRecord,
+        *,
+        now: datetime,
+    ) -> ExecutionRecord:
+        outcome = ExecutionOutcomeRecord.model_validate(outcome.model_dump(mode="python"))
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT record_json
+                    FROM creator_repository_executions
+                    WHERE id = ?
+                    """,
+                    (outcome.execution_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"repository execution not found: {outcome.execution_id}")
+                record = ExecutionRecord.model_validate_json(row["record_json"])
+                if (
+                    record.status != ExecutionStatus.RUNNING
+                    or record.plan.plan_digest != outcome.plan_digest
+                    or record.attempt_count != 1
+                ):
+                    raise StoreStateConflictError(
+                        "repository execution outcome does not match a running attempt"
+                    )
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                canceled = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = ?",
+                    (f"cancel:{record.plan.job_id}",),
+                ).fetchone()
+                job_row = self._connection.execute(
+                    "SELECT status FROM jobs WHERE id = ?",
+                    (record.plan.job_id,),
+                ).fetchone()
+                cancellation_code = None
+                if emergency is not None and str(emergency["value"]) == "true":
+                    cancellation_code = "emergency_stop_active"
+                elif (
+                    (canceled is not None and str(canceled["value"]) == "true")
+                    or job_row is None
+                    or str(job_row["status"]) in {status.value for status in TERMINAL_STATES}
+                ):
+                    cancellation_code = "job_canceled"
+                if cancellation_code is not None:
+                    canceled_record = record.model_copy(
+                        update={
+                            "status": ExecutionStatus.CANCELED,
+                            "failure_code": cancellation_code,
+                        }
+                    )
+                    self._update_repository_execution_locked(canceled_record, now)
+                    self._connection.commit()
+                    return canceled_record
+                status = (
+                    ExecutionStatus.SUCCEEDED
+                    if outcome.status == "verified_success"
+                    else ExecutionStatus.FAILED
+                )
+                completed = record.model_copy(
+                    update={
+                        "status": status,
+                        "result_digest": outcome.outcome_digest,
+                        "failure_code": (
+                            None if status == ExecutionStatus.SUCCEEDED else "verification_failed"
+                        ),
+                    }
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO creator_repository_execution_results (
+                        execution_id, result_digest, verifier_signature,
+                        result_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        outcome.execution_id,
+                        outcome.outcome_digest,
+                        outcome.verifier_signature,
+                        outcome.model_dump_json(),
+                        now.isoformat(),
+                    ),
+                )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_repository_executions
+                    SET status = ?, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ? AND attempt_count = 1
+                    """,
+                    (
+                        completed.status.value,
+                        completed.model_dump_json(),
+                        now.isoformat(),
+                        outcome.execution_id,
+                        ExecutionStatus.RUNNING.value,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise StoreStateConflictError(
+                        "repository execution completion lost a concurrent race"
+                    )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return completed
+
+    def fail_repository_execution(
+        self,
+        execution_id: str,
+        *,
+        failure_code: str,
+        now: datetime,
+    ) -> ExecutionRecord:
+        if not failure_code or len(failure_code) > 128:
+            raise ValueError("repository execution failure code is invalid")
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT record_json
+                    FROM creator_repository_executions
+                    WHERE id = ?
+                    """,
+                    (execution_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"repository execution not found: {execution_id}")
+                record = ExecutionRecord.model_validate_json(row["record_json"])
+                if record.status != ExecutionStatus.RUNNING:
+                    raise StoreStateConflictError("repository execution is not running")
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                canceled = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = ?",
+                    (f"cancel:{record.plan.job_id}",),
+                ).fetchone()
+                job_row = self._connection.execute(
+                    "SELECT status FROM jobs WHERE id = ?",
+                    (record.plan.job_id,),
+                ).fetchone()
+                terminal_failure_code = failure_code
+                terminal_status = ExecutionStatus.FAILED
+                if emergency is not None and str(emergency["value"]) == "true":
+                    terminal_status = ExecutionStatus.CANCELED
+                    terminal_failure_code = "emergency_stop_active"
+                elif (
+                    (canceled is not None and str(canceled["value"]) == "true")
+                    or job_row is None
+                    or str(job_row["status"]) in {status.value for status in TERMINAL_STATES}
+                ):
+                    terminal_status = ExecutionStatus.CANCELED
+                    terminal_failure_code = "job_canceled"
+                failed = record.model_copy(
+                    update={
+                        "status": terminal_status,
+                        "failure_code": terminal_failure_code,
+                    }
+                )
+                self._update_repository_execution_locked(failed, now)
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return failed
+
+    def get_repository_execution_result(self, execution_id: str) -> ExecutionOutcomeRecord:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT result_json
+                FROM creator_repository_execution_results
+                WHERE execution_id = ?
+                """,
+                (execution_id,),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"repository execution result not found: {execution_id}")
+        return ExecutionOutcomeRecord.model_validate_json(row["result_json"])
+
+    def _update_repository_execution_locked(
+        self,
+        record: ExecutionRecord,
+        now: datetime,
+    ) -> None:
+        updated = self._connection.execute(
+            """
+            UPDATE creator_repository_executions
+            SET status = ?, attempt_count = ?, record_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                record.status.value,
+                record.attempt_count,
+                record.model_dump_json(),
+                now.isoformat(),
+                record.plan.id,
+            ),
+        )
+        if updated.rowcount != 1:
+            raise StoreStateConflictError("repository execution record update was lost")
 
     def publish_creator_live_proposal(self, record: LiveProposalRecord) -> None:
         proposal = record.proposal

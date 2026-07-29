@@ -293,9 +293,10 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 
 
 def _is_sensitive_filename(name: str) -> bool:
-    if name in _SECRET_FILENAMES:
+    normalized = name.casefold()
+    if normalized in _SECRET_FILENAMES:
         return True
-    return name.startswith(".env.") and name not in {
+    return normalized.startswith(".env.") and normalized not in {
         ".env.example",
         ".env.sample",
         ".env.template",

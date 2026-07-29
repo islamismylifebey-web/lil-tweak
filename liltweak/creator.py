@@ -743,11 +743,14 @@ class CreatorService:
         *,
         model_calls_enabled: bool = False,
         hosted_sandbox_probe_ready: bool = False,
+        repository_execution_connected: bool = False,
     ) -> CreatorHealth:
         return CreatorHealth(
             durable_brief_signatures=self._durable_signatures,
             model_calls_enabled=model_calls_enabled,
             hosted_sandbox_probe_ready=hosted_sandbox_probe_ready,
+            execution_connected=repository_execution_connected,
+            source_execution_connected=repository_execution_connected,
         )
 
     def compile(
@@ -914,7 +917,7 @@ class CreatorService:
             {
                 "creator_cycle": CREATOR_CYCLE,
                 "profiles": profiles,
-                "version": "0.6.0",
+                "version": "0.7.0",
             }
         )
 

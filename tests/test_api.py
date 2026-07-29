@@ -44,6 +44,41 @@ def task_payload() -> dict:
     }
 
 
+def test_phase7_keeps_the_version_0_6_http_surface_additively() -> None:
+    legacy_operations = {
+        ("/health", "GET"),
+        ("/v1/approvals/{approval_id}", "GET"),
+        ("/v1/approvals/{approval_id}/decision", "POST"),
+        ("/v1/creator/compile", "POST"),
+        ("/v1/creator/health", "GET"),
+        ("/v1/creator/learning", "GET"),
+        ("/v1/creator/live/proposals", "POST"),
+        ("/v1/creator/live/proposals/{proposal_id}", "GET"),
+        ("/v1/creator/live/proposals/{proposal_id}/decision", "POST"),
+        ("/v1/creator/live/results/{proposal_id}", "GET"),
+        ("/v1/creator/live/runs", "POST"),
+        ("/v1/creator/prepare", "POST"),
+        ("/v1/creator/route", "POST"),
+        ("/v1/emergency-stop", "POST"),
+        ("/v1/jobs", "POST"),
+        ("/v1/jobs/{job_id}", "GET"),
+        ("/v1/jobs/{job_id}/analyze", "POST"),
+        ("/v1/jobs/{job_id}/cancel", "POST"),
+        ("/v1/jobs/{job_id}/changes/prepare", "POST"),
+        ("/v1/jobs/{job_id}/evidence", "GET"),
+        ("/v1/jobs/{job_id}/execute", "POST"),
+        ("/v1/jobs/{job_id}/inspect", "POST"),
+        ("/v1/jobs/{job_id}/inspection", "GET"),
+        ("/v1/jobs/{job_id}/recovery", "GET"),
+        ("/v1/jobs/{job_id}/recovery", "POST"),
+        ("/v1/jobs/{job_id}/recovery/prepare", "POST"),
+    }
+    observed_operations = {
+        (route.path, method) for route in build_app().routes for method in (route.methods or set())
+    }
+    assert legacy_operations <= observed_operations
+
+
 @pytest.mark.asyncio
 async def test_health_is_public_and_truthful() -> None:
     async with AsyncClient(

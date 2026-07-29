@@ -312,14 +312,14 @@ class RuntimeOutcome(CreatorSchema):
 
 class CreatorHealth(CreatorSchema):
     status: Literal["creator_foundation_ready"] = "creator_foundation_ready"
-    version: Literal["0.6.0"] = "0.6.0"
+    version: Literal["0.7.0"] = "0.7.0"
     compiler_ready: Literal[True] = True
     adaptive_router_ready: Literal[True] = True
     causal_learning_ready: Literal[True] = True
     live_reasoning_adapter_ready: Literal[True] = True
     hosted_sandbox_probe_ready: StrictBool = False
-    execution_connected: Literal[False] = False
-    source_execution_connected: Literal[False] = False
+    execution_connected: StrictBool = False
+    source_execution_connected: StrictBool = False
     model_calls_enabled: StrictBool = False
     tool_execution_enabled: Literal[False] = False
     durable_brief_signatures: StrictBool

@@ -113,6 +113,9 @@ class Settings:
     live_call_limit_usd: float = 0.10
     live_input_token_limit: int = 12_000
     live_output_token_limit: int = 1_024
+    repository_execution_enabled: bool = False
+    execution_runtime_root: Path = Path("./runtime-root")
+    execution_image_ref: str | None = None
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -162,6 +165,34 @@ class Settings:
                 "live model calls require LILTWEAK_CREATOR_SIGNING_KEY "
                 "or LILTWEAK_EVIDENCE_SIGNING_KEY"
             )
+        if self.repository_execution_enabled:
+            if self.creator_signing_key is None and self.evidence_signing_key is None:
+                raise ValueError(
+                    "repository execution requires a durable Creator or evidence signing key"
+                )
+            if (
+                self.execution_image_ref is None
+                or re.fullmatch(
+                    r"[a-z0-9][a-z0-9._/-]{0,255}@sha256:[0-9a-f]{64}",
+                    self.execution_image_ref,
+                )
+                is None
+            ):
+                raise ValueError("repository execution requires an immutable runtime image digest")
+            resolved_roots = {
+                "workspace": self.workspace_root.resolve(),
+                "artifact": self.artifact_root.resolve(),
+                "runtime": self.execution_runtime_root.resolve(),
+            }
+            if Path("/") in resolved_roots.values() or len(set(resolved_roots.values())) != 3:
+                raise ValueError("workspace, artifact, and runtime roots must be distinct")
+            roots = list(resolved_roots.values())
+            if any(
+                first.is_relative_to(second) or second.is_relative_to(first)
+                for index, first in enumerate(roots)
+                for second in roots[index + 1 :]
+            ):
+                raise ValueError("workspace, artifact, and runtime roots must be disjoint")
         for name, key in {
             "LILTWEAK_ARTIFACT_ENCRYPTION_KEY": self.artifact_encryption_key,
             "LILTWEAK_EVIDENCE_SIGNING_KEY": self.evidence_signing_key,
@@ -217,4 +248,9 @@ class Settings:
                 "LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT",
                 1_024,
             ),
+            repository_execution_enabled=_bool_env("LILTWEAK_REPOSITORY_EXECUTION_ENABLED"),
+            execution_runtime_root=Path(
+                os.getenv("LILTWEAK_EXECUTION_RUNTIME_ROOT", "./runtime-root")
+            ),
+            execution_image_ref=os.getenv("LILTWEAK_EXECUTION_IMAGE_REF"),
         )

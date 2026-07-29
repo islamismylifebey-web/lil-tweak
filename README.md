@@ -1,4 +1,4 @@
-# Lil Tweak Creator Model Foundation — 0.6.0
+# Lil Tweak Isolated Repository Verification — 0.7.0
 
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
@@ -34,6 +34,23 @@ Version 0.6.0 adds the bounded live-model plane without connecting source execut
 - no automatic paid retry after any provider or validation failure;
 - a network-disabled hosted-container probe adapter restricted to a synthetic challenge;
 - 120 additional offline Phase 6 simulations covering accepted, blocked, and tampered flows.
+
+Version 0.7.0 adds a fail-closed repository verification control plane:
+
+- deterministic, `.git`-free snapshots of one exact, clean, complete Git commit;
+- server-owned verification recipes with fixed argument vectors, configured immutable image
+  references, and strict declared resource ceilings;
+- digest-bound execution plans and expiring Founder approvals consumed atomically once;
+- a permanently disconnected candidate Bubblewrap adapter that generates a cleared-environment,
+  namespace-isolated, non-root, read-only invocation for later target-host qualification;
+- durable schema-versioned execution plans, approvals, attempts, and signed verification outcomes;
+- additive authenticated API routes for preparing, deciding, running, and reading verification;
+- 120 Phase 7 offline cases with zero model, provider, or real execution calls.
+
+The repository runner remains disabled and truthfully reports `execution_connected=false` on this
+build host: its Linux namespace probe is not permitted, and the candidate stays hard-disconnected
+even where that narrow probe succeeds. Version 0.7.0 therefore ships the reviewed control plane
+and a candidate adapter, not a production-connected runner.
 
 The Creator Model contract is documented in
 [`docs/creator-model-foundation.md`](docs/creator-model-foundation.md).
@@ -78,6 +95,11 @@ not add model routing, specialist models, tools, source writes, or execution aut
   secret, and unsupported-execution validation;
 - three progressively harder synthetic reasoning trials for atomicity, tenant isolation, and
   sport-agnostic temporal leakage, with hidden grading expectations and a three-call live cap.
+- deterministic committed-tree snapshots that reject dirty, ignored, shallow, sparse, submodule,
+  symlink, credential-shaped, oversized, and ambiguous-path input;
+- schema-versioned, atomic, one-attempt repository verification plans and approvals;
+- signed verification outcomes that require exact command order, unchanged source, matching
+  sandbox evidence, successful cleanup, and no unexpected artifacts.
 
 Only ciphertext is written to the artifact root. API models expose opaque IDs, hashes, sizes,
 media types, and statuses—never storage paths, encryption nonces, keys, source content, or raw
@@ -110,6 +132,17 @@ The 0.6.0 live Creator path still does not:
 - mark a provider-hosted sandbox as verified;
 - reconcile token estimates to the provider invoice;
 - enable live calls unless the server has a durable signing key and explicitly enables them.
+
+The 0.7.0 repository verification path still does not:
+
+- connect automatically from configuration or treat binary presence as isolation proof;
+- execute on this managed build host, whose Bubblewrap namespace probe is denied;
+- accept caller-selected commands, images, paths, network access, package installation, retries,
+  source writes, Git operations, deployment, artifacts, or credentials;
+- mutate the registered repository or include its `.git` directory in a sandbox;
+- make model calls or authorize spending;
+- claim production quota enforcement, cancellation of an already-running sandbox, remote
+  attestation, or a production deployment.
 
 The Phase 3.2 reasoning trial receives only synthetic, bounded evidence packets. It is not wired
 to registered repository contents or production API authority. Passing it proves evidence-backed
@@ -151,6 +184,24 @@ LILTWEAK_LIVE_CALL_LIMIT_USD=0.10
 LILTWEAK_LIVE_INPUT_TOKEN_LIMIT=12000
 LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT=1024
 ```
+
+Repository verification is also disabled by default. These settings describe a candidate
+server-owned runtime; `create_app` must receive an explicitly constructed execution controller.
+The 0.7 Bubblewrap candidate remains permanently disconnected even if its namespace smoke probe
+succeeds:
+
+```env
+LILTWEAK_REPOSITORY_EXECUTION_ENABLED=false
+LILTWEAK_EXECUTION_RUNTIME_ROOT=./runtime-root
+LILTWEAK_EXECUTION_IMAGE_REF=registry.example/liltweak-python@sha256:<64 lowercase hex>
+```
+
+The workspace, artifact, and runtime roots must be distinct and disjoint. Enabling the
+API control plane also requires a durable Creator or evidence signing key and an immutable image
+reference. Configuration, controller, and independently qualified runner gates are conjunctive;
+the candidate adapter cannot satisfy the runner gate. A later production adapter must pass the
+separate qualification in
+[`docs/phase7-security-boundaries.md`](docs/phase7-security-boundaries.md).
 
 The artifact root and repository workspace must be disjoint. Without the encryption key,
 inspection and planning work, while `recovery_preparation_enabled` remains false.
@@ -203,6 +254,11 @@ plaintext is published, and any partially published ciphertext is quarantined.
 - `POST /v1/creator/live/proposals/{proposal_id}/decision`
 - `POST /v1/creator/live/runs`
 - `GET /v1/creator/live/results/{proposal_id}`
+- `POST /v1/creator/executions`
+- `GET /v1/creator/executions/{execution_id}`
+- `POST /v1/creator/executions/{execution_id}/decision`
+- `POST /v1/creator/executions/{execution_id}/run`
+- `GET /v1/creator/executions/{execution_id}/result`
 
 Every `/v1/*` route requires the development bearer token. The token identifies the one
 configured owner; request fields do not grant authority.
@@ -219,6 +275,7 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_gauntlet.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_engineering_trial.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_creator_benchmark.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase6_offline.py
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase7_offline.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py creator-smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_gauntlet.py --live
@@ -239,6 +296,9 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file .env.local \
 The two bounded development probes and their failed-closed result are recorded in
 [`docs/phase6-live-evidence.md`](docs/phase6-live-evidence.md).
 
+The local namespace result and the exact boundary between fixture verification and real isolation
+are recorded in [`docs/phase7-isolation-evidence.md`](docs/phase7-isolation-evidence.md).
+
 ## Launch status
 
 This remains an owner-only development API. Organization and project fields prepare the model
@@ -249,6 +309,13 @@ reconciliation, state/evidence transaction unification, aggregate per-tenant req
 quotas, an external anti-rollback evidence checkpoint, artifact-path publication hardening,
 enforced artifact expiry, aggregate inspection resource limits, defense-in-depth secret scanning,
 and deployment are still launch gates.
+
+The Phase 7 repository execution controller and candidate Bubblewrap adapter do not change that
+launch status. A dedicated target host must prove non-root execution, network denial, cgroup-level
+CPU/memory/PID/disk limits, live cancellation and emergency termination, signed remote
+attestation, cleanup, and sandbox destruction before repository execution may be enabled.
+The public service health field `phase=3` intentionally remains the legacy core-service phase;
+the separately versioned Creator/verification health contract reports version `0.7.0`.
 
 The latest high-volume and live adversarial results are documented in
 [`docs/gauntlet-report.md`](docs/gauntlet-report.md). The single-model engineering result is in
