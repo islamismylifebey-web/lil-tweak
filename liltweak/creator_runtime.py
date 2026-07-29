@@ -19,6 +19,7 @@ from .creator_contract import (
     SandboxCommand,
     SandboxResult,
     VerificationReport,
+    content_digest,
 )
 from .store import SQLiteStore
 
@@ -29,6 +30,16 @@ class SandboxUnavailableError(RuntimeError):
 
 class ExecutionApprovalError(RuntimeError):
     pass
+
+
+def _digests_match(first: object, second: object) -> bool:
+    return (
+        isinstance(first, str)
+        and isinstance(second, str)
+        and first.isascii()
+        and second.isascii()
+        and secrets.compare_digest(first, second)
+    )
 
 
 class SandboxExecutor(Protocol):
@@ -174,15 +185,20 @@ class CreatorRuntimeController:
         cpu_count: int = 2,
         artifact_byte_limit: int = 50_000_000,
     ) -> ExecutionPlan:
+        submitted_digest = content_digest(
+            route.model_dump(mode="json", exclude={"decision_digest"})
+        )
+        if not _digests_match(route.decision_digest, submitted_digest):
+            raise CreatorEnvelopeError("route decision digest is invalid")
         verified_route = self.creator.route(RoutePreviewRequest(envelope=envelope))
-        if route.decision_digest != verified_route.decision_digest:
+        if not _digests_match(route.decision_digest, verified_route.decision_digest):
             raise CreatorEnvelopeError("route decision is not bound to the signed brief")
-        if route.status != RouteStatus.READY:
+        if verified_route.status != RouteStatus.READY:
             raise SandboxUnavailableError("creator route is not ready for execution preparation")
         return ExecutionPlan(
             id=f"exec_plan_{uuid.uuid4().hex}",
             brief_digest=envelope.brief_digest,
-            route_digest=route.decision_digest,
+            route_digest=verified_route.decision_digest,
             repository_fingerprint=repository_fingerprint,
             workspace_mount_digest=workspace_mount_digest,
             commands=commands,

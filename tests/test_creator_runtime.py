@@ -8,11 +8,12 @@ from threading import Barrier
 
 import pytest
 
-from liltweak.creator import CreatorService, outcome_digest_for_fixture
+from liltweak.creator import CreatorEnvelopeError, CreatorService, outcome_digest_for_fixture
 from liltweak.creator_contract import (
     CommandKind,
     CreatorCompileRequest,
     RoutePreviewRequest,
+    RouteStatus,
     RuntimeOutcome,
     SandboxCommand,
     SandboxResult,
@@ -112,6 +113,78 @@ def test_execution_plan_is_bounded_and_does_not_grant_itself_authority() -> None
     assert plan.wall_clock_seconds == 900
     assert plan.allowed_write_paths == ("src", "tests")
     assert plan.plan_digest
+
+
+def test_execution_plan_rejects_stale_digest_route_mutation() -> None:
+    store = SQLiteStore(":memory:")
+    creator = CreatorService(
+        store=store,
+        signing_key=SIGNING_KEY,
+        durable_signatures=True,
+    )
+    runtime = CreatorRuntimeController(
+        creator=creator,
+        store=store,
+        signing_key=SIGNING_KEY,
+    )
+    envelope = creator.compile(
+        CreatorCompileRequest(direction="Recommend a medical treatment for a patient."),
+        actor_id="owner",
+    )
+    blocked = creator.route(RoutePreviewRequest(envelope=envelope))
+    tampered = blocked.model_copy(update={"status": RouteStatus.READY})
+
+    with pytest.raises(CreatorEnvelopeError, match="route decision digest is invalid"):
+        runtime.prepare_plan(
+            envelope=envelope,
+            route=tampered,
+            repository_fingerprint=outcome_digest_for_fixture("source-before"),
+            workspace_mount_digest=outcome_digest_for_fixture("mount"),
+            commands=(
+                SandboxCommand(
+                    command_id="baseline",
+                    kind=CommandKind.BASELINE,
+                    argv=("pytest", "-q"),
+                    timeout_seconds=300,
+                ),
+            ),
+        )
+
+
+def test_execution_plan_rejects_non_ascii_route_digest_as_envelope_error() -> None:
+    store = SQLiteStore(":memory:")
+    creator = CreatorService(
+        store=store,
+        signing_key=SIGNING_KEY,
+        durable_signatures=True,
+    )
+    runtime = CreatorRuntimeController(
+        creator=creator,
+        store=store,
+        signing_key=SIGNING_KEY,
+    )
+    envelope = creator.compile(
+        CreatorCompileRequest(direction="Build an API and run regression tests."),
+        actor_id="owner",
+    )
+    route = creator.route(RoutePreviewRequest(envelope=envelope))
+    tampered = route.model_copy(update={"decision_digest": "é" * 64})
+
+    with pytest.raises(CreatorEnvelopeError, match="route decision digest is invalid"):
+        runtime.prepare_plan(
+            envelope=envelope,
+            route=tampered,
+            repository_fingerprint=outcome_digest_for_fixture("source-before"),
+            workspace_mount_digest=outcome_digest_for_fixture("mount"),
+            commands=(
+                SandboxCommand(
+                    command_id="baseline",
+                    kind=CommandKind.BASELINE,
+                    argv=("pytest", "-q"),
+                    timeout_seconds=300,
+                ),
+            ),
+        )
 
 
 @pytest.mark.asyncio
