@@ -1,9 +1,9 @@
-# Lil Tweak Isolated Repository Verification 0.7.0
+# Lil Tweak Automatic Verification and Dormant Runner Qualification 0.7.1
 
 Date: 2026-07-29 (America/Chicago)
 Owner: Maurice Pennington-Bey
 Verified private-repository baseline:
-`0051503b1327177573359347fe8ff7f0a2ed8d5c`
+`43580205930718d45d3571b99033ff00e8952d41`
 Production deployed: No
 Repository execution enabled: No
 Execution runner connected: No
@@ -31,10 +31,19 @@ Execution runner connected: No
   emergency stop, artifacts, or unverified cleanup.
 - HMAC-signed immutable success or failure outcomes for completed fixture attempts.
 - Additive authenticated execution API routes; the 0.6.0 route set remains present.
+- Automatic GitHub-hosted deterministic verification on pull requests and `main`, with read-only
+  permissions, no repository secrets, no live evaluations, and full-SHA action pins.
+- Separately signed Ed25519 runner challenge and attestation contracts bound to one exact
+  repository identity, source commit and tree, runner key, image, sandbox profile, runtime,
+  limiter, collector, destroyer, nonce, expiry, and exact ordered adversarial suite.
+- A manual three-job evidence workflow that issues and verifies on separate GitHub-hosted jobs
+  while the uniquely labeled, non-root, repository-token-free ephemeral candidate runs only
+  hash-pinned host-owned collection and cleanup tools.
+- A qualification decision whose `connection_authorized` value is structurally fixed to `false`.
 
 ## Verification
 
-- 269 unit, integration, API, repository, migration, concurrency, isolation-contract, and
+- 326 unit, integration, API, repository, migration, concurrency, isolation-contract, and
   adversarial tests pass.
 - Ruff lint and formatting checks pass.
 - All pre-Phase 7 deterministic tests and offline evaluation suites remain green.
@@ -53,6 +62,10 @@ Execution runner connected: No
   vacuous success when no required check exists.
 - Concurrent cancellation, emergency stop, and decision-time expiry retain their true terminal
   state and failure code.
+- Existing execution schemas, digest domains, database schema version 2, HTTP operations, and
+  stored Phase 7 records remain unchanged.
+- The runner qualification verifier is not called by the API, execution controller, health
+  response, or database.
 
 ## Isolation evidence
 
@@ -64,6 +77,10 @@ Execution runner connected: No
 - `execution_connected`: `false`.
 - No registered source was passed to the failed probe.
 - The adapter is hard-disconnected in 0.7 even on a host where this smoke probe succeeds.
+- Automatic GitHub CI is regression evidence and is not runner-isolation evidence.
+- The dedicated-runner workflow remains dormant until its exact ephemeral host labels, protected
+  environment, independently managed runner key, host-owned collector and destroyer, and pinned
+  digests are configured.
 
 ## Honest boundary
 
@@ -87,6 +104,10 @@ content or trust decisions across the two passes. Local paired evidence is recor
 No production behavior was enabled. A future dedicated runner must pass the adversarial
 qualification in `docs/phase7-security-boundaries.md` before the server may report
 `execution_connected=true`.
+Phase 7.1 can validate a signed offline report, but its decision type always returns
+`connection_authorized=false`. Activation additionally requires durable one-use replay state,
+a fresh signed connection lease, per-attempt runner signatures, and control-plane integration
+that are intentionally absent from this release.
 
 ## Release exclusions
 

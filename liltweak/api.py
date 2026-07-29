@@ -209,7 +209,7 @@ def create_app(
 
     app = FastAPI(
         title="Lil Tweak Engineering API",
-        version="0.7.0",
+        version="0.7.1",
         description=(
             "Independent evidence-driven engineering engine with Creator Model compilation, "
             "bounded live reasoning, adaptive routing, encrypted recovery, approvals, causal "

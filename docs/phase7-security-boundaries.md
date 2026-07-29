@@ -60,3 +60,7 @@ the attempt. No failure may become a completion claim.
 with `Operation not permitted`, and the remaining target-host gates above have not been run. This
 is an enforced status, not a roadmap claim. A successful smoke probe on another host would still
 leave the 0.7 candidate disconnected.
+
+Phase 7.1 adds a separate signed evidence contract and a dormant manual qualification workflow.
+It does not alter this decision. Even a valid Ed25519 report produces
+`connection_authorized=false`; GitHub CI and self-hosted runner labels are never isolation proof.

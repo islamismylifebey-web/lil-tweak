@@ -917,7 +917,7 @@ class CreatorService:
             {
                 "creator_cycle": CREATOR_CYCLE,
                 "profiles": profiles,
-                "version": "0.7.0",
+                "version": "0.7.1",
             }
         )
 

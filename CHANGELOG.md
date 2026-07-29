@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.1 — Automatic Verification and Dormant Runner Qualification
+
+- Added automatic GitHub-hosted deterministic verification for pull requests and `main`.
+- Pinned every GitHub Action by full commit SHA and limited the token to read-only contents.
+- Required the frozen lock, Ruff, the complete test suite, every offline evaluation, both smoke
+  paths, zero paid/provider calls, and disconnected execution.
+- Added separately signed Ed25519 challenge and attestation domains bound to the exact repository
+  identity, source, runner key, image, profile, runtime, collector, destroyer, nonce, and suite.
+- Required one exact ordered adversarial suite covering network denial, hard resource limits,
+  cancellation, emergency termination, hostile workloads, source integrity, and cleanup.
+- Added a manual three-job workflow that issues and verifies on separate GitHub-hosted jobs while
+  the uniquely labeled ephemeral candidate only invokes hash-pinned host-owned collection and
+  cleanup tools.
+- Kept qualification evidence outside the production API, SQLite schema, execution plans,
+  execution outcomes, and connectivity decision.
+- Preserved `execution_connected=false`; a valid Phase 7.1 report is review evidence only.
+
 ## 0.7.0 — Isolated Repository Verification
 
 - Added deterministic `.git`-free snapshots for exact clean Git commits.

@@ -312,7 +312,7 @@ class RuntimeOutcome(CreatorSchema):
 
 class CreatorHealth(CreatorSchema):
     status: Literal["creator_foundation_ready"] = "creator_foundation_ready"
-    version: Literal["0.7.0"] = "0.7.0"
+    version: Literal["0.7.1"] = "0.7.1"
     compiler_ready: Literal[True] = True
     adaptive_router_ready: Literal[True] = True
     causal_learning_ready: Literal[True] = True
