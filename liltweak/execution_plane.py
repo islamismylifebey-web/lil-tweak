@@ -131,6 +131,8 @@ class RepositoryVerificationGate:
 
         observations = {item.command_id: item for item in evidence.observations}
         required = [command for command in plan.commands if command.required]
+        if not required:
+            failures.append("no_required_checks")
         passed = 0
         aggregate_duration_ms = 0
         aggregate_output_bytes = 0

@@ -34,7 +34,7 @@ Execution runner connected: No
 
 ## Verification
 
-- 243 unit, integration, API, repository, migration, concurrency, isolation-contract, and
+- 247 unit, integration, API, repository, migration, concurrency, isolation-contract, and
   adversarial tests pass.
 - Ruff lint and formatting checks pass.
 - All pre-Phase 7 deterministic tests and offline evaluation suites remain green.
@@ -49,6 +49,10 @@ Execution runner connected: No
 - Legacy HTTP path compatibility: passed.
 - Registered source writes, commits, pushes, deployments, and artifact releases during runtime
   verification: 0.
+- Optional-only recipes and plans are rejected, and the verification gate independently refuses
+  vacuous success when no required check exists.
+- Concurrent cancellation, emergency stop, and decision-time expiry retain their true terminal
+  state and failure code.
 
 ## Isolation evidence
 

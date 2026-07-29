@@ -1113,7 +1113,12 @@ class SQLiteStore:
                 if record.plan.plan_digest != plan_digest:
                     raise StoreStateConflictError("repository execution plan digest changed")
                 if record.plan.expires_at <= now:
-                    expired = record.model_copy(update={"status": ExecutionStatus.EXPIRED})
+                    expired = record.model_copy(
+                        update={
+                            "status": ExecutionStatus.EXPIRED,
+                            "failure_code": "plan_expired",
+                        }
+                    )
                     self._update_repository_execution_locked(expired, now)
                     self._connection.commit()
                     return expired, None
@@ -1409,10 +1414,33 @@ class SQLiteStore:
                 record = ExecutionRecord.model_validate_json(row["record_json"])
                 if record.status != ExecutionStatus.RUNNING:
                     raise StoreStateConflictError("repository execution is not running")
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                canceled = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = ?",
+                    (f"cancel:{record.plan.job_id}",),
+                ).fetchone()
+                job_row = self._connection.execute(
+                    "SELECT status FROM jobs WHERE id = ?",
+                    (record.plan.job_id,),
+                ).fetchone()
+                terminal_failure_code = failure_code
+                terminal_status = ExecutionStatus.FAILED
+                if emergency is not None and str(emergency["value"]) == "true":
+                    terminal_status = ExecutionStatus.CANCELED
+                    terminal_failure_code = "emergency_stop_active"
+                elif (
+                    (canceled is not None and str(canceled["value"]) == "true")
+                    or job_row is None
+                    or str(job_row["status"]) in {status.value for status in TERMINAL_STATES}
+                ):
+                    terminal_status = ExecutionStatus.CANCELED
+                    terminal_failure_code = "job_canceled"
                 failed = record.model_copy(
                     update={
-                        "status": ExecutionStatus.FAILED,
-                        "failure_code": failure_code,
+                        "status": terminal_status,
+                        "failure_code": terminal_failure_code,
                     }
                 )
                 self._update_repository_execution_locked(failed, now)

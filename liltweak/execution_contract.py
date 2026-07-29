@@ -104,6 +104,8 @@ class ExecutionRecipe(CreatorSchema):
         command_ids = [item.command_id for item in self.commands]
         if len(command_ids) != len(set(command_ids)):
             raise ValueError("execution recipe command ids must be unique")
+        if not any(command.required for command in self.commands):
+            raise ValueError("execution recipes require at least one required check")
         blocked = {
             "bash",
             "busybox",
@@ -203,6 +205,8 @@ class RepositoryExecutionPlan(CreatorSchema):
     def validate_plan(self) -> RepositoryExecutionPlan:
         if self.expires_at <= self.created_at:
             raise ValueError("execution plan must expire after creation")
+        if not any(command.required for command in self.commands):
+            raise ValueError("repository execution plans require at least one required check")
         expected_mount = content_digest(
             {
                 "source_manifest_digest": self.source.manifest_digest,

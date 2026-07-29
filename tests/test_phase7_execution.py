@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 
@@ -28,9 +29,12 @@ from liltweak.execution_contract import (
     ExecutionRecipe,
     ExecutionStatus,
     ProcessObservation,
+    RepositoryExecutionApproval,
+    RepositoryExecutionPlan,
     RunnerAttestation,
     SandboxExecutionEvidence,
     SandboxProfile,
+    SourceSnapshotManifest,
 )
 from liltweak.execution_plane import (
     ExecutionRecipeRegistry,
@@ -39,6 +43,7 @@ from liltweak.execution_plane import (
     RepositoryExecutionDisabledError,
     RepositoryExecutionError,
     RepositoryExecutionProviderError,
+    RepositoryVerificationGate,
 )
 from liltweak.models import Environment, RepositoryRef, TaskCreate
 from liltweak.repository import RepositoryInspector
@@ -160,6 +165,164 @@ def trusted_recipe() -> ExecutionRecipe:
         ),
         output_byte_limit=1_024,
     )
+
+
+def test_recipe_and_plan_require_a_required_check() -> None:
+    optional = SandboxCommand(
+        command_id="optional",
+        kind=CommandKind.TEST,
+        argv=("pytest", "-q"),
+        timeout_seconds=60,
+        required=False,
+    )
+    with pytest.raises(ValueError, match="at least one required check"):
+        ExecutionRecipe(
+            recipe_id="optional-only",
+            image_ref=IMAGE,
+            commands=(optional,),
+        )
+
+    valid = trusted_recipe()
+    source = SourceSnapshotManifest(
+        provider="local",
+        repository_id="fixture",
+        resolved_revision="a" * 40,
+        repository_fingerprint="b" * 64,
+        tree_digest="c" * 64,
+        archive_digest="d" * 64,
+        file_count=1,
+        total_bytes=1,
+    )
+    profile = SandboxProfile(
+        runtime_sha256=RUNTIME_DIGEST,
+        limiter_sha256=LIMITER_DIGEST,
+        image_ref=IMAGE,
+        container_user=valid.container_user,
+    )
+    created_at = datetime.now(UTC)
+    values = {
+        "id": "optional-only-plan",
+        "job_id": "job",
+        "organization_id": "org",
+        "project_id": "project",
+        "brief_digest": "e" * 64,
+        "route_digest": "f" * 64,
+        "recipe_id": valid.recipe_id,
+        "recipe_digest": valid.recipe_digest,
+        "source": source,
+        "sandbox_profile_digest": profile.profile_digest,
+        "workspace_mount_digest": content_digest(
+            {
+                "source_manifest_digest": source.manifest_digest,
+                "sandbox_profile_digest": profile.profile_digest,
+                "recipe_digest": valid.recipe_digest,
+            }
+        ),
+        "image_ref": IMAGE,
+        "commands": (optional,),
+        "wall_clock_seconds": 60,
+        "memory_megabytes": 128,
+        "cpu_count": 1,
+        "pid_limit": 16,
+        "file_size_limit_bytes": 1,
+        "output_byte_limit": 1_024,
+        "created_at": created_at,
+        "expires_at": created_at + timedelta(minutes=1),
+        "attempt_nonce": "1" * 64,
+    }
+    unsigned = RepositoryExecutionPlan.model_construct(**values, plan_digest="0" * 64)
+    with pytest.raises(ValueError, match="at least one required check"):
+        RepositoryExecutionPlan(
+            **values,
+            plan_digest=content_digest(unsigned.model_dump(mode="json", exclude={"plan_digest"})),
+        )
+
+
+def test_verification_gate_rejects_optional_only_checks_defensively() -> None:
+    optional = SandboxCommand(
+        command_id="optional",
+        kind=CommandKind.TEST,
+        argv=("pytest", "-q"),
+        timeout_seconds=60,
+        required=False,
+    )
+    valid = trusted_recipe()
+    source = SourceSnapshotManifest(
+        provider="local",
+        repository_id="fixture",
+        resolved_revision="a" * 40,
+        repository_fingerprint="b" * 64,
+        tree_digest="c" * 64,
+        archive_digest="d" * 64,
+        file_count=1,
+        total_bytes=1,
+    )
+    profile = SandboxProfile(
+        runtime_sha256=RUNTIME_DIGEST,
+        limiter_sha256=LIMITER_DIGEST,
+        image_ref=IMAGE,
+        container_user=valid.container_user,
+    )
+    plan = RepositoryExecutionPlan.model_construct(
+        id="optional-only-plan",
+        job_id="job",
+        organization_id="org",
+        project_id="project",
+        brief_digest="e" * 64,
+        route_digest="f" * 64,
+        recipe_id=valid.recipe_id,
+        recipe_digest=valid.recipe_digest,
+        source=source,
+        sandbox_profile_digest=profile.profile_digest,
+        workspace_mount_digest="0" * 64,
+        image_ref=IMAGE,
+        commands=(optional,),
+        wall_clock_seconds=60,
+        memory_megabytes=128,
+        cpu_count=1,
+        pid_limit=16,
+        file_size_limit_bytes=1,
+        output_byte_limit=1_024,
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=1),
+        attempt_nonce="1" * 64,
+        plan_digest="2" * 64,
+    )
+    evidence = SandboxExecutionEvidence(
+        plan_digest=plan.plan_digest,
+        session_id="optional-only-session",
+        source_before_digest=source.tree_digest,
+        source_after_digest=source.tree_digest,
+        observations=(
+            ProcessObservation(
+                command_id="optional",
+                exit_code=1,
+                stdout_digest="3" * 64,
+                stderr_digest="4" * 64,
+                stdout_bytes=0,
+                stderr_bytes=0,
+                duration_ms=1,
+            ),
+        ),
+        attestation=RunnerAttestation(
+            attempt_nonce=plan.attempt_nonce,
+            runtime_sha256=profile.runtime_sha256,
+            limiter_sha256=profile.limiter_sha256,
+            sandbox_profile_digest=profile.profile_digest,
+            image_ref=profile.image_ref,
+            cleanup_verified=True,
+        ),
+    )
+    verification = RepositoryVerificationGate().verify(
+        plan=plan,
+        evidence=evidence,
+        profile=profile,
+        canceled=False,
+        emergency_stopped=False,
+    )
+    assert verification.verified is False
+    assert verification.completion_claim_allowed is False
+    assert "no_required_checks" in verification.failure_codes
 
 
 def build_controller(
@@ -594,6 +757,49 @@ async def test_completion_failure_after_claim_cannot_leave_execution_running(
     assert failed.attempt_count == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("terminal_signal", "expected_failure"),
+    [
+        ("cancel", "job_canceled"),
+        ("emergency", "emergency_stop_active"),
+    ],
+)
+async def test_dispatch_failure_preserves_concurrent_terminal_truth(
+    tmp_path: Path,
+    terminal_signal: str,
+    expected_failure: str,
+) -> None:
+    store, _service, controller, executor, request = build_controller(tmp_path)
+    pending = controller.prepare(
+        request,
+        idempotency_key=f"phase7-dispatch-{terminal_signal}-key",
+    )
+    decision = controller.decide(
+        pending.plan.id,
+        ExecutionDecisionRequest(
+            decision="approve",
+            plan_digest=pending.plan.plan_digest,
+        ),
+        actor_id="owner",
+    )
+
+    async def signal_then_fail(**_kwargs):
+        if terminal_signal == "cancel":
+            store.set_job_cancel_requested(pending.plan.job_id)
+        else:
+            store.set_emergency_stop(True)
+        raise RuntimeError("simulated sandbox dispatch failure")
+
+    executor.execute = signal_then_fail
+    with pytest.raises(RepositoryExecutionProviderError):
+        await controller.run(pending.plan.id, approval_id=decision.approval.id)
+    terminal = controller.get(pending.plan.id)
+    assert terminal.status == ExecutionStatus.CANCELED
+    assert terminal.failure_code == expected_failure
+    assert terminal.attempt_count == 1
+
+
 def test_repository_execution_claim_is_atomic_across_workers(tmp_path: Path) -> None:
     database = tmp_path / "state" / "phase7.db"
     store, _service, controller, _executor, request = build_controller(
@@ -644,6 +850,31 @@ def test_pending_expiry_and_approved_cancellation_reconcile_truthfully(
     )
     assert expired.status == ExecutionStatus.EXPIRED
     assert expired.failure_code == "plan_expired"
+
+    expiring_on_decision = controller.prepare(
+        request,
+        idempotency_key="phase7-expiry-decision-key",
+    )
+    candidate_approval = RepositoryExecutionApproval(
+        id="phase7-expiry-decision-approval",
+        execution_id=expiring_on_decision.plan.id,
+        job_id=expiring_on_decision.plan.job_id,
+        plan_digest=expiring_on_decision.plan.plan_digest,
+        approved_by="owner",
+        signature=controller._sign_plan(expiring_on_decision.plan.plan_digest),
+        created_at=expiring_on_decision.plan.created_at,
+        expires_at=expiring_on_decision.plan.expires_at,
+    )
+    decided, approval = store.decide_repository_execution(
+        execution_id=expiring_on_decision.plan.id,
+        plan_digest=expiring_on_decision.plan.plan_digest,
+        decision="approve",
+        approval=candidate_approval,
+        now=expiring_on_decision.plan.expires_at,
+    )
+    assert approval is None
+    assert decided.status == ExecutionStatus.EXPIRED
+    assert decided.failure_code == "plan_expired"
 
     approved = controller.prepare(request, idempotency_key="phase7-cancel-state-key")
     controller.decide(
