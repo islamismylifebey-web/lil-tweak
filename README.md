@@ -1,4 +1,4 @@
-# Lil Tweak Isolated Repository Verification — 0.7.0
+# Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1
 
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
@@ -47,10 +47,26 @@ Version 0.7.0 adds a fail-closed repository verification control plane:
 - additive authenticated API routes for preparing, deciding, running, and reading verification;
 - 120 Phase 7 offline cases with zero model, provider, or real execution calls.
 
+Version 0.7.1 adds repository protection and a dormant dedicated-runner evidence gate:
+
+- automatic GitHub-hosted pull-request and `main` verification with read-only permissions,
+  immutable action pins, a frozen dependency lock, and no repository secrets;
+- the complete deterministic test, lint, format, offline-evaluation, and smoke matrix with
+  explicit zero-call and disconnected-execution assertions;
+- separately signed Ed25519 qualification challenge and attestation contracts bound to one exact
+  repository, source commit and tree, runner key, image, sandbox profile, runtime, limiter,
+  collector, and destroyer;
+- one exact ordered adversarial suite for network, resources, cancellation, cleanup, hostile
+  workloads, source integrity, and host isolation;
+- a manual three-job workflow that issues and verifies on separate GitHub-hosted jobs while the
+  uniquely labeled ephemeral candidate runs only hash-pinned host-owned collection and cleanup
+  tools.
+
 The repository runner remains disabled and truthfully reports `execution_connected=false` on this
 build host: its Linux namespace probe is not permitted, and the candidate stays hard-disconnected
-even where that narrow probe succeeds. Version 0.7.0 therefore ships the reviewed control plane
-and a candidate adapter, not a production-connected runner.
+even where that narrow probe succeeds. A valid 0.7.1 qualification report also leaves connection
+authorization false. Version 0.7.1 therefore ships automatic regression protection and a
+review-only qualification gate, not a production-connected runner.
 
 The Creator Model contract is documented in
 [`docs/creator-model-foundation.md`](docs/creator-model-foundation.md).
@@ -144,6 +160,17 @@ The 0.7.0 repository verification path still does not:
 - claim production quota enforcement, cancellation of an already-running sandbox, remote
   attestation, or a production deployment.
 
+The 0.7.1 qualification path also does not:
+
+- accept runner evidence through a public API or persist it in the production state database;
+- treat GitHub CI, a self-hosted label, a namespace probe, or self-asserted booleans as isolation
+  proof;
+- expose the runner signing key to repository code or accept a shared HMAC as runner identity;
+- authorize a live connection, modify configuration, consume an execution approval, dispatch a
+  sandbox, or enable deployment;
+- replace the future requirement for a fresh signed connection lease, durable replay prevention,
+  per-attempt signatures, and an independently destroyed one-job runner.
+
 The Phase 3.2 reasoning trial receives only synthetic, bounded evidence packets. It is not wired
 to registered repository contents or production API authority. Passing it proves evidence-backed
 engineering reasoning; it does not prove custom-trained foundation weights or executed code.
@@ -202,6 +229,8 @@ reference. Configuration, controller, and independently qualified runner gates a
 the candidate adapter cannot satisfy the runner gate. A later production adapter must pass the
 separate qualification in
 [`docs/phase7-security-boundaries.md`](docs/phase7-security-boundaries.md).
+The Phase 7.1 evidence-only contract and dedicated-host prerequisites are documented in
+[`docs/phase71-runner-qualification.md`](docs/phase71-runner-qualification.md).
 
 The artifact root and repository workspace must be disjoint. Without the encryption key,
 inspection and planning work, while `recovery_preparation_enabled` remains false.
@@ -315,7 +344,7 @@ launch status. A dedicated target host must prove non-root execution, network de
 CPU/memory/PID/disk limits, live cancellation and emergency termination, signed remote
 attestation, cleanup, and sandbox destruction before repository execution may be enabled.
 The public service health field `phase=3` intentionally remains the legacy core-service phase;
-the separately versioned Creator/verification health contract reports version `0.7.0`.
+the separately versioned Creator/verification health contract reports version `0.7.1`.
 
 The latest high-volume and live adversarial results are documented in
 [`docs/gauntlet-report.md`](docs/gauntlet-report.md). The single-model engineering result is in
