@@ -694,6 +694,9 @@ class AdaptiveRouter:
         return ReasoningEffort.XHIGH
 
 
+_DEFAULT_ADAPTIVE_ROUTE: Final = AdaptiveRouter.route
+
+
 class VerificationAuthority:
     """Trusted-harness signer. It is never exposed through the public API."""
 
@@ -765,7 +768,7 @@ class CreatorService:
     def route(self, request: RoutePreviewRequest) -> RouteDecision:
         verified_digest = self._verify_brief_envelope(request.envelope)
         route = self.router.route
-        if getattr(route, "__func__", None) is AdaptiveRouter.route:
+        if getattr(route, "__func__", None) is _DEFAULT_ADAPTIVE_ROUTE:
             return self.router._route_from_verified_brief(
                 request.envelope.brief,
                 brief_digest=verified_digest,

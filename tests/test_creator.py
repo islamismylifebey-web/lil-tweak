@@ -259,6 +259,27 @@ def test_custom_router_override_remains_in_control() -> None:
     assert router.called is True
 
 
+def test_class_router_replacement_remains_in_control(monkeypatch) -> None:
+    original = AdaptiveRouter.route
+    calls = 0
+
+    def route(self, brief):
+        nonlocal calls
+        calls += 1
+        return original(self, brief)
+
+    monkeypatch.setattr(AdaptiveRouter, "route", route)
+    service = creator_service()
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+
+    service.route(RoutePreviewRequest(envelope=envelope))
+
+    assert calls == 1
+
+
 def test_instance_router_override_remains_in_control() -> None:
     service = creator_service()
     router = AdaptiveRouter()
