@@ -38,6 +38,19 @@ class _TreeEntry:
     sha256: str
 
 
+@dataclass(frozen=True)
+class _InventoryEntry:
+    path: str
+    mode: int
+    object_id: str
+
+
+@dataclass(frozen=True)
+class _AdmittedEntry:
+    inventory: _InventoryEntry
+    size: int
+
+
 class _HashWriter:
     def __init__(self) -> None:
         self._digest = hashlib.sha256()
@@ -56,6 +69,221 @@ class _HashWriter:
 
     def hexdigest(self) -> str:
         return self._digest.hexdigest()
+
+
+class _GitBatchReader:
+    """A single-repository, single-pass bounded Git cat-file protocol reader."""
+
+    def __init__(
+        self,
+        *,
+        command: list[str],
+        environment: dict[str, str],
+        deadline: float,
+    ) -> None:
+        self.command = command
+        self.deadline = deadline
+        self.process: subprocess.Popen[bytes] | None = None
+        self.selector: selectors.BaseSelector | None = None
+        self.buffer = bytearray()
+        self.finished = False
+        try:
+            self.process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=environment,
+                start_new_session=True,
+            )
+            assert self.process.stdin is not None
+            assert self.process.stdout is not None
+            os.set_blocking(self.process.stdin.fileno(), False)
+            self.selector = selectors.DefaultSelector()
+            self.selector.register(self.process.stdout, selectors.EVENT_READ)
+        except OSError as exc:
+            self.close(failed=True)
+            raise SourceSnapshotError("bounded Git batch operation failed") from exc
+
+    def __enter__(self) -> _GitBatchReader:
+        return self
+
+    def __exit__(self, exception_type, _exception, _traceback) -> None:
+        self.close(failed=exception_type is not None)
+
+    def check(self, object_id: str) -> int:
+        self._request(object_id)
+        returned_id, object_type, object_size = self._read_header()
+        self._validate_metadata(
+            expected_id=object_id,
+            returned_id=returned_id,
+            object_type=object_type,
+        )
+        return object_size
+
+    def read_blob(self, object_id: str, *, expected_size: int) -> bytes:
+        self._request(object_id)
+        returned_id, object_type, object_size = self._read_header()
+        self._validate_metadata(
+            expected_id=object_id,
+            returned_id=returned_id,
+            object_type=object_type,
+        )
+        if object_size != expected_size:
+            raise SourceSnapshotError("Git blob size changed during snapshot preparation")
+        data = self._read_exact(object_size)
+        if self._read_exact(1) != b"\n":
+            raise SourceSnapshotError("Git batch content delimiter is invalid")
+        return data
+
+    def close(self, *, failed: bool) -> None:
+        if self.finished:
+            return
+        self.finished = True
+        process = self.process
+        selector = self.selector
+        try:
+            if process is None:
+                return
+            if failed:
+                RepositorySnapshotBuilder._terminate_process(process)
+                return
+            if process.stdin is not None and not process.stdin.closed:
+                process.stdin.close()
+            if self.buffer:
+                raise SourceSnapshotError("Git batch operation returned unexpected trailing output")
+            assert process.stdout is not None
+            while True:
+                self._require_time()
+                assert selector is not None
+                events = selector.select(timeout=min(self._remaining(), 0.25))
+                if not events:
+                    continue
+                chunk = os.read(process.stdout.fileno(), 64 * 1024)
+                if not chunk:
+                    break
+                raise SourceSnapshotError("Git batch operation returned unexpected trailing output")
+            self._require_time()
+            return_code = process.wait(timeout=self._remaining())
+            if return_code != 0:
+                raise SourceSnapshotError("bounded Git batch operation failed")
+        except SourceSnapshotError:
+            if process is not None:
+                RepositorySnapshotBuilder._terminate_process(process)
+            raise
+        except (BrokenPipeError, OSError, subprocess.TimeoutExpired) as exc:
+            if process is not None:
+                RepositorySnapshotBuilder._terminate_process(process)
+            raise SourceSnapshotError("bounded Git batch operation failed") from exc
+        finally:
+            if selector is not None:
+                selector.close()
+            if process is not None:
+                if process.stdin is not None and not process.stdin.closed:
+                    with contextlib.suppress(BrokenPipeError, OSError):
+                        process.stdin.close()
+                if process.stdout is not None:
+                    with contextlib.suppress(OSError):
+                        process.stdout.close()
+
+    def _request(self, object_id: str) -> None:
+        if self.finished:
+            raise SourceSnapshotError("Git batch operation is already closed")
+        if not RepositorySnapshotBuilder._valid_object_id(object_id):
+            raise SourceSnapshotError("Git blob object id uses an unsupported hash format")
+        self._require_time()
+        assert self.process is not None and self.process.stdin is not None
+        descriptor = self.process.stdin.fileno()
+        pending = memoryview(object_id.encode("ascii") + b"\n")
+        write_selector = selectors.DefaultSelector()
+        try:
+            write_selector.register(descriptor, selectors.EVENT_WRITE)
+            while pending:
+                self._require_time()
+                events = write_selector.select(timeout=min(self._remaining(), 0.25))
+                if not events:
+                    continue
+                try:
+                    written = os.write(descriptor, pending)
+                except BlockingIOError:
+                    continue
+                if written <= 0:
+                    raise BrokenPipeError
+                pending = pending[written:]
+        except (BrokenPipeError, OSError) as exc:
+            RepositorySnapshotBuilder._terminate_process(self.process)
+            raise SourceSnapshotError("bounded Git batch operation failed") from exc
+        finally:
+            write_selector.close()
+
+    def _read_header(self) -> tuple[str, str, int]:
+        raw_header = self._read_until_newline(limit=256)
+        try:
+            returned_id, object_type, raw_size = raw_header.decode("ascii").split(" ")
+            if not raw_size.isdecimal() or (len(raw_size) > 1 and raw_size.startswith("0")):
+                raise ValueError
+            object_size = int(raw_size)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise SourceSnapshotError("Git batch object header is invalid") from exc
+        if object_size < 0:
+            raise SourceSnapshotError("Git batch object header is invalid")
+        return returned_id, object_type, object_size
+
+    @staticmethod
+    def _validate_metadata(
+        *,
+        expected_id: str,
+        returned_id: str,
+        object_type: str,
+    ) -> None:
+        if returned_id != expected_id or object_type != "blob":
+            raise SourceSnapshotError("Git batch object metadata does not match the tree")
+
+    def _read_until_newline(self, *, limit: int) -> bytes:
+        while True:
+            delimiter = self.buffer.find(b"\n")
+            if delimiter >= 0:
+                if delimiter > limit:
+                    raise SourceSnapshotError("bounded Git batch header exceeded its limit")
+                line = bytes(self.buffer[:delimiter])
+                del self.buffer[: delimiter + 1]
+                return line
+            if len(self.buffer) > limit:
+                raise SourceSnapshotError("bounded Git batch header exceeded its limit")
+            self._read_into_buffer(maximum=limit + 1 - len(self.buffer))
+
+    def _read_exact(self, size: int) -> bytes:
+        output = bytearray()
+        while len(output) < size:
+            if self.buffer:
+                take = min(size - len(output), len(self.buffer))
+                output.extend(self.buffer[:take])
+                del self.buffer[:take]
+                continue
+            self._read_into_buffer(maximum=min(64 * 1024, size - len(output)))
+        return bytes(output)
+
+    def _read_into_buffer(self, *, maximum: int) -> None:
+        self._require_time()
+        assert self.process is not None
+        assert self.process.stdout is not None
+        assert self.selector is not None
+        while True:
+            events = self.selector.select(timeout=min(self._remaining(), 0.25))
+            if events:
+                break
+            self._require_time()
+        chunk = os.read(self.process.stdout.fileno(), max(1, maximum))
+        if not chunk:
+            raise SourceSnapshotError("Git batch operation ended before its response was complete")
+        self.buffer.extend(chunk)
+
+    def _remaining(self) -> float:
+        return self.deadline - time.monotonic()
+
+    def _require_time(self) -> None:
+        if self._remaining() <= 0:
+            raise SourceSnapshotError("bounded Git batch operation failed")
 
 
 class RepositorySnapshotBuilder:
@@ -162,8 +390,7 @@ class RepositorySnapshotBuilder:
             output_limit=inventory_limit,
             deadline=deadline,
         )
-        entries: list[_TreeEntry] = []
-        total_bytes = 0
+        inventory: list[_InventoryEntry] = []
         collision_keys: set[str] = set()
         file_keys: set[str] = set()
         ancestor_keys: set[str] = set()
@@ -179,56 +406,89 @@ class RepositorySnapshotBuilder:
                 object_id = raw_oid.decode("ascii")
             except (ValueError, UnicodeDecodeError) as exc:
                 raise SourceSnapshotError("Git tree contains an invalid entry") from exc
-            if object_type != "blob" or mode_text not in {"100644", "100755"}:
+            if (
+                object_type != "blob"
+                or mode_text not in {"100644", "100755"}
+                or not self._valid_object_id(object_id)
+            ):
                 raise SourceSnapshotError("Git tree contains a non-regular source entry")
             self._validate_path(path, collision_keys, file_keys, ancestor_keys)
             if is_sensitive_path(path):
                 raise SourceSnapshotError("committed tree contains a sensitive path")
-            raw_size = self._git(
-                repository,
-                "cat-file",
-                "-s",
-                object_id,
-                output_limit=128,
-                deadline=deadline,
-            )
-            try:
-                object_size = int(raw_size.decode("ascii").strip())
-            except (UnicodeDecodeError, ValueError) as exc:
-                raise SourceSnapshotError("Git blob size is invalid") from exc
-            if object_size < 0 or object_size > self.max_file_bytes:
-                raise SourceSnapshotError("committed tree contains an oversized file")
-            if total_bytes + object_size > self.max_total_bytes:
-                raise SourceSnapshotError("committed tree exceeds the snapshot byte limit")
-            data = self._git(
-                repository,
-                "cat-file",
-                "blob",
-                object_id,
-                output_limit=object_size,
-                deadline=deadline,
-            )
-            if len(data) != object_size:
-                raise SourceSnapshotError("Git blob size changed during snapshot preparation")
-            if self._git_object_id(data, object_id) != object_id:
-                raise SourceSnapshotError("Git blob content does not match its object id")
-            if secret_rule_ids(data):
-                raise SourceSnapshotError("committed tree contains credential-shaped material")
-            total_bytes += object_size
-            entries.append(
-                _TreeEntry(
+            inventory.append(
+                _InventoryEntry(
                     path=path,
                     mode=0o755 if mode_text == "100755" else 0o644,
                     object_id=object_id,
-                    data=data,
-                    sha256=hashlib.sha256(data).hexdigest(),
                 )
             )
-            if len(entries) > self.max_files:
+            if len(inventory) > self.max_files:
                 raise SourceSnapshotError("committed tree exceeds the snapshot file limit")
-        if not entries:
+        if not inventory:
             raise SourceSnapshotError("committed tree snapshot is empty")
+
+        admitted: list[_AdmittedEntry] = []
+        total_bytes = 0
+        with self._git_batch(
+            repository,
+            "--batch-check",
+            deadline=deadline,
+        ) as size_reader:
+            for item in inventory:
+                object_size = size_reader.check(item.object_id)
+                if object_size > self.max_file_bytes:
+                    raise SourceSnapshotError("committed tree contains an oversized file")
+                if total_bytes + object_size > self.max_total_bytes:
+                    raise SourceSnapshotError("committed tree exceeds the snapshot byte limit")
+                total_bytes += object_size
+                admitted.append(_AdmittedEntry(inventory=item, size=object_size))
+
+        entries: list[_TreeEntry] = []
+        with self._git_batch(
+            repository,
+            "--batch",
+            deadline=deadline,
+        ) as content_reader:
+            for item in admitted:
+                data = content_reader.read_blob(
+                    item.inventory.object_id,
+                    expected_size=item.size,
+                )
+                if self._git_object_id(data, item.inventory.object_id) != item.inventory.object_id:
+                    raise SourceSnapshotError("Git blob content does not match its object id")
+                if secret_rule_ids(data):
+                    raise SourceSnapshotError("committed tree contains credential-shaped material")
+                entries.append(
+                    _TreeEntry(
+                        path=item.inventory.path,
+                        mode=item.inventory.mode,
+                        object_id=item.inventory.object_id,
+                        data=data,
+                        sha256=hashlib.sha256(data).hexdigest(),
+                    )
+                )
         return inspection, repository, entries
+
+    @staticmethod
+    def _valid_object_id(object_id: str) -> bool:
+        return len(object_id) in {40, 64} and all(
+            character in "0123456789abcdef" for character in object_id
+        )
+
+    def _git_batch(
+        self,
+        repository: Path,
+        batch_mode: str,
+        *,
+        deadline: float,
+    ) -> _GitBatchReader:
+        if batch_mode not in {"--batch-check", "--batch"}:
+            raise ValueError("unsupported Git batch mode")
+        return _GitBatchReader(
+            command=self._git_command(repository, "cat-file", batch_mode),
+            environment=self._git_environment(),
+            deadline=deadline,
+        )
 
     @staticmethod
     def _git_object_id(data: bytes, expected: str) -> str:
@@ -431,29 +691,8 @@ class RepositorySnapshotBuilder:
         output_limit: int,
         deadline: float | None = None,
     ) -> bytes:
-        environment = {
-            "HOME": "/nonexistent",
-            "LANG": "C",
-            "LC_ALL": "C",
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_NO_REPLACE_OBJECTS": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "GIT_TERMINAL_PROMPT": "0",
-        }
-        command = [
-            self.git_binary,
-            "-c",
-            "core.hooksPath=/dev/null",
-            "-c",
-            "core.attributesFile=/dev/null",
-            "-c",
-            "protocol.allow=never",
-            "-C",
-            str(repository),
-            *arguments,
-        ]
+        environment = self._git_environment()
+        command = self._git_command(repository, *arguments)
         process: subprocess.Popen[bytes] | None = None
         selector: selectors.BaseSelector | None = None
         try:
@@ -500,6 +739,34 @@ class RepositorySnapshotBuilder:
                 selector.close()
             if process is not None and process.stdout is not None:
                 process.stdout.close()
+
+    @staticmethod
+    def _git_environment() -> dict[str, str]:
+        return {
+            "HOME": "/nonexistent",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+
+    def _git_command(self, repository: Path, *arguments: str) -> list[str]:
+        return [
+            self.git_binary,
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.attributesFile=/dev/null",
+            "-c",
+            "protocol.allow=never",
+            "-C",
+            str(repository),
+            *arguments,
+        ]
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen[bytes]) -> None:
