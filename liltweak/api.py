@@ -34,6 +34,21 @@ from .creator_contract import (
     RoutePreviewRequest,
 )
 from .evidence import EvidenceChainError
+from .execution_contract import (
+    ExecutionDecisionRequest,
+    ExecutionDecisionResponse,
+    ExecutionOutcomeRecord,
+    ExecutionPrepareRequest,
+    ExecutionRecord,
+    ExecutionRunRequest,
+)
+from .execution_plane import (
+    RepositoryExecutionApprovalError,
+    RepositoryExecutionController,
+    RepositoryExecutionDisabledError,
+    RepositoryExecutionError,
+    RepositoryExecutionProviderError,
+)
 from .live_contract import (
     LiveProposalDecisionRequest,
     LiveProposalDecisionResponse,
@@ -142,6 +157,7 @@ def create_app(
     settings: Settings | None = None,
     creator_service: CreatorService | None = None,
     live_controller: LiveCreatorController | None = None,
+    execution_controller: RepositoryExecutionController | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -193,11 +209,11 @@ def create_app(
 
     app = FastAPI(
         title="Lil Tweak Engineering API",
-        version="0.6.0",
+        version="0.7.0",
         description=(
             "Independent evidence-driven engineering engine with Creator Model compilation, "
-            "bounded live reasoning, adaptive routing, encrypted recovery, approvals, "
-            "and causal learning."
+            "bounded live reasoning, adaptive routing, encrypted recovery, approvals, causal "
+            "learning, and a disabled-by-default read-only repository execution plane."
         ),
     )
 
@@ -297,6 +313,37 @@ def create_app(
             content={"detail": "live Creator provider is currently unavailable"},
         )
 
+    @app.exception_handler(RepositoryExecutionApprovalError)
+    async def repository_execution_approval_handler(
+        _request: Request,
+        exc: RepositoryExecutionApprovalError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(RepositoryExecutionDisabledError)
+    async def repository_execution_disabled_handler(
+        _request: Request,
+        exc: RepositoryExecutionDisabledError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(RepositoryExecutionProviderError)
+    async def repository_execution_provider_handler(
+        _request: Request,
+        _exc: RepositoryExecutionProviderError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "repository sandbox attempt failed and will not be retried"},
+        )
+
+    @app.exception_handler(RepositoryExecutionError)
+    async def repository_execution_handler(
+        _request: Request,
+        exc: RepositoryExecutionError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     @app.exception_handler(EmergencyStopError)
     async def emergency_handler(_request: Request, exc: EmergencyStopError) -> JSONResponse:
         return JSONResponse(status_code=423, content={"detail": str(exc)})
@@ -370,6 +417,11 @@ def create_app(
         return creator_service.health(
             model_calls_enabled=(live_controller is not None and live_controller.enabled),
             hosted_sandbox_probe_ready=False,
+            repository_execution_connected=(
+                settings.repository_execution_enabled
+                and execution_controller is not None
+                and execution_controller.connected
+            ),
         )
 
     @app.post(
@@ -406,6 +458,88 @@ def create_app(
         limit: int = 20,
     ) -> list[CausalLearningRecord]:
         return creator_service.list_learning(problem_signature, limit=limit)
+
+    def require_execution_controller() -> RepositoryExecutionController:
+        if not settings.repository_execution_enabled or execution_controller is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="repository execution is disabled or not configured",
+            )
+        return execution_controller
+
+    def require_execution_reader() -> RepositoryExecutionController:
+        if execution_controller is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="repository execution records are not configured",
+            )
+        return execution_controller
+
+    @app.post(
+        "/v1/creator/executions",
+        response_model=ExecutionRecord,
+        status_code=status.HTTP_202_ACCEPTED,
+        dependencies=[Depends(require_auth)],
+    )
+    async def prepare_repository_execution(
+        body: ExecutionPrepareRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=16, max_length=128),
+        ],
+    ) -> ExecutionRecord:
+        return await run_in_threadpool(
+            require_execution_controller().prepare,
+            body,
+            idempotency_key=idempotency_key,
+        )
+
+    @app.get(
+        "/v1/creator/executions/{execution_id}",
+        response_model=ExecutionRecord,
+        dependencies=[Depends(require_auth)],
+    )
+    async def get_repository_execution(execution_id: str) -> ExecutionRecord:
+        return require_execution_reader().get(execution_id)
+
+    @app.post(
+        "/v1/creator/executions/{execution_id}/decision",
+        response_model=ExecutionDecisionResponse,
+        dependencies=[Depends(require_auth)],
+    )
+    async def decide_repository_execution(
+        execution_id: str,
+        body: ExecutionDecisionRequest,
+    ) -> ExecutionDecisionResponse:
+        return require_execution_controller().decide(
+            execution_id,
+            body,
+            actor_id=settings.owner_id,
+        )
+
+    @app.post(
+        "/v1/creator/executions/{execution_id}/run",
+        response_model=ExecutionRecord,
+        dependencies=[Depends(require_auth)],
+    )
+    async def run_repository_execution(
+        execution_id: str,
+        body: ExecutionRunRequest,
+    ) -> ExecutionRecord:
+        return await require_execution_controller().run(
+            execution_id,
+            approval_id=body.approval_id,
+        )
+
+    @app.get(
+        "/v1/creator/executions/{execution_id}/result",
+        response_model=ExecutionOutcomeRecord,
+        dependencies=[Depends(require_auth)],
+    )
+    async def get_repository_execution_result(
+        execution_id: str,
+    ) -> ExecutionOutcomeRecord:
+        return require_execution_reader().get_result(execution_id)
 
     def require_live_controller() -> LiveCreatorController:
         if live_controller is None:
