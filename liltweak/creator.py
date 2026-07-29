@@ -65,6 +65,16 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
+def _digests_match(first: object, second: object) -> bool:
+    return (
+        isinstance(first, str)
+        and isinstance(second, str)
+        and first.isascii()
+        and second.isascii()
+        and secrets.compare_digest(first, second)
+    )
+
+
 def _extract_sentences(direction: str) -> list[str]:
     return [item.strip() for item in re.split(r"(?<=[.!?])\s+|\n+", direction) if item.strip()]
 
@@ -536,6 +546,18 @@ MODEL_PROFILES: Final[tuple[ModelProfile, ...]] = (
 
 class AdaptiveRouter:
     def route(self, brief: CreatorBrief) -> RouteDecision:
+        return self._route_from_verified_brief(
+            brief,
+            brief_digest=brief.brief_digest,
+        )
+
+    def _route_from_verified_brief(
+        self,
+        brief: CreatorBrief,
+        *,
+        brief_digest: str,
+    ) -> RouteDecision:
+        """Route a brief whose digest was freshly verified by the caller."""
         complexity = self._complexity(brief)
         capabilities = self._required_capabilities(brief)
         blocked_reasons: list[str] = []
@@ -569,7 +591,7 @@ class AdaptiveRouter:
             cost = profile.synthetic_cost_units
 
         values = {
-            "brief_digest": brief.brief_digest,
+            "brief_digest": brief_digest,
             "status": status,
             "selected_tier": selected_tier,
             "reasoning_effort": reasoning_effort,
@@ -672,6 +694,9 @@ class AdaptiveRouter:
         return ReasoningEffort.XHIGH
 
 
+_DEFAULT_ADAPTIVE_ROUTE: Final = AdaptiveRouter.route
+
+
 class VerificationAuthority:
     """Trusted-harness signer. It is never exposed through the public API."""
 
@@ -732,16 +757,23 @@ class CreatorService:
         actor_id: str,
     ) -> CreatorBriefEnvelope:
         brief = self.compiler.compile(request, actor_id=actor_id)
-        signature = self._sign_digest(brief.brief_digest, domain="creator-brief-v1")
+        brief_digest = brief.brief_digest
+        signature = self._sign_digest(brief_digest, domain="creator-brief-v1")
         return CreatorBriefEnvelope(
             brief=brief,
-            brief_digest=brief.brief_digest,
+            brief_digest=brief_digest,
             signature=signature,
         )
 
     def route(self, request: RoutePreviewRequest) -> RouteDecision:
-        self._verify_brief_envelope(request.envelope)
-        return self.router.route(request.envelope.brief)
+        verified_digest = self._verify_brief_envelope(request.envelope)
+        route = self.router.route
+        if getattr(route, "__func__", None) is _DEFAULT_ADAPTIVE_ROUTE:
+            return self.router._route_from_verified_brief(
+                request.envelope.brief,
+                brief_digest=verified_digest,
+            )
+        return route(request.envelope.brief)
 
     def prepare(
         self,
@@ -826,14 +858,16 @@ class CreatorService:
             for entry in self.store.list_creator_learning(problem_signature, limit=limit)
         ]
 
-    def _verify_brief_envelope(self, envelope: CreatorBriefEnvelope) -> None:
-        if envelope.brief.brief_digest != envelope.brief_digest:
+    def _verify_brief_envelope(self, envelope: CreatorBriefEnvelope) -> str:
+        verified_digest = envelope.brief.brief_digest
+        if not _digests_match(verified_digest, envelope.brief_digest):
             raise CreatorEnvelopeError("creator brief digest is invalid")
         expected = self._sign_digest(envelope.brief_digest, domain="creator-brief-v1")
         if not secrets.compare_digest(expected, envelope.signature):
             raise CreatorEnvelopeError("creator brief signature is invalid")
         if envelope.brief.authority.source != "authenticated_server_context":
             raise CreatorEnvelopeError("creator brief authority is invalid")
+        return verified_digest
 
     def _verify_outcome_envelope(self, envelope: VerifiedOutcomeEnvelope) -> None:
         if envelope.outcome.outcome_digest != envelope.outcome_digest:

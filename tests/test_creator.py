@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from liltweak.creator import (
+    AdaptiveRouter,
     CreatorEnvelopeError,
     CreatorInputError,
     CreatorLearningError,
@@ -200,6 +201,130 @@ def test_digest_bound_brief_rejects_tampering() -> None:
     )
     with pytest.raises(CreatorEnvelopeError):
         service.route(RoutePreviewRequest(envelope=forged))
+
+
+def test_route_boundary_recomputes_digest_after_model_copy() -> None:
+    service = creator_service()
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+    changed = envelope.brief.model_copy(update={"direction": "Deploy to production."})
+    forged = CreatorBriefEnvelope.model_construct(
+        brief=changed,
+        brief_digest=envelope.brief_digest,
+        signature=envelope.signature,
+    )
+    request = RoutePreviewRequest.model_construct(envelope=forged)
+
+    with pytest.raises(CreatorEnvelopeError, match="brief digest is invalid"):
+        service.route(request)
+
+
+def test_route_boundary_rejects_non_ascii_digest_as_envelope_error() -> None:
+    service = creator_service()
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+    forged = CreatorBriefEnvelope.model_construct(
+        brief=envelope.brief,
+        brief_digest="é" * 64,
+        signature=envelope.signature,
+    )
+
+    with pytest.raises(CreatorEnvelopeError, match="brief digest is invalid"):
+        service.route(RoutePreviewRequest.model_construct(envelope=forged))
+
+
+def test_custom_router_override_remains_in_control() -> None:
+    class RecordingRouter(AdaptiveRouter):
+        def __init__(self) -> None:
+            self.called = False
+
+        def route(self, brief):
+            self.called = True
+            return super().route(brief)
+
+    service = creator_service()
+    router = RecordingRouter()
+    service.router = router
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+
+    service.route(RoutePreviewRequest(envelope=envelope))
+
+    assert router.called is True
+
+
+def test_class_router_replacement_remains_in_control(monkeypatch) -> None:
+    original = AdaptiveRouter.route
+    calls = 0
+
+    def route(self, brief):
+        nonlocal calls
+        calls += 1
+        return original(self, brief)
+
+    monkeypatch.setattr(AdaptiveRouter, "route", route)
+    service = creator_service()
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+
+    service.route(RoutePreviewRequest(envelope=envelope))
+
+    assert calls == 1
+
+
+def test_instance_router_override_remains_in_control() -> None:
+    service = creator_service()
+    router = AdaptiveRouter()
+    original = router.route
+    calls = 0
+
+    def route(brief):
+        nonlocal calls
+        calls += 1
+        return original(brief)
+
+    router.route = route
+    service.router = router
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Write a short summary."),
+        actor_id="owner",
+    )
+
+    service.route(RoutePreviewRequest(envelope=envelope))
+
+    assert calls == 1
+
+
+def test_compile_and_route_reuse_only_freshly_verified_digest(monkeypatch) -> None:
+    import liltweak.creator as creator_module
+    import liltweak.creator_contract as contract_module
+
+    original = contract_module.content_digest
+    calls: list[object] = []
+
+    def counted(value: object) -> str:
+        calls.append(value)
+        return original(value)
+
+    monkeypatch.setattr(contract_module, "content_digest", counted)
+    monkeypatch.setattr(creator_module, "content_digest", counted)
+
+    service = creator_service()
+    envelope = service.compile(
+        CreatorCompileRequest(direction="Build a typed API and targeted tests."),
+        actor_id="owner",
+    )
+    service.route(RoutePreviewRequest(envelope=envelope))
+
+    assert len(calls) == 7
 
 
 def test_only_signed_observed_outcomes_enter_causal_learning(tmp_path: Path) -> None:
