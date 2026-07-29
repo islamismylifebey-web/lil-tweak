@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from typing import Annotated
 
@@ -16,6 +17,22 @@ from .approvals import ApprovalError
 from .artifacts import ArtifactIntegrityError, EncryptedArtifactStore
 from .config import Settings
 from .costs import BudgetExceededError, CostGuard
+from .creator import (
+    CreatorEnvelopeError,
+    CreatorInputError,
+    CreatorLearningError,
+    CreatorService,
+)
+from .creator_contract import (
+    MAX_CREATOR_REQUEST_BYTES,
+    CausalLearningRecord,
+    CreatorBriefEnvelope,
+    CreatorCompileRequest,
+    CreatorHealth,
+    CreatorRunPreview,
+    RouteDecision,
+    RoutePreviewRequest,
+)
 from .evidence import EvidenceChainError
 from .models import (
     ApprovalDecisionRequest,
@@ -47,6 +64,19 @@ class ApiModel(BaseModel):
 class EmergencyStopResponse(ApiModel):
     status: str
     canceled_jobs: list[str]
+
+
+class _DuplicateJsonKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJsonKeyError
+        result[key] = value
+    return result
 
 
 def _safe_match(actual: str, expected: str) -> bool:
@@ -90,9 +120,20 @@ def build_default_service(settings: Settings) -> LilTweakService:
 def create_app(
     service: LilTweakService | None = None,
     settings: Settings | None = None,
+    creator_service: CreatorService | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
+    creator_key = settings.creator_signing_key
+    if creator_key is None and settings.evidence_signing_key is not None:
+        creator_key = hashlib.sha256(
+            settings.evidence_signing_key + b"LilTweakCreatorControlPlaneV1"
+        ).digest()
+    creator_service = creator_service or CreatorService(
+        store=service.store,
+        signing_key=creator_key,
+        durable_signatures=creator_key is not None,
+    )
     bearer = HTTPBearer(auto_error=False)
 
     async def require_auth(
@@ -118,15 +159,33 @@ def create_app(
 
     app = FastAPI(
         title="Lil Tweak Engineering API",
-        version="0.3.2",
+        version="0.5.0",
         description=(
-            "Independent Phase 3 repository intelligence, encrypted recovery preparation, "
-            "change specifications, approvals, and evidence runtime."
+            "Independent evidence-driven engineering engine with Creator Model compilation, "
+            "adaptive routing previews, encrypted recovery, approvals, and causal learning."
         ),
     )
 
     @app.middleware("http")
     async def private_api_headers(request: Request, call_next):
+        if request.url.path.startswith("/v1/creator/") and request.method in {
+            "POST",
+            "PUT",
+            "PATCH",
+        }:
+            body = await request.body()
+            if len(body) > MAX_CREATOR_REQUEST_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Creator request is too large."},
+                )
+            try:
+                json.loads(body, object_pairs_hook=_reject_duplicate_json_keys)
+            except (_DuplicateJsonKeyError, json.JSONDecodeError, UnicodeDecodeError):
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Creator request JSON is invalid."},
+                )
         response = await call_next(request)
         if request.url.path.startswith("/v1/"):
             response.headers["Cache-Control"] = "no-store"
@@ -163,6 +222,22 @@ def create_app(
     @app.exception_handler(SensitiveInputError)
     async def sensitive_input_handler(_request: Request, exc: SensitiveInputError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(CreatorInputError)
+    async def creator_input_handler(_request: Request, exc: CreatorInputError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(CreatorEnvelopeError)
+    async def creator_envelope_handler(
+        _request: Request, exc: CreatorEnvelopeError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(CreatorLearningError)
+    async def creator_learning_handler(
+        _request: Request, exc: CreatorLearningError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     @app.exception_handler(EmergencyStopError)
     async def emergency_handler(_request: Request, exc: EmergencyStopError) -> JSONResponse:
@@ -227,6 +302,49 @@ def create_app(
     @app.get("/health")
     async def health() -> dict:
         return service.health().model_dump(mode="json")
+
+    @app.get(
+        "/v1/creator/health",
+        response_model=CreatorHealth,
+        dependencies=[Depends(require_auth)],
+    )
+    async def creator_health() -> CreatorHealth:
+        return creator_service.health()
+
+    @app.post(
+        "/v1/creator/compile",
+        response_model=CreatorBriefEnvelope,
+        dependencies=[Depends(require_auth)],
+    )
+    async def creator_compile(body: CreatorCompileRequest) -> CreatorBriefEnvelope:
+        return creator_service.compile(body, actor_id=settings.owner_id)
+
+    @app.post(
+        "/v1/creator/route",
+        response_model=RouteDecision,
+        dependencies=[Depends(require_auth)],
+    )
+    async def creator_route(body: RoutePreviewRequest) -> RouteDecision:
+        return creator_service.route(body)
+
+    @app.post(
+        "/v1/creator/prepare",
+        response_model=CreatorRunPreview,
+        dependencies=[Depends(require_auth)],
+    )
+    async def creator_prepare(body: CreatorCompileRequest) -> CreatorRunPreview:
+        return creator_service.prepare(body, actor_id=settings.owner_id)
+
+    @app.get(
+        "/v1/creator/learning",
+        response_model=list[CausalLearningRecord],
+        dependencies=[Depends(require_auth)],
+    )
+    async def creator_learning(
+        problem_signature: str,
+        limit: int = 20,
+    ) -> list[CausalLearningRecord]:
+        return creator_service.list_learning(problem_signature, limit=limit)
 
     @app.post(
         "/v1/jobs",

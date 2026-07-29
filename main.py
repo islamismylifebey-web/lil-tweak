@@ -15,6 +15,8 @@ from liltweak.api import create_app
 from liltweak.artifacts import EncryptedArtifactStore
 from liltweak.config import Settings
 from liltweak.costs import CostGuard
+from liltweak.creator import CreatorService
+from liltweak.creator_contract import CreatorCompileRequest
 from liltweak.models import (
     ApprovalDecisionRequest,
     RecoveryCreateRequest,
@@ -206,6 +208,50 @@ async def run_smoke(live: bool) -> None:
         )
 
 
+def run_creator_smoke() -> None:
+    store = SQLiteStore(":memory:")
+    creator = CreatorService(
+        store=store,
+        signing_key=b"LilTweakCreatorSmokeKeyMaterial!",
+        durable_signatures=True,
+    )
+    preview = creator.prepare(
+        CreatorCompileRequest(
+            direction=(
+                "Build a typed Creator Model API with adaptive routing and regression tests. "
+                "Keep execution disconnected."
+            )
+        ),
+        actor_id="maurice-pennington-bey",
+    )
+    print(
+        json.dumps(
+            {
+                "status": preview.route.status.value,
+                "version": creator.health().version,
+                "work_kind": preview.envelope.brief.work_kind.value,
+                "brief_digest": preview.envelope.brief_digest,
+                "selected_tier": (
+                    preview.route.selected_tier.value
+                    if preview.route.selected_tier is not None
+                    else None
+                ),
+                "reasoning_effort": (
+                    preview.route.reasoning_effort.value
+                    if preview.route.reasoning_effort is not None
+                    else None
+                ),
+                "model_call_authorized": preview.route.model_call_authorized,
+                "tool_use_authorized": preview.route.tool_use_authorized,
+                "spend_authorized": preview.route.spend_authorized,
+                "execution_authorized": preview.route.execution_authorized,
+                "execution_connected": preview.execution_connected,
+            },
+            indent=2,
+        )
+    )
+
+
 def main() -> None:
     port = os.getenv("PORT")
     if port:
@@ -221,9 +267,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lil Tweak Phase 3 runtime")
     parser.add_argument(
         "command",
-        choices=["smoke", "live-smoke", "phase2-live-smoke", "phase3-live-smoke"],
+        choices=[
+            "smoke",
+            "creator-smoke",
+            "live-smoke",
+            "phase2-live-smoke",
+            "phase3-live-smoke",
+        ],
     )
     args = parser.parse_args()
+    if args.command == "creator-smoke":
+        run_creator_smoke()
+        return
     asyncio.run(
         run_smoke(live=args.command in {"live-smoke", "phase2-live-smoke", "phase3-live-smoke"})
     )

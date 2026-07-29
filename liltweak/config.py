@@ -61,6 +61,10 @@ def _evidence_key_env() -> bytes | None:
     return _key_env("LILTWEAK_EVIDENCE_SIGNING_KEY")
 
 
+def _creator_key_env() -> bytes | None:
+    return _key_env("LILTWEAK_CREATOR_SIGNING_KEY")
+
+
 def _owner_id_env() -> str:
     value = os.getenv("LILTWEAK_OWNER_ID", "maurice-pennington-bey")
     if (
@@ -88,6 +92,7 @@ class Settings:
     artifact_root: Path = Path("./artifacts")
     artifact_encryption_key: bytes | None = None
     evidence_signing_key: bytes | None = None
+    creator_signing_key: bytes | None = None
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -121,6 +126,7 @@ class Settings:
         for name, key in {
             "LILTWEAK_ARTIFACT_ENCRYPTION_KEY": self.artifact_encryption_key,
             "LILTWEAK_EVIDENCE_SIGNING_KEY": self.evidence_signing_key,
+            "LILTWEAK_CREATOR_SIGNING_KEY": self.creator_signing_key,
         }.items():
             if key is not None and (not isinstance(key, bytes) or len(key) != 32):
                 raise ValueError(f"{name} must contain exactly 32 bytes")
@@ -154,4 +160,5 @@ class Settings:
             artifact_root=Path(os.getenv("LILTWEAK_ARTIFACT_ROOT", "./artifacts")),
             artifact_encryption_key=_artifact_key_env(),
             evidence_signing_key=evidence_signing_key,
+            creator_signing_key=_creator_key_env(),
         )

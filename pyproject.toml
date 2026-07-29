@@ -1,6 +1,6 @@
 [project]
 name = "lil-tweak-engine"
-version = "0.3.2"
+version = "0.5.0"
 description = "Independent, API-first, evidence-driven software-engineering engine."
 readme = "README.md"
 requires-python = ">=3.12"

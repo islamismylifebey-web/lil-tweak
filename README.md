@@ -1,12 +1,29 @@
-# Lil Tweak Engineering API — Phase 3.2
+# Lil Tweak Creator Model Foundation — 0.5.0
 
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
 use the same bounded API without policy-bypass authority.
 
-Phase 3 adds owner-approved, encrypted recovery and non-executing change preparation to the
+The verified Phase 3.2 baseline adds owner-approved, encrypted recovery and non-executing change preparation to the
 verified inspection, planning, policy, cost, and evidence core. Phase 3.2 adds an evaluation-only
 engineering-reasoning gate for the single Lil Tweak model.
+
+Version 0.5.0 adds the first real Creator Model control plane:
+
+- a signed prompt compiler that preserves Founder direction;
+- deterministic deliverables, negative constraints, acceptance criteria, and material questions;
+- visual-language compilation for qualities such as shine, electric, clean, fast, secure, and
+  fluid;
+- least-cost capable adaptive routing with measurable escalation and de-escalation triggers;
+- caller-proof server authority and digest-bound immutable briefs;
+- high-stakes gates that accept prerequisites only from the trusted harness;
+- a bounded sandbox execution contract with exact one-attempt approvals;
+- proof-based completion gates tied to observed command results;
+- append-only causal learning from signed verified outcomes;
+- 160 offline Creator Model routing simulations with no provider, tool, or execution calls.
+
+The Creator Model contract is documented in
+[`docs/creator-model-foundation.md`](docs/creator-model-foundation.md).
 
 The reasoning gate uses Tweak's versioned TWEAK method: trace evidence, weigh competing
 hypotheses, explain causality, act minimally, and kill regressions with falsifying tests. It does
@@ -156,7 +173,9 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run pytest
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_local.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_gauntlet.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_engineering_trial.py
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_creator_benchmark.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py smoke
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py creator-smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_gauntlet.py --live
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_engineering_trial.py --live
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python main.py phase3-live-smoke

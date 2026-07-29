@@ -205,6 +205,30 @@ class SQLiteStore:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS creator_learning (
+                    id TEXT PRIMARY KEY,
+                    problem_signature TEXT NOT NULL,
+                    intervention_digest TEXT NOT NULL,
+                    outcome_digest TEXT NOT NULL UNIQUE,
+                    record_json TEXT NOT NULL,
+                    record_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS creator_learning_problem_idx
+                ON creator_learning(problem_signature, created_at);
+
+                CREATE TABLE IF NOT EXISTS creator_execution_approvals (
+                    id TEXT PRIMARY KEY,
+                    plan_digest TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    approved_by TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    consumed_at TEXT
+                );
                 """
             )
 
@@ -235,6 +259,138 @@ class SQLiteStore:
                     job.updated_at.isoformat(),
                 ),
             )
+
+    def append_creator_learning(
+        self,
+        *,
+        record_id: str,
+        problem_signature: str,
+        intervention_digest: str,
+        outcome_digest: str,
+        record_json: str,
+        record_hash: str,
+        created_at: str,
+    ) -> bool:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                INSERT OR IGNORE INTO creator_learning (
+                    id, problem_signature, intervention_digest, outcome_digest,
+                    record_json, record_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record_id,
+                    problem_signature,
+                    intervention_digest,
+                    outcome_digest,
+                    record_json,
+                    record_hash,
+                    created_at,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def get_creator_learning_by_outcome(
+        self,
+        outcome_digest: str,
+    ) -> tuple[str, str] | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT record_json, record_hash
+                FROM creator_learning
+                WHERE outcome_digest = ?
+                """,
+                (outcome_digest,),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["record_json"]), str(row["record_hash"])
+
+    def list_creator_learning(
+        self,
+        problem_signature: str,
+        *,
+        limit: int = 20,
+    ) -> list[tuple[str, str]]:
+        if limit < 1 or limit > 100:
+            raise ValueError("creator learning limit must be between 1 and 100")
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT record_json, record_hash
+                FROM creator_learning
+                WHERE problem_signature = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (problem_signature, limit),
+            ).fetchall()
+        return [(str(row["record_json"]), str(row["record_hash"])) for row in rows]
+
+    def publish_creator_execution_approval(
+        self,
+        *,
+        approval_id: str,
+        plan_digest: str,
+        signature: str,
+        approved_by: str,
+        expires_at: str,
+        created_at: str,
+    ) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO creator_execution_approvals (
+                    id, plan_digest, signature, approved_by, status,
+                    expires_at, created_at
+                ) VALUES (?, ?, ?, ?, 'approved', ?, ?)
+                """,
+                (
+                    approval_id,
+                    plan_digest,
+                    signature,
+                    approved_by,
+                    expires_at,
+                    created_at,
+                ),
+            )
+
+    def consume_creator_execution_approval(
+        self,
+        *,
+        approval_id: str,
+        plan_digest: str,
+        signature: str,
+        consumed_at: str,
+    ) -> bool:
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                cursor = self._connection.execute(
+                    """
+                    UPDATE creator_execution_approvals
+                    SET status = 'consumed', consumed_at = ?
+                    WHERE id = ?
+                      AND plan_digest = ?
+                      AND signature = ?
+                      AND status = 'approved'
+                      AND expires_at > ?
+                    """,
+                    (
+                        consumed_at,
+                        approval_id,
+                        plan_digest,
+                        signature,
+                        consumed_at,
+                    ),
+                )
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return cursor.rowcount == 1
 
     def create_job_idempotently(
         self,
