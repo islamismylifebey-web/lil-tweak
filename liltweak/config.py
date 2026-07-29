@@ -15,6 +15,21 @@ def _float_env(name: str, default: float) -> float:
     return default if raw is None else float(raw)
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    return default if raw is None else int(raw)
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    lowered = raw.casefold()
+    if lowered not in {"true", "false"}:
+        raise ValueError(f"{name} must be true or false")
+    return lowered == "true"
+
+
 def _repository_mappings_env() -> dict[str, str]:
     raw = os.getenv("LILTWEAK_REPOSITORIES_JSON", "{}")
     try:
@@ -93,6 +108,11 @@ class Settings:
     artifact_encryption_key: bytes | None = None
     evidence_signing_key: bytes | None = None
     creator_signing_key: bytes | None = None
+    live_model_enabled: bool = False
+    live_monthly_limit_usd: float = 5.0
+    live_call_limit_usd: float = 0.10
+    live_input_token_limit: int = 12_000
+    live_output_token_limit: int = 1_024
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -123,6 +143,25 @@ class Settings:
             ):
                 qualifier = "non-negative" if zero_allowed else "positive"
                 raise ValueError(f"{name} must be a finite {qualifier} number")
+        for name, value in {
+            "LILTWEAK_LIVE_MONTHLY_LIMIT_USD": self.live_monthly_limit_usd,
+            "LILTWEAK_LIVE_CALL_LIMIT_USD": self.live_call_limit_usd,
+        }.items():
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a finite positive number")
+        if self.live_input_token_limit < 256 or self.live_input_token_limit > 200_000:
+            raise ValueError("LILTWEAK_LIVE_INPUT_TOKEN_LIMIT is invalid")
+        if self.live_output_token_limit < 1_024 or self.live_output_token_limit > 32_000:
+            raise ValueError("LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT is invalid")
+        if (
+            self.live_model_enabled
+            and self.creator_signing_key is None
+            and self.evidence_signing_key is None
+        ):
+            raise ValueError(
+                "live model calls require LILTWEAK_CREATOR_SIGNING_KEY "
+                "or LILTWEAK_EVIDENCE_SIGNING_KEY"
+            )
         for name, key in {
             "LILTWEAK_ARTIFACT_ENCRYPTION_KEY": self.artifact_encryption_key,
             "LILTWEAK_EVIDENCE_SIGNING_KEY": self.evidence_signing_key,
@@ -136,7 +175,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         environment = os.getenv("LILTWEAK_ENVIRONMENT", "development")
-        auth_disabled = os.getenv("LILTWEAK_AUTH_DISABLED", "false").lower() == "true"
+        auth_disabled = _bool_env("LILTWEAK_AUTH_DISABLED")
         if auth_disabled and environment != "test":
             raise ValueError("authentication can be disabled only in the test environment")
         evidence_signing_key = _evidence_key_env()
@@ -161,4 +200,21 @@ class Settings:
             artifact_encryption_key=_artifact_key_env(),
             evidence_signing_key=evidence_signing_key,
             creator_signing_key=_creator_key_env(),
+            live_model_enabled=_bool_env("LILTWEAK_LIVE_MODEL_ENABLED"),
+            live_monthly_limit_usd=_float_env(
+                "LILTWEAK_LIVE_MONTHLY_LIMIT_USD",
+                5.0,
+            ),
+            live_call_limit_usd=_float_env(
+                "LILTWEAK_LIVE_CALL_LIMIT_USD",
+                0.10,
+            ),
+            live_input_token_limit=_int_env(
+                "LILTWEAK_LIVE_INPUT_TOKEN_LIMIT",
+                12_000,
+            ),
+            live_output_token_limit=_int_env(
+                "LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT",
+                1_024,
+            ),
         )

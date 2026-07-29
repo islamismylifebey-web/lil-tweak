@@ -1,4 +1,4 @@
-# Lil Tweak Creator Model Foundation — 0.5.0
+# Lil Tweak Creator Model Foundation — 0.6.0
 
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
@@ -21,6 +21,19 @@ Version 0.5.0 adds the first real Creator Model control plane:
 - proof-based completion gates tied to observed command results;
 - append-only causal learning from signed verified outcomes;
 - 160 offline Creator Model routing simulations with no provider, tool, or execution calls.
+
+Version 0.6.0 adds the bounded live-model plane without connecting source execution:
+
+- immutable, digest-bound live-run proposals with an exact model, effort, token limits, price
+  schedule, and conservative cost ceiling;
+- expiring Founder approvals that are atomically consumed before one provider attempt;
+- transactional per-call and monthly spend admission from conservative reservations;
+- a one-turn Agents SDK provider with typed work orders and no tools, handoffs, source, or
+  execution authority;
+- recorded token usage, estimated token cost, provider-request hashing, and immutable outcomes;
+- no automatic paid retry after any provider or validation failure;
+- a network-disabled hosted-container probe adapter restricted to a synthetic challenge;
+- 120 additional offline Phase 6 simulations covering accepted, blocked, and tampered flows.
 
 The Creator Model contract is documented in
 [`docs/creator-model-foundation.md`](docs/creator-model-foundation.md).
@@ -88,6 +101,16 @@ Phase 3 does not:
 - integrate with Terhuti;
 - activate Full Voice Access.
 
+The 0.6.0 live Creator path still does not:
+
+- expose tools or repositories to the live model;
+- run, modify, or deploy source;
+- treat a work order as evidence or permission;
+- retry a failed paid call automatically;
+- mark a provider-hosted sandbox as verified;
+- reconcile token estimates to the provider invoice;
+- enable live calls unless the server has a durable signing key and explicitly enables them.
+
 The Phase 3.2 reasoning trial receives only synthetic, bounded evidence packets. It is not wired
 to registered repository contents or production API authority. Passing it proves evidence-backed
 engineering reasoning; it does not prove custom-trained foundation weights or executed code.
@@ -116,6 +139,17 @@ LILTWEAK_ARTIFACT_ENCRYPTION_KEY=<URL-safe base64 for exactly 32 random bytes>
 LILTWEAK_OWNER_ID=maurice-pennington-bey
 LILTWEAK_EVIDENCE_SIGNING_KEY=<URL-safe base64 for exactly 32 random bytes>
 LILTWEAK_PLANNING_RESERVATION_USD=1
+```
+
+Live Creator calls are disabled by default. Enabling them requires a server-controlled signing
+key, an API key outside version control, and explicit spend limits:
+
+```env
+LILTWEAK_LIVE_MODEL_ENABLED=false
+LILTWEAK_LIVE_MONTHLY_LIMIT_USD=5
+LILTWEAK_LIVE_CALL_LIMIT_USD=0.10
+LILTWEAK_LIVE_INPUT_TOKEN_LIMIT=12000
+LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT=1024
 ```
 
 The artifact root and repository workspace must be disjoint. Without the encryption key,
@@ -159,6 +193,16 @@ plaintext is published, and any partially published ciphertext is quarantined.
 - `GET /v1/approvals/{approval_id}`
 - `POST /v1/approvals/{approval_id}/decision`
 - `POST /v1/emergency-stop`
+- `GET /v1/creator/health`
+- `POST /v1/creator/compile`
+- `POST /v1/creator/route`
+- `POST /v1/creator/prepare`
+- `GET /v1/creator/learning`
+- `POST /v1/creator/live/proposals`
+- `GET /v1/creator/live/proposals/{proposal_id}`
+- `POST /v1/creator/live/proposals/{proposal_id}/decision`
+- `POST /v1/creator/live/runs`
+- `GET /v1/creator/live/results/{proposal_id}`
 
 Every `/v1/*` route requires the development bearer token. The token identifies the one
 configured owner; request fields do not grant authority.
@@ -174,12 +218,26 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_local.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_gauntlet.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_engineering_trial.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_creator_benchmark.py
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase6_offline.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py creator-smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_gauntlet.py --live
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_engineering_trial.py --live
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python main.py phase3-live-smoke
 ```
+
+The paid Phase 6 evaluation is never part of the default verification matrix. It requires an
+explicit, exact ceiling and creates a fresh digest-bound approval:
+
+```bash
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file .env.local \
+  python evals/run_phase6_live.py \
+  --approve-model-ceiling-usd 0.05 \
+  --approve-sandbox-ceiling-usd 0
+```
+
+The two bounded development probes and their failed-closed result are recorded in
+[`docs/phase6-live-evidence.md`](docs/phase6-live-evidence.md).
 
 ## Launch status
 

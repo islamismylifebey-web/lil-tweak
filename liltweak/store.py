@@ -12,6 +12,12 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from .live_contract import (
+    LiveProposalRecord,
+    LiveProposalStatus,
+    LiveRunApproval,
+    LiveRunResult,
+)
 from .models import (
     ApprovalRecord,
     ApprovalStatus,
@@ -229,6 +235,53 @@ class SQLiteStore:
                     created_at TEXT NOT NULL,
                     consumed_at TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS creator_live_proposals (
+                    id TEXT PRIMARY KEY,
+                    proposal_digest TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS creator_live_approvals (
+                    id TEXT PRIMARY KEY,
+                    proposal_id TEXT NOT NULL UNIQUE
+                        REFERENCES creator_live_proposals(id),
+                    proposal_digest TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    consumed_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS creator_live_spend (
+                    id TEXT PRIMARY KEY,
+                    proposal_id TEXT NOT NULL UNIQUE
+                        REFERENCES creator_live_proposals(id),
+                    organization_id TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    reserved_usd REAL NOT NULL,
+                    actual_usd REAL,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    created_at TEXT NOT NULL,
+                    reconciled_at TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS creator_live_spend_org_created_idx
+                ON creator_live_spend(organization_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS creator_live_results (
+                    proposal_id TEXT PRIMARY KEY
+                        REFERENCES creator_live_proposals(id),
+                    result_digest TEXT NOT NULL UNIQUE,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -391,6 +444,446 @@ class SQLiteStore:
                 self._connection.rollback()
                 raise
         return cursor.rowcount == 1
+
+    def publish_creator_live_proposal(self, record: LiveProposalRecord) -> None:
+        proposal = record.proposal
+        if record.status != LiveProposalStatus.PENDING_APPROVAL:
+            raise ValueError("new live proposals must await approval")
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO creator_live_proposals (
+                    id, proposal_digest, status, record_json,
+                    expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    proposal.id,
+                    proposal.proposal_digest,
+                    record.status.value,
+                    record.model_dump_json(),
+                    proposal.expires_at.isoformat(),
+                    proposal.created_at.isoformat(),
+                    proposal.created_at.isoformat(),
+                ),
+            )
+
+    def get_creator_live_proposal(self, proposal_id: str) -> LiveProposalRecord:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT record_json
+                FROM creator_live_proposals
+                WHERE id = ?
+                """,
+                (proposal_id,),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"live proposal not found: {proposal_id}")
+        return LiveProposalRecord.model_validate_json(row["record_json"])
+
+    def decide_creator_live_proposal(
+        self,
+        *,
+        proposal_id: str,
+        proposal_digest: str,
+        decision: str,
+        approval: LiveRunApproval | None,
+        now: datetime,
+    ) -> tuple[LiveProposalRecord, LiveRunApproval | None]:
+        if decision not in {"approve", "reject"}:
+            raise ValueError("live proposal decision is invalid")
+        if decision == "approve" and approval is None:
+            raise ValueError("live proposal approval is required")
+        if decision == "reject" and approval is not None:
+            raise ValueError("rejected live proposals cannot carry approval")
+
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT status, record_json
+                    FROM creator_live_proposals
+                    WHERE id = ?
+                    """,
+                    (proposal_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"live proposal not found: {proposal_id}")
+                record = LiveProposalRecord.model_validate_json(row["record_json"])
+                if record.status != LiveProposalStatus.PENDING_APPROVAL:
+                    raise StoreStateConflictError("live proposal is not pending approval")
+                if record.proposal.proposal_digest != proposal_digest:
+                    raise StoreStateConflictError("live proposal digest no longer matches")
+                if record.proposal.expires_at <= now:
+                    expired = record.model_copy(update={"status": LiveProposalStatus.EXPIRED})
+                    self._connection.execute(
+                        """
+                        UPDATE creator_live_proposals
+                        SET status = ?, record_json = ?, updated_at = ?
+                        WHERE id = ? AND status = ?
+                        """,
+                        (
+                            expired.status.value,
+                            expired.model_dump_json(),
+                            now.isoformat(),
+                            proposal_id,
+                            LiveProposalStatus.PENDING_APPROVAL.value,
+                        ),
+                    )
+                    self._connection.commit()
+                    return expired, None
+
+                status = (
+                    LiveProposalStatus.APPROVED
+                    if decision == "approve"
+                    else LiveProposalStatus.REJECTED
+                )
+                decided = record.model_copy(
+                    update={
+                        "status": status,
+                        "approval_id": approval.id if approval is not None else None,
+                    }
+                )
+                if approval is not None:
+                    if (
+                        approval.proposal_id != proposal_id
+                        or approval.proposal_digest != proposal_digest
+                        or abs(approval.max_cost_usd - record.proposal.cost_ceiling_usd) > 0.000001
+                    ):
+                        raise StoreStateConflictError("live approval does not match the proposal")
+                    self._connection.execute(
+                        """
+                        INSERT INTO creator_live_approvals (
+                            id, proposal_id, proposal_digest, signature,
+                            status, expires_at, created_at
+                        ) VALUES (?, ?, ?, ?, 'approved', ?, ?)
+                        """,
+                        (
+                            approval.id,
+                            approval.proposal_id,
+                            approval.proposal_digest,
+                            approval.signature,
+                            approval.expires_at.isoformat(),
+                            approval.created_at.isoformat(),
+                        ),
+                    )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_live_proposals
+                    SET status = ?, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ?
+                    """,
+                    (
+                        decided.status.value,
+                        decided.model_dump_json(),
+                        now.isoformat(),
+                        proposal_id,
+                        LiveProposalStatus.PENDING_APPROVAL.value,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise StoreStateConflictError("live proposal decision lost a concurrent race")
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return decided, approval
+
+    def claim_creator_live_run(
+        self,
+        *,
+        proposal_id: str,
+        approval_id: str,
+        proposal_digest: str,
+        approval_signature: str,
+        organization_id: str,
+        reservation_usd: float,
+        monthly_limit_usd: float,
+        now: datetime,
+    ) -> LiveProposalRecord:
+        if not math.isfinite(reservation_usd) or reservation_usd <= 0:
+            raise ValueError("live reservation must be a finite positive amount")
+        if not math.isfinite(monthly_limit_usd) or monthly_limit_usd < 0:
+            raise ValueError("live monthly limit must be finite and non-negative")
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                emergency = self._connection.execute(
+                    "SELECT value FROM system_state WHERE key = 'emergency_stop'"
+                ).fetchone()
+                if emergency is not None and str(emergency["value"]) == "true":
+                    raise EmergencyStopActiveError("Lil Tweak is emergency-stopped")
+
+                proposal_row = self._connection.execute(
+                    """
+                    SELECT status, record_json
+                    FROM creator_live_proposals
+                    WHERE id = ?
+                    """,
+                    (proposal_id,),
+                ).fetchone()
+                if proposal_row is None:
+                    raise NotFoundError(f"live proposal not found: {proposal_id}")
+                record = LiveProposalRecord.model_validate_json(proposal_row["record_json"])
+                if record.status != LiveProposalStatus.APPROVED:
+                    raise StoreStateConflictError("live proposal is not approved and unused")
+                proposal = record.proposal
+                if (
+                    proposal.proposal_digest != proposal_digest
+                    or proposal.expires_at <= now
+                    or abs(proposal.cost_ceiling_usd - reservation_usd) > 0.000001
+                ):
+                    raise StoreStateConflictError("live proposal is stale or no longer matches")
+
+                approval_row = self._connection.execute(
+                    """
+                    SELECT proposal_id, proposal_digest, signature, status, expires_at
+                    FROM creator_live_approvals
+                    WHERE id = ?
+                    """,
+                    (approval_id,),
+                ).fetchone()
+                if approval_row is None:
+                    raise NotFoundError(f"live approval not found: {approval_id}")
+                if (
+                    str(approval_row["proposal_id"]) != proposal_id
+                    or str(approval_row["proposal_digest"]) != proposal_digest
+                    or str(approval_row["signature"]) != approval_signature
+                    or str(approval_row["status"]) != "approved"
+                    or str(approval_row["expires_at"]) <= now.isoformat()
+                ):
+                    raise StoreStateConflictError(
+                        "live approval is invalid, expired, or already consumed"
+                    )
+
+                total_row = self._connection.execute(
+                    """
+                    SELECT COALESCE(SUM(reserved_usd), 0) AS total
+                    FROM creator_live_spend
+                    WHERE organization_id = ? AND created_at >= ?
+                    """,
+                    (organization_id, month_start),
+                ).fetchone()
+                committed = float(total_row["total"]) if total_row is not None else 0.0
+                if committed + reservation_usd > monthly_limit_usd:
+                    raise ValueError("monthly live-model budget would be exceeded")
+
+                running = record.model_copy(update={"status": LiveProposalStatus.RUNNING})
+                self._connection.execute(
+                    """
+                    INSERT INTO creator_live_spend (
+                        id, proposal_id, organization_id, model,
+                        reserved_usd, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"live_spend_{proposal_id}",
+                        proposal_id,
+                        organization_id,
+                        proposal.model,
+                        reservation_usd,
+                        now.isoformat(),
+                    ),
+                )
+                consumed = self._connection.execute(
+                    """
+                    UPDATE creator_live_approvals
+                    SET status = 'consumed', consumed_at = ?
+                    WHERE id = ? AND status = 'approved'
+                    """,
+                    (now.isoformat(), approval_id),
+                )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_live_proposals
+                    SET status = ?, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ?
+                    """,
+                    (
+                        running.status.value,
+                        running.model_dump_json(),
+                        now.isoformat(),
+                        proposal_id,
+                        LiveProposalStatus.APPROVED.value,
+                    ),
+                )
+                if consumed.rowcount != 1 or updated.rowcount != 1:
+                    raise StoreStateConflictError("live run claim lost a concurrent race")
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return running
+
+    def complete_creator_live_run(
+        self,
+        result: LiveRunResult,
+        *,
+        now: datetime,
+    ) -> LiveProposalRecord:
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT status, record_json
+                    FROM creator_live_proposals
+                    WHERE id = ?
+                    """,
+                    (result.proposal_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"live proposal not found: {result.proposal_id}")
+                record = LiveProposalRecord.model_validate_json(row["record_json"])
+                if (
+                    record.status != LiveProposalStatus.RUNNING
+                    or record.proposal.proposal_digest != result.proposal_digest
+                ):
+                    raise StoreStateConflictError("live result does not match a running proposal")
+                completed = record.model_copy(
+                    update={
+                        "status": LiveProposalStatus.SUCCEEDED,
+                        "result_digest": result.result_digest,
+                    }
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO creator_live_results (
+                        proposal_id, result_digest, result_json, created_at
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        result.proposal_id,
+                        result.result_digest,
+                        result.model_dump_json(),
+                        now.isoformat(),
+                    ),
+                )
+                spend = self._connection.execute(
+                    """
+                    UPDATE creator_live_spend
+                    SET actual_usd = ?, input_tokens = ?, output_tokens = ?,
+                        reconciled_at = ?
+                    WHERE proposal_id = ? AND actual_usd IS NULL
+                    """,
+                    (
+                        result.estimated_actual_cost_usd,
+                        result.usage.input_tokens,
+                        result.usage.output_tokens,
+                        now.isoformat(),
+                        result.proposal_id,
+                    ),
+                )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_live_proposals
+                    SET status = ?, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ?
+                    """,
+                    (
+                        completed.status.value,
+                        completed.model_dump_json(),
+                        now.isoformat(),
+                        result.proposal_id,
+                        LiveProposalStatus.RUNNING.value,
+                    ),
+                )
+                if spend.rowcount != 1 or updated.rowcount != 1:
+                    raise StoreStateConflictError("live result publication lost a concurrent race")
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return completed
+
+    def fail_creator_live_run(
+        self,
+        proposal_id: str,
+        *,
+        failure_code: str,
+        now: datetime,
+    ) -> LiveProposalRecord:
+        if not failure_code or len(failure_code) > 128:
+            raise ValueError("live failure code is invalid")
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._connection.execute(
+                    """
+                    SELECT status, record_json
+                    FROM creator_live_proposals
+                    WHERE id = ?
+                    """,
+                    (proposal_id,),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError(f"live proposal not found: {proposal_id}")
+                record = LiveProposalRecord.model_validate_json(row["record_json"])
+                if record.status != LiveProposalStatus.RUNNING:
+                    raise StoreStateConflictError("live proposal is not running")
+                failed = record.model_copy(
+                    update={
+                        "status": LiveProposalStatus.FAILED,
+                        "failure_code": failure_code,
+                    }
+                )
+                updated = self._connection.execute(
+                    """
+                    UPDATE creator_live_proposals
+                    SET status = ?, record_json = ?, updated_at = ?
+                    WHERE id = ? AND status = ?
+                    """,
+                    (
+                        failed.status.value,
+                        failed.model_dump_json(),
+                        now.isoformat(),
+                        proposal_id,
+                        LiveProposalStatus.RUNNING.value,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise StoreStateConflictError("live failure publication lost a concurrent race")
+                self._connection.commit()
+            except Exception:
+                self._connection.rollback()
+                raise
+        return failed
+
+    def get_creator_live_result(self, proposal_id: str) -> LiveRunResult:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT result_json
+                FROM creator_live_results
+                WHERE proposal_id = ?
+                """,
+                (proposal_id,),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"live result not found: {proposal_id}")
+        return LiveRunResult.model_validate_json(row["result_json"])
+
+    def creator_live_month_to_date_reserved(
+        self,
+        organization_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> float:
+        now = now or datetime.now(UTC)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT COALESCE(SUM(reserved_usd), 0) AS total
+                FROM creator_live_spend
+                WHERE organization_id = ? AND created_at >= ?
+                """,
+                (organization_id, start),
+            ).fetchone()
+        return float(row["total"]) if row is not None else 0.0
 
     def create_job_idempotently(
         self,

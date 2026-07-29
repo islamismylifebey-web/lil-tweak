@@ -568,29 +568,39 @@ class AdaptiveRouter:
             max_turns = profile.max_turns
             cost = profile.synthetic_cost_units
 
-        return RouteDecision(
-            brief_digest=brief.brief_digest,
-            status=status,
-            selected_tier=selected_tier,
-            reasoning_effort=reasoning_effort,
-            context_token_ceiling=context_tokens,
-            max_turns=max_turns,
-            complexity_score=complexity,
-            required_capabilities=capabilities,
-            suggested_tools=self._suggested_tools(brief),
-            blocked_reasons=tuple(blocked_reasons),
-            escalation_triggers=(
+        values = {
+            "brief_digest": brief.brief_digest,
+            "status": status,
+            "selected_tier": selected_tier,
+            "reasoning_effort": reasoning_effort,
+            "context_token_ceiling": context_tokens,
+            "max_turns": max_turns,
+            "complexity_score": complexity,
+            "required_capabilities": capabilities,
+            "suggested_tools": self._suggested_tools(brief),
+            "blocked_reasons": tuple(blocked_reasons),
+            "escalation_triggers": (
                 "a deterministic check falsifies the current hypothesis",
                 "required evidence cannot fit the selected context ceiling",
                 "the selected tier fails one validated attempt",
                 "new risk evidence raises the task classification",
             ),
-            deescalation_triggers=(
+            "deescalation_triggers": (
                 "the uncertainty has been resolved by deterministic evidence",
                 "remaining work is mechanical or schema-bound",
                 "verification can complete without further model reasoning",
             ),
-            synthetic_cost_units=cost,
+            "synthetic_cost_units": cost,
+        }
+        unsigned = RouteDecision.model_construct(
+            **values,
+            decision_digest="0" * 64,
+        )
+        return RouteDecision(
+            **values,
+            decision_digest=content_digest(
+                unsigned.model_dump(mode="json", exclude={"decision_digest"})
+            ),
         )
 
     @staticmethod
@@ -703,8 +713,17 @@ class CreatorService:
         self.compiler = PromptCompiler()
         self.router = AdaptiveRouter()
 
-    def health(self) -> CreatorHealth:
-        return CreatorHealth(durable_brief_signatures=self._durable_signatures)
+    def health(
+        self,
+        *,
+        model_calls_enabled: bool = False,
+        hosted_sandbox_probe_ready: bool = False,
+    ) -> CreatorHealth:
+        return CreatorHealth(
+            durable_brief_signatures=self._durable_signatures,
+            model_calls_enabled=model_calls_enabled,
+            hosted_sandbox_probe_ready=hosted_sandbox_probe_ready,
+        )
 
     def compile(
         self,
@@ -861,7 +880,7 @@ class CreatorService:
             {
                 "creator_cycle": CREATOR_CYCLE,
                 "profiles": profiles,
-                "version": "0.5.0",
+                "version": "0.6.0",
             }
         )
 

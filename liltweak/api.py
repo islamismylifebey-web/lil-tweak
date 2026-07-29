@@ -34,6 +34,21 @@ from .creator_contract import (
     RoutePreviewRequest,
 )
 from .evidence import EvidenceChainError
+from .live_contract import (
+    LiveProposalDecisionRequest,
+    LiveProposalDecisionResponse,
+    LiveProposalPrepareRequest,
+    LiveProposalRecord,
+    LiveRunExecuteRequest,
+    LiveRunResult,
+)
+from .live_model import (
+    LiveCreatorController,
+    LiveModelApprovalError,
+    LiveModelDisabledError,
+    LiveModelProviderError,
+    OpenAICreatorModelProvider,
+)
 from .models import (
     ApprovalDecisionRequest,
     ApprovalRecord,
@@ -54,7 +69,12 @@ from .service import (
     RunnerUnavailableError,
     SensitiveInputError,
 )
-from .store import IdempotencyConflictError, NotFoundError, SQLiteStore
+from .store import (
+    IdempotencyConflictError,
+    NotFoundError,
+    SQLiteStore,
+    StoreStateConflictError,
+)
 
 
 class ApiModel(BaseModel):
@@ -121,6 +141,7 @@ def create_app(
     service: LilTweakService | None = None,
     settings: Settings | None = None,
     creator_service: CreatorService | None = None,
+    live_controller: LiveCreatorController | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -134,6 +155,19 @@ def create_app(
         signing_key=creator_key,
         durable_signatures=creator_key is not None,
     )
+    if live_controller is None and creator_key is not None:
+        live_controller = LiveCreatorController(
+            creator=creator_service,
+            store=service.store,
+            signing_key=creator_key,
+            provider=OpenAICreatorModelProvider(),
+            enabled=settings.live_model_enabled,
+            owner_id=settings.owner_id,
+            monthly_limit_usd=settings.live_monthly_limit_usd,
+            per_call_limit_usd=settings.live_call_limit_usd,
+            input_token_limit=settings.live_input_token_limit,
+            output_token_limit=settings.live_output_token_limit,
+        )
     bearer = HTTPBearer(auto_error=False)
 
     async def require_auth(
@@ -159,10 +193,11 @@ def create_app(
 
     app = FastAPI(
         title="Lil Tweak Engineering API",
-        version="0.5.0",
+        version="0.6.0",
         description=(
             "Independent evidence-driven engineering engine with Creator Model compilation, "
-            "adaptive routing previews, encrypted recovery, approvals, and causal learning."
+            "bounded live reasoning, adaptive routing, encrypted recovery, approvals, "
+            "and causal learning."
         ),
     )
 
@@ -211,6 +246,12 @@ def create_app(
     async def idempotency_handler(_request: Request, exc: IdempotencyConflictError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(StoreStateConflictError)
+    async def store_conflict_handler(
+        _request: Request, exc: StoreStateConflictError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     @app.exception_handler(ApprovalError)
     async def approval_handler(_request: Request, exc: ApprovalError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
@@ -238,6 +279,23 @@ def create_app(
         _request: Request, exc: CreatorLearningError
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(LiveModelApprovalError)
+    async def live_approval_handler(_request: Request, exc: LiveModelApprovalError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(LiveModelDisabledError)
+    async def live_disabled_handler(_request: Request, exc: LiveModelDisabledError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(LiveModelProviderError)
+    async def live_provider_handler(
+        _request: Request, _exc: LiveModelProviderError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "live Creator provider is currently unavailable"},
+        )
 
     @app.exception_handler(EmergencyStopError)
     async def emergency_handler(_request: Request, exc: EmergencyStopError) -> JSONResponse:
@@ -309,7 +367,10 @@ def create_app(
         dependencies=[Depends(require_auth)],
     )
     async def creator_health() -> CreatorHealth:
-        return creator_service.health()
+        return creator_service.health(
+            model_calls_enabled=(live_controller is not None and live_controller.enabled),
+            hosted_sandbox_probe_ready=False,
+        )
 
     @app.post(
         "/v1/creator/compile",
@@ -345,6 +406,70 @@ def create_app(
         limit: int = 20,
     ) -> list[CausalLearningRecord]:
         return creator_service.list_learning(problem_signature, limit=limit)
+
+    def require_live_controller() -> LiveCreatorController:
+        if live_controller is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="durable live Creator controls are not configured",
+            )
+        return live_controller
+
+    @app.post(
+        "/v1/creator/live/proposals",
+        response_model=LiveProposalRecord,
+        status_code=status.HTTP_202_ACCEPTED,
+        dependencies=[Depends(require_auth)],
+    )
+    async def prepare_live_proposal(
+        body: LiveProposalPrepareRequest,
+    ) -> LiveProposalRecord:
+        return require_live_controller().prepare(body)
+
+    @app.get(
+        "/v1/creator/live/proposals/{proposal_id}",
+        response_model=LiveProposalRecord,
+        dependencies=[Depends(require_auth)],
+    )
+    async def get_live_proposal(proposal_id: str) -> LiveProposalRecord:
+        return require_live_controller().get_proposal(proposal_id)
+
+    @app.post(
+        "/v1/creator/live/proposals/{proposal_id}/decision",
+        response_model=LiveProposalDecisionResponse,
+        dependencies=[Depends(require_auth)],
+    )
+    async def decide_live_proposal(
+        proposal_id: str,
+        body: LiveProposalDecisionRequest,
+    ) -> LiveProposalDecisionResponse:
+        record, approval = require_live_controller().decide(
+            proposal_id,
+            body,
+            actor_id=settings.owner_id,
+        )
+        return LiveProposalDecisionResponse(record=record, approval=approval)
+
+    @app.post(
+        "/v1/creator/live/runs",
+        response_model=LiveRunResult,
+        dependencies=[Depends(require_auth)],
+    )
+    async def execute_live_run(body: LiveRunExecuteRequest) -> LiveRunResult:
+        return await require_live_controller().execute(
+            proposal_id=body.proposal_id,
+            approval_id=body.approval_id,
+            envelope=body.envelope,
+            route=body.route,
+        )
+
+    @app.get(
+        "/v1/creator/live/results/{proposal_id}",
+        response_model=LiveRunResult,
+        dependencies=[Depends(require_auth)],
+    )
+    async def get_live_result(proposal_id: str) -> LiveRunResult:
+        return require_live_controller().get_result(proposal_id)
 
     @app.post(
         "/v1/jobs",

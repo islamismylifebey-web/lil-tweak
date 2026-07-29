@@ -14,7 +14,6 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
-    computed_field,
     model_validator,
 )
 
@@ -187,11 +186,14 @@ class RouteDecision(CreatorSchema):
     tool_use_authorized: Literal[False] = False
     spend_authorized: Literal[False] = False
     execution_authorized: Literal[False] = False
+    decision_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
 
-    @computed_field
-    @property
-    def decision_digest(self) -> str:
-        return content_digest(self.model_dump(mode="json", exclude={"decision_digest"}))
+    @model_validator(mode="after")
+    def digest_matches_decision(self) -> RouteDecision:
+        expected = content_digest(self.model_dump(mode="json", exclude={"decision_digest"}))
+        if self.decision_digest != expected:
+            raise ValueError("route decision digest mismatch")
+        return self
 
 
 class CreatorRunPreview(CreatorSchema):
@@ -309,13 +311,16 @@ class RuntimeOutcome(CreatorSchema):
 
 
 class CreatorHealth(CreatorSchema):
-    status: Literal["foundation_ready"] = "foundation_ready"
-    version: Literal["0.5.0"] = "0.5.0"
+    status: Literal["creator_foundation_ready"] = "creator_foundation_ready"
+    version: Literal["0.6.0"] = "0.6.0"
     compiler_ready: Literal[True] = True
     adaptive_router_ready: Literal[True] = True
     causal_learning_ready: Literal[True] = True
+    live_reasoning_adapter_ready: Literal[True] = True
+    hosted_sandbox_probe_ready: StrictBool = False
     execution_connected: Literal[False] = False
-    model_calls_enabled: Literal[False] = False
+    source_execution_connected: Literal[False] = False
+    model_calls_enabled: StrictBool = False
     tool_execution_enabled: Literal[False] = False
     durable_brief_signatures: StrictBool
 
