@@ -21,7 +21,7 @@ from liltweak.workbench_contract import (
     content_digest,
     utc_now,
 )
-from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
+from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore, WorkbenchStoreError
 
 DIGEST = "a" * 64
 
@@ -147,6 +147,13 @@ def test_canonical_bridge_migration_and_ledgers_are_durable_and_immutable(
         ).fetchone()[0]
         == 1
     )
+    assert (
+        store._connection.execute(
+            "SELECT COUNT(*) FROM canonical_schema_migrations "
+            "WHERE migration_id='0011_canonical_active_cancellation'"
+        ).fetchone()[0]
+        == 1
+    )
     with pytest.raises(sqlite3.IntegrityError, match="canonical evidence is immutable"):
         store._connection.execute(
             "UPDATE canonical_evidence SET event_type='forged' WHERE task_id=?",
@@ -159,6 +166,31 @@ def test_canonical_bridge_migration_and_ledgers_are_durable_and_immutable(
             (task.id,),
         )
     store._connection.rollback()
+
+
+def test_legacy_tasks_fail_before_any_implicit_schema_mutation(tmp_path: Path) -> None:
+    database = tmp_path / "legacy-workbench.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE workbench_tasks(id TEXT PRIMARY KEY, state TEXT)")
+        connection.execute(
+            "INSERT INTO workbench_tasks(id, state) VALUES (?, ?)",
+            ("legacy-task", "ANALYZED"),
+        )
+
+    with pytest.raises(WorkbenchStoreError, match="predate canonical authority"):
+        WorkbenchStore(database)
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT * FROM workbench_tasks").fetchall() == [
+            ("legacy-task", "ANALYZED")
+        ]
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        }
+    assert tables == {"workbench_tasks"}
 
 
 def test_task_digest_is_immutable_and_unique(tmp_path: Path) -> None:

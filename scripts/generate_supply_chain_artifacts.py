@@ -11,6 +11,7 @@ import re
 import stat
 import subprocess
 import sys
+import tarfile
 import tomllib
 import zipfile
 from datetime import UTC, datetime
@@ -36,6 +37,7 @@ REQUIRED_WHEEL_PAYLOAD = frozenset(
     {
         "migrations/0009_canonical_control_plane.sql",
         "migrations/0010_workbench_canonical_authority.sql",
+        "migrations/0011_canonical_active_cancellation.sql",
         "docs/prompt.md",
         "docs/engineering-prompt.md",
         "docs/creator-live-prompt.md",
@@ -44,6 +46,9 @@ REQUIRED_WHEEL_PAYLOAD = frozenset(
         "web/workbench/app.js",
         "web/workbench/styles.css",
     }
+)
+REQUIRED_SDIST_PAYLOAD = REQUIRED_WHEEL_PAYLOAD | frozenset(
+    {"README.md", "pyproject.toml", "liltweak/__init__.py"}
 )
 FORBIDDEN_WHEEL_DIRECTORIES = frozenset({"evals", "scripts", "tests"})
 SYNTHETIC_SECRET_FIXTURE_ALLOWLIST: dict[str, dict[str, object]] = {
@@ -180,6 +185,21 @@ def _inspect_wheel(data: bytes, *, path: Path) -> None:
                 raise ArtifactValidationError(
                     f"wheel member failed its CRC check {corrupt_member!r}: {path}"
                 )
+            metadata_names = [name for name in names if name.endswith(".dist-info/METADATA")]
+            if len(metadata_names) != 1:
+                raise ArtifactValidationError(
+                    f"wheel must contain exactly one METADATA record: {path}"
+                )
+            metadata = archive.read(metadata_names[0]).decode("utf-8", errors="strict")
+            if any(
+                line.casefold().startswith("license-file:")
+                and line.split(":", 1)[1].strip() == "LICENSE_INVENTORY.json"
+                for line in metadata.splitlines()
+            ):
+                raise ArtifactValidationError(
+                    "wheel falsely classifies LICENSE_INVENTORY.json as the project license: "
+                    f"{path}"
+                )
     except zipfile.BadZipFile as exc:
         raise ArtifactValidationError(f"wheel is not a valid ZIP archive: {path}") from exc
 
@@ -192,6 +212,51 @@ def _inspect_wheel(data: bytes, *, path: Path) -> None:
         raise ArtifactValidationError(
             "wheel contains forbidden development payload: " + ", ".join(sorted(forbidden))
         )
+
+
+def _inspect_sdist(data: bytes, *, path: Path) -> None:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+            members = archive.getmembers()
+            names = [member.name for member in members]
+            if len(names) != len(set(names)):
+                raise ArtifactValidationError(f"sdist contains duplicate archive members: {path}")
+            roots: set[str] = set()
+            logical_files: set[str] = set()
+            for member in members:
+                name = member.name
+                pure = PurePosixPath(name)
+                if (
+                    not name
+                    or "\\" in name
+                    or pure.is_absolute()
+                    or any(part in {"", ".", ".."} for part in pure.parts)
+                ):
+                    raise ArtifactValidationError(
+                        f"sdist contains an unsafe archive member {name!r}: {path}"
+                    )
+                roots.add(pure.parts[0])
+                if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+                    raise ArtifactValidationError(
+                        f"sdist contains a non-regular archive member {name!r}: {path}"
+                    )
+                if member.isfile() and len(pure.parts) > 1:
+                    logical_files.add("/".join(pure.parts[1:]))
+            if len(roots) != 1:
+                raise ArtifactValidationError(
+                    f"sdist must contain exactly one top-level directory: {path}"
+                )
+            missing = sorted(REQUIRED_SDIST_PAYLOAD - logical_files)
+            if missing:
+                raise ArtifactValidationError(
+                    "sdist is missing required source payload: " + ", ".join(missing)
+                )
+            if "LICENSE_INVENTORY.json" in logical_files:
+                raise ArtifactValidationError(
+                    f"sdist falsely packages LICENSE_INVENTORY.json as a license file: {path}"
+                )
+    except (tarfile.TarError, UnicodeDecodeError) as exc:
+        raise ArtifactValidationError(f"sdist is not a valid gzip tar archive: {path}") from exc
 
 
 def package_artifact_subjects(
@@ -209,6 +274,7 @@ def package_artifact_subjects(
         expected_suffix=".tar.gz",
         kind="sdist",
     )
+    _inspect_sdist(sdist_data, path=sdist_artifact)
     return [
         {
             "artifact_type": "wheel",
@@ -296,7 +362,11 @@ def locked_packages() -> list[dict[str, object]]:
             {
                 "name": name,
                 "version": version,
-                "purl": f"pkg:pypi/{name}@{version}",
+                "purl": (
+                    f"pkg:generic/{name}@{version}"
+                    if "editable" in item.get("source", {})
+                    else f"pkg:pypi/{name}@{version}"
+                ),
                 "hashes": hashes,
                 "source": item.get("source", {}),
             }
@@ -307,6 +377,8 @@ def locked_packages() -> list[dict[str, object]]:
 def sbom(packages: list[dict[str, object]]) -> dict[str, object]:
     components = []
     for package in packages:
+        if "editable" in package["source"]:
+            continue
         component: dict[str, object] = {
             "type": "library",
             "bom-ref": package["purl"],
@@ -575,12 +647,13 @@ def provenance(
         "branch": BRANCH,
         "baseline_commit": BASELINE_COMMIT,
         "candidate_commit": "recorded_externally_after_freeze",
-        "generated_at": datetime.fromtimestamp(source_date_epoch, UTC).isoformat(),
+        "reproducible_build_epoch": datetime.fromtimestamp(source_date_epoch, UTC).isoformat(),
+        "observation_time": "recorded externally with exact-commit verification",
         "builder": "Lil Tweak Master Builder local private workspace",
         "build_system": _build_system(),
         "environment": {
             "python": platform.python_version(),
-            "platform": platform.platform(),
+            "platform": f"{platform.system().lower()}-{platform.machine().lower()}",
             "SOURCE_DATE_EPOCH": str(source_date_epoch),
             "uv": subprocess.run(
                 ("uv", "--version"),

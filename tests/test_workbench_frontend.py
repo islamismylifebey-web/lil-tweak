@@ -48,6 +48,9 @@ def test_disconnected_model_and_runner_disable_their_controls_with_exact_reasons
     assert "!state.health.runner_connected" in script
     assert "model adapter is disconnected" in script
     assert "no independently qualified runner provider is connected" in script
+    assert '$("revision-button").disabled = true' in script
+    assert "ROLLED_BACK: []" in script
+    assert "Rolled-back tasks are terminal" in script
 
 
 def test_capability_gates_and_exact_blockers_are_rendered_without_hiding_them() -> None:

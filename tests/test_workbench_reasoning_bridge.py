@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -413,6 +414,15 @@ def model_capability(client: TestClient) -> dict[str, object]:
     return next(item for item in health.json()["capabilities"] if item["capability"] == "model")
 
 
+def canonical_model_capability(database: Path) -> dict[str, object]:
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            "SELECT record_json FROM canonical_capabilities WHERE name='model'"
+        ).fetchone()
+    assert row is not None
+    return json.loads(row[0])
+
+
 def test_app_factory_flag_cannot_self_assert_provider_qualification(tmp_path: Path) -> None:
     configured = enabled_settings(tmp_path)
     client = TestClient(create_app(settings=configured), base_url="http://127.0.0.1")
@@ -421,6 +431,9 @@ def test_app_factory_flag_cannot_self_assert_provider_qualification(tmp_path: Pa
     assert capability["connected"] is False
     assert capability["qualified"] is False
     assert capability["operational"] is False
+    canonical = canonical_model_capability(configured.database_path)
+    assert canonical["status"] == "BLOCKED"
+    assert canonical["operational"] is False
 
 
 def test_app_factory_uses_only_explicitly_injected_qualified_provider(tmp_path: Path) -> None:
@@ -440,3 +453,6 @@ def test_app_factory_uses_only_explicitly_injected_qualified_provider(tmp_path: 
     assert capability["healthy"] is True
     assert capability["qualified"] is True
     assert capability["operational"] is True
+    canonical = canonical_model_capability(configured.database_path)
+    assert canonical["status"] == "OPERATIONAL"
+    assert canonical["operational"] is True

@@ -11,8 +11,8 @@
 | Working candidate commit | **PENDING** — no candidate SHA is claimed inside this pre-commit file |
 | Exact final tested tree | **PENDING** — the prior 523-test checkpoint ran on an uncommitted working tree and was invalidated for release purposes by later lifecycle and documentation changes |
 | Environment | Private Codex Linux workspace, Python 3.12, loopback-only Workbench; real Chromium `149.0.7827.0` acceptance executed; no qualified runner; GCP and public deployment disabled |
-| Integrated checkpoint | `.venv/bin/pytest -q`: 597 passed, 0 failed, 0 skipped on the mutable working tree; one known Starlette/httpx deprecation warning |
-| Current focused checkpoint | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py`: 80/80 passed on the mutable working tree |
+| Integrated checkpoint | Historical mutable-tree result only; exact-commit result must be reported externally |
+| Current focused checkpoint | Historical mutable-tree result only; exact-commit result must be reported externally |
 | Immutable evidence digest | **PENDING** — final manifest and exact-commit verification have not run |
 
 The 597-test result is an engineering checkpoint, not final publication evidence. A clean checkout
@@ -36,12 +36,12 @@ No credential or connection in one plane activates another plane.
 
 | Concern | Working-candidate implementation | Current truth |
 |---|---|---|
-| Canonical lifecycle | `liltweak/canonical_lifecycle.py`, `liltweak/canonical_store.py`, migrations `0009_canonical_control_plane.sql` and `0010_workbench_canonical_authority.sql` | Authoritative for the active private Workbench; other legacy paths are not yet fully reconciled |
+| Canonical lifecycle | `liltweak/canonical_lifecycle.py`, `liltweak/canonical_store.py`, migrations `0009`, `0010`, and `0011` | Authoritative for the active private Workbench; pre-canonical task databases require an explicit export/migration workflow and legacy paths remain unreconciled |
 | Reasoning policy | `liltweak/reasoning_policy.py`, `liltweak/model_catalog.py`, `liltweak/reasoning_prompts.py` | Sol-primary, versioned roles/profiles; full live provider qualification remains blocked |
 | Provider boundary | `liltweak/reasoning_provider.py` | Responses/Agents boundary with strict output and failure classification; only a partial live gate has passed |
-| Cognitive pipeline | `liltweak/cognitive_contract.py`, `liltweak/cognitive_pipeline.py` | Tool-free/offline-tested; not authority and not a completion path |
-| Context and memory | `liltweak/context_manifest.py`, `liltweak/memory_governance.py`, `liltweak/training_readiness.py` | Deterministic context manifests are active in private Workbench planning; memory, automatic prompt change, and training execution remain inactive |
-| Tool authority | `liltweak/tool_registry.py`, `TOOL_AUTHORITY_REGISTRY.json` | Two non-mutating definitions only; mutation and publisher tools are absent |
+| Cognitive pipeline | `liltweak/cognitive_contract.py`, `liltweak/cognitive_pipeline.py` | Tool-free/offline-tested but not integrated into production Workbench analysis; this is a directive blocker |
+| Context and memory | `liltweak/context_manifest.py`, `liltweak/memory_governance.py`, `liltweak/training_readiness.py` | Deterministic inventory context is active; relevance/call-graph retrieval and durable memory/training authority are absent |
+| Tool authority | `liltweak/tool_registry.py`, `TOOL_AUTHORITY_REGISTRY.json` | Two non-mutating definitions exist offline, but production Workbench dispatch does not use the registry |
 | Runner | `liltweak/workbench_executor.py`, `liltweak/runner_qualification.py` | Contracts and hostile qualification logic exist; production transport remains disconnected/unqualified |
 | Evidence checkpoint | `liltweak/external_checkpoint.py` | Submit/assert interface exists; default client is disabled and no independent backend is configured |
 | Repository delivery | `liltweak/repository_delivery.py` | Strict contracts and pytest-only protocol exerciser exist; production publisher is disabled |
@@ -121,7 +121,7 @@ approval.
 
 ## Current classification
 
-**ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**
+**FAILED — RELEASE GATES NOT MET**
 
 This classification is provisional until the exact final candidate commit passes clean-checkout
 verification. It does not authorize merge, release, deployment, GCP, owner-tree publication, or

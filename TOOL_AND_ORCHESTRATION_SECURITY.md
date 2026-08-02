@@ -10,7 +10,7 @@
 | Exact final tested tree | **PENDING**; the 523-test uncommitted checkpoint predates later changes and is not release evidence |
 | Environment | Private Codex Linux workspace, Python 3.12; production runner and tool dispatch disconnected |
 | Current focused command | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py` |
-| Current focused result | 80/80 passed on the mutable working tree |
+| Current focused result | 88/88 passed on the mutable working tree |
 | Registry digest | `96f47167cffa63be212cffaeb45997841853abf2406352e56011ffac25404fec` |
 | Registry source digest at authoring | `dd921daf78fc89dee4fe1b4a8c8d6f4d3bffe6b8a2ddcdc77b819a83a17f5ba0` |
 | Final evidence artifact/digest | **PENDING**; the registry export is deterministic, but no exact-candidate evidence bundle is claimed |
@@ -18,9 +18,11 @@
 
 ## Authority model
 
-A model output is only a request. The server-owned registry and policy broker must revalidate the
-exact invocation immediately before dispatch. Registry, definition, task, plan, workspace,
-attempt, nonce, expiry, arguments, and any network grant are content-bound.
+A model output is only a request. The server-owned registry must revalidate the exact invocation
+immediately before dispatch. Registry, definition, task, plan, workspace, attempt, nonce, expiry,
+arguments, and any network grant must be content-bound. This invariant is **not yet integrated**
+into the production Workbench, which still uses the legacy command policy broker; production tool
+dispatch therefore remains blocked.
 
 The current default registry contains only:
 

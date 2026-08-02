@@ -3,6 +3,7 @@ name = "lil-tweak-engine"
 version = "0.7.1"
 description = "Independent, API-first, evidence-driven software-engineering engine."
 readme = "README.md"
+license-files = []
 requires-python = ">=3.12"
 dependencies = [
   "cryptography>=45,<47",

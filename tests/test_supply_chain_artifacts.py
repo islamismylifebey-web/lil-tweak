@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pytest
 from scripts.generate_supply_chain_artifacts import (
     APP_ROOT,
     MAX_SECRET_SCAN_FILE_BYTES,
+    REQUIRED_SDIST_PAYLOAD,
     REQUIRED_SOURCE_DATE_EPOCH,
     REQUIRED_WHEEL_PAYLOAD,
     SYNTHETIC_SECRET_FIXTURE_ALLOWLIST,
@@ -30,6 +33,8 @@ def _package_artifacts(
     *,
     omitted_payload: str | None = None,
     extra_payload: tuple[str, ...] = (),
+    wheel_metadata: str = "Name: lil-tweak-engine\n",
+    sdist_extra_payload: tuple[str, ...] = (),
 ) -> tuple[Path, Path]:
     wheel = tmp_path / "lil_tweak_engine-0.7.1-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -37,9 +42,14 @@ def _package_artifacts(
             archive.writestr(name, f"payload:{name}\n")
         for name in extra_payload:
             archive.writestr(name, f"payload:{name}\n")
-        archive.writestr("lil_tweak_engine-0.7.1.dist-info/METADATA", "Name: lil-tweak-engine\n")
+        archive.writestr("lil_tweak_engine-0.7.1.dist-info/METADATA", wheel_metadata)
     sdist = tmp_path / "lil_tweak_engine-0.7.1.tar.gz"
-    sdist.write_bytes(b"synthetic-focused-test-sdist")
+    with tarfile.open(sdist, "w:gz") as archive:
+        for name in sorted(REQUIRED_SDIST_PAYLOAD | set(sdist_extra_payload)):
+            data = f"payload:{name}\n".encode()
+            info = tarfile.TarInfo(f"lil_tweak_engine-0.7.1/{name}")
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
     return wheel, sdist
 
 
@@ -85,7 +95,8 @@ def test_package_artifacts_become_provenance_subjects(
         "build_backend": "setuptools.build_meta",
     }
     assert report["environment"]["SOURCE_DATE_EPOCH"] == REQUIRED_SOURCE_DATE_EPOCH
-    assert report["generated_at"] == "2025-01-01T00:00:00+00:00"
+    assert report["reproducible_build_epoch"] == "2025-01-01T00:00:00+00:00"
+    assert report["observation_time"] == "recorded externally with exact-commit verification"
 
 
 def test_wheel_missing_required_payload_fails_closed(tmp_path: Path) -> None:
@@ -103,6 +114,23 @@ def test_wheel_with_development_payload_fails_closed(tmp_path: Path) -> None:
         package_artifact_subjects(wheel, sdist)
 
 
+def test_generated_inventory_cannot_be_mislabeled_as_project_license(tmp_path: Path) -> None:
+    wheel, sdist = _package_artifacts(
+        tmp_path,
+        wheel_metadata=("Name: lil-tweak-engine\nLicense-File: LICENSE_INVENTORY.json\n"),
+    )
+
+    with pytest.raises(ArtifactValidationError, match="falsely classifies"):
+        package_artifact_subjects(wheel, sdist)
+
+    wheel, sdist = _package_artifacts(
+        tmp_path,
+        sdist_extra_payload=("LICENSE_INVENTORY.json",),
+    )
+    with pytest.raises(ArtifactValidationError, match="falsely packages"):
+        package_artifact_subjects(wheel, sdist)
+
+
 @pytest.mark.parametrize("missing_kind", ["wheel", "sdist"])
 def test_missing_package_artifact_fails_closed(tmp_path: Path, missing_kind: str) -> None:
     wheel, sdist = _package_artifacts(tmp_path)
@@ -113,6 +141,14 @@ def test_missing_package_artifact_fails_closed(tmp_path: Path, missing_kind: str
         sdist = missing
 
     with pytest.raises(ArtifactValidationError, match="cannot be inspected"):
+        package_artifact_subjects(wheel, sdist)
+
+
+def test_malformed_sdist_fails_closed(tmp_path: Path) -> None:
+    wheel, sdist = _package_artifacts(tmp_path)
+    sdist.write_bytes(b"not-a-source-archive")
+
+    with pytest.raises(ArtifactValidationError, match="valid gzip tar"):
         package_artifact_subjects(wheel, sdist)
 
 

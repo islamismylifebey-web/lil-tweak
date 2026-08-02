@@ -339,3 +339,21 @@ def test_completion_report_blocks_operational_verdict_without_live_unmocked_evid
                 "status_reasons": (),
             }
         )
+
+    failed = CompletionReport.model_validate(
+        base
+        | {
+            "verdict": CompletionVerdict.FAILED,
+            "status": OutcomeStatus.FAILED,
+            "status_reasons": ("A release gate failed.",),
+        }
+    )
+    assert failed.verdict.value == "FAILED — RELEASE GATES NOT MET"
+    with pytest.raises(ValidationError, match="requires the exact failed verdict"):
+        CompletionReport.model_validate(
+            base
+            | {
+                "status": OutcomeStatus.FAILED,
+                "status_reasons": ("A release gate failed.",),
+            }
+        )

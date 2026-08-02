@@ -997,6 +997,37 @@ class CanonicalStateStore:
         with self._lock:
             return self._get_lease_locked(lease_id)
 
+    def assert_dispatch_active(
+        self,
+        task_id: str,
+        lease_id: str,
+        *,
+        lease_token: str,
+    ) -> DispatchLease:
+        """Revalidate live dispatch authority immediately before delegated execution."""
+
+        with self._lock:
+            self._assert_runtime_locked()
+            self._assert_not_stopped_locked()
+            task = self._get_task_locked(task_id)
+            lease = self._get_lease_locked(lease_id)
+            control = self._control_locked()
+            if (
+                task.state != TaskState.EXECUTING
+                or lease.task_id != task.id
+                or lease.status != DispatchLeaseStatus.ACTIVE
+                or lease.runtime_id != self.runtime_id
+                or lease.generation != int(control["generation"])
+                or not secrets.compare_digest(
+                    lease.token_digest,
+                    hashlib.sha256(lease_token.encode()).hexdigest(),
+                )
+            ):
+                raise CanonicalConflict("dispatch authority is no longer active")
+            if utc_now() >= lease.expires_at:
+                raise CanonicalConflict("dispatch lease expired")
+            return lease
+
     def list_leases(self, task_id: str) -> list[DispatchLease]:
         with self._lock:
             self._get_task_locked(task_id)

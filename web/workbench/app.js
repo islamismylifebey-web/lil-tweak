@@ -235,7 +235,7 @@ function renderTask() {
     ANALYZED: ["analyze-button", "cancel-button"],
     BLOCKED: ["inspect-button", "cancel-button"],
     AWAITING_APPROVAL: ["cancel-button"],
-    ROLLED_BACK: ["retry-button"],
+    ROLLED_BACK: [],
     APPROVED: ["execute-button", "cancel-button"],
     EXECUTING: ["cancel-button"],
     TESTING: ["cancel-button"],
@@ -275,7 +275,8 @@ function renderTask() {
     state.task.state === "APPROVED" ? "Start Execution consumes the exact approval once." :
     state.task.state === "AWAITING_APPROVAL" ? "Approve or reject the exact digest in Approvals." :
     state.task.state === "FAILED" ? "Request and approve rollback before retrying." :
-    state.task.state === "ROLLED_BACK" ? "Retry opens revised planning from the verified original source." :
+    state.task.state === "ROLLED_BACK" ?
+      "Rolled-back tasks are terminal. Import the verified source as a new task revision." :
     "Controls enable only when their state prerequisite is true.";
 }
 
@@ -314,10 +315,13 @@ $("repository-inspection-form").addEventListener("submit", async (event) => {
 
 function renderApproval() {
   $("approval-json").textContent = state.approval ? json(state.approval) : "No current approval.";
-  ["approve-button", "reject-button", "revision-button"].forEach((id) => {
+  ["approve-button", "reject-button"].forEach((id) => {
     $(id).disabled = !state.approval || state.approval.status !== "pending" ||
       !state.task || state.task.state !== "AWAITING_APPROVAL";
   });
+  $("revision-button").disabled = true;
+  $("revision-button").title =
+    "Canonical tasks are monotonic; import a new task revision instead.";
   $("reissue-approval-button").disabled = !state.approval ||
     state.approval.status !== "expired" || !state.task ||
     !["AWAITING_APPROVAL", "APPROVED"].includes(state.task.state);

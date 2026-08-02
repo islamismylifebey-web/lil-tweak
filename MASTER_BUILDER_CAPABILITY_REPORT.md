@@ -11,7 +11,7 @@
 | Working candidate commit | **PENDING** — this report does not invent or pre-claim a candidate SHA |
 | Exact final tested tree | **MUTABLE CHECKPOINT ONLY** — no candidate commit/tree is claimed |
 | Environment | Private Codex Linux workspace, Python 3.12, Chromium 149; runner disconnected; GCP and public deployment disabled |
-| Integrated checkpoint | `.venv/bin/pytest -q`: **597 passed, 0 failed, 0 skipped**, with one known Starlette/httpx deprecation warning, on the mutable working tree |
+| Integrated checkpoint | **HISTORICAL ONLY** — 597 passed on a mutable tree that was later changed; exact-commit results are external |
 | Browser checkpoint | Chromium 149: **30 PASS / 3 BLOCKED / 0 FAIL**; result SHA-256 `d0e150189eff95b10fb5e4fa68768020428bb4a1175c9c72aefc49295a87cb18`; screenshot SHA-256 `387e7ddce232bddbbb0f861dbcaa95b7f0797f5d16531d9d0a80243e3dd58542` |
 | Build checkpoint | Wheel and sdist both built successfully after explicit `setuptools==82.0.1` / `wheel==0.47.0` build configuration |
 | Immutable evidence artifact/digest | **PENDING** — no final manifest tied to an exact candidate commit exists |
@@ -37,18 +37,18 @@ No status in this report is an authorization to mutate an owner repository.
 | Capability | Implemented surface | Evidence mode | Current status | Exact limitation or blocker |
 |---|---|---|---|---|
 | Control-plane API and storage | Typed services, SQLite state, evidence records, private API | Full offline suite | **IMPLEMENTED AND TESTED; not operational** | Exact candidate commit and clean-checkout evidence are pending |
-| Canonical lifecycle | Canonical store plus migrations `0009`/`0010`, same-connection Workbench projection, reconciliation and immutable ledger guards | Full offline suite/integration | **ACTIVE WORKBENCH INTEGRATION TESTED** | Legacy paths, external providers, and production delivery are not operationally reconciled |
+| Canonical lifecycle | Canonical store plus migrations `0009`/`0010`/`0011`, same-connection Workbench projection and immutable ledger guards | Offline integration | **PARTIALLY INTEGRATED** | Legacy paths and production delivery remain unreconciled; legacy task databases fail closed pending an explicit export/migration workflow |
 | Sol reasoning provider | Strict Responses/Agents contracts, profiles, role prompts, failure taxonomy | Partial live plus mocked/offline tests | **BLOCKED overall** | Live compaction, cache behavior/telemetry, timeout, cancellation, refusal, and incomplete-response handling are not fully qualified end to end |
 | Sol frozen holdout | Immutable 15-case source suite; label-blind v2 request/evaluator | Live v2 | **15/15 PASSED; partial evidence** | One call and zero retries passed; full provider qualification and immutable candidate binding remain blocked |
 | Sol profile matrix | `standard` and `pro` across `high`, `xhigh`, and `max` | Live | **Six variants PASSED, partial evidence only** | This does not satisfy the missing provider failure/control gates |
 | Continuation and concurrency | Bounded continuation and concurrent-call exercises | Live | **PASSED, partial evidence only** | Exact immutable artifacts and complete provider qualification remain absent |
 | Terra degraded profile | Policy/catalog surface | Offline/mock only | **BLOCKED** | No complete live qualification or operational authorization |
-| Cognitive pipeline | Planner, implementer, critic, verifier, finalizer contracts | Offline deterministic tests | **OFFLINE TESTED** | Tool-free proposal pipeline only; it has no dispatch, approval, mutation, or completion authority |
-| Context manifest | Descriptor-pinned deterministic assembly, digest, secret/hardlink controls, and active Workbench adapter | Full offline suite/integration | **INTEGRATED AND TESTED** | Live provider compaction, failure, and cache scenarios remain unqualified |
+| Cognitive pipeline | Planner, implementer, critic, verifier, finalizer contracts | Offline deterministic tests | **BLOCKED FOR DIRECTIVE COMPLETION** | It is not mapped into production Workbench analysis; production still uses a single planner call |
+| Context manifest | Descriptor-pinned deterministic assembly, digest, secret/hardlink controls, and Workbench adapter | Offline integration | **PARTIAL** | Selection is path/category inventory ordering, not objective relevance, call-graph, dependency, or test-impact retrieval |
 | Memory governance | Proposal, approval, invalidation, and provenance contracts | Offline deterministic tests | **OFFLINE TESTED** | No automatic prompt mutation or autonomous policy learning is permitted |
 | Training readiness | Dataset/provenance/readiness evaluation | Offline deterministic tests | **OFFLINE TESTED** | No training job, provider upload, or model change is authorized |
 | Repository onboarding/inspection | Opaque mappings, read-only inspection, repository fingerprints | Offline/integration; earlier baseline live exercise | **OFFLINE TESTED; current live retest pending** | Newest candidate has not been exercised against an immutable live owner-tree fixture |
-| Tool registry | Two safe tools: repository read and named verification check | Offline tests; registry export digest | **OFFLINE TESTED; not dispatched** | Registry lacks mutation tools and is not evidence of a connected orchestrator or runner |
+| Tool registry | Two safe tools: repository read and named verification check | Offline tests; registry export digest | **BLOCKED FOR PRODUCTION DISPATCH** | Registry is not injected into the Workbench executor path; the legacy broad command broker remains separate |
 | Tool execution | Bounded executor and tool result contracts | Mocked/test-only | **BLOCKED** | Production runner transport is disconnected and independently authorized dispatch is absent |
 | Isolated runner | Transport, executor, and 47-check hostile qualifier contracts | Offline tests and local failed prerequisite probe | **BLOCKED** | Qualifier/destroyer/runtime pins, delegated cgroup v2, namespace proof, signed authorization, process transport, and independent qualification are absent |
 | Local evidence ledger | Hash-chained and signed evidence contracts | Offline deterministic tests | **OFFLINE TESTED** | Local signing is not independent external anti-rollback proof |
@@ -86,7 +86,7 @@ verification rather than independent completion evidence.
 
 ## Current classification
 
-**ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**
+**FAILED — RELEASE GATES NOT MET**
 
 This report does not approve an owner-tree apply, local commit, remote push, merge, release,
 deployment, or public launch. Those actions remain blocked until their independent capability

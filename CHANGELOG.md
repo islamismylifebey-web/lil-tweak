@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 — Live Workbench and Bounded Execution Bridge
+## Unreleased — Live Workbench and Bounded Execution Bridge
 
 - Added the private owner Workbench UI and session/CSRF API.
 - Added immutable tasks, live typed planning, exact one-time approvals, bounded file and command

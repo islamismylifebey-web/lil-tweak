@@ -5,6 +5,7 @@ import json
 import uuid
 from datetime import timedelta
 
+from .canonical_lifecycle import CapabilityName
 from .context_manifest import ContextManifest, ContextPolicy, build_context_manifest
 from .creator import CreatorService
 from .creator_contract import (
@@ -428,6 +429,8 @@ class WorkbenchController:
         task = self.store.get_task(task_id)
         if task.state != WorkbenchState.ANALYZED:
             raise WorkbenchError("task is not ready for planning")
+        if not self.store.canonical.capability(CapabilityName.MODEL).operational:
+            raise WorkbenchError("canonical model capability is not operational")
         if not task.creator_brief_digest or not task.creator_route_digest:
             raise WorkbenchError("Creator control-plane bindings are missing")
         (
@@ -662,6 +665,11 @@ class WorkbenchController:
                         "request_digest": step.request_digest,
                         "phase": step.phase.value,
                     },
+                )
+                self.store.assert_active_dispatch_authority(
+                    task_id,
+                    expected_attempt=attempt,
+                    request=step,
                 )
                 run = await self.executor.execute(
                     task_id=task_id,
@@ -936,17 +944,9 @@ class WorkbenchController:
         current_digest = self.workspaces.tree_digest(self.workspaces.task_root(task_id))
         if current_digest != task.imported.source_snapshot_digest:
             raise WorkbenchError("retry source does not match the immutable task snapshot")
-        revised = self.store.transition(task_id, WorkbenchState.ANALYZED)
-        self.store.append_evidence(
-            task_id,
-            kind=EvidenceKind.CONTROL,
-            event_type="revision_requested_after_rollback",
-            payload={
-                "source_snapshot_digest": current_digest,
-                "next_step": "produce a revised plan and obtain a new exact approval",
-            },
+        raise WorkbenchError(
+            "rolled-back tasks are terminal; import the verified source as a new task revision"
         )
-        return revised
 
     def generate_submission(self, task_id: str) -> CandidateSubmission:
         task = self.store.get_task(task_id)

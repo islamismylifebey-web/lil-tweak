@@ -59,13 +59,13 @@ def test_phase71_release_versions_are_consistent() -> None:
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1\n"
     )
     assert changelog.startswith(
-        "# Changelog\n\n## 0.8.0 — Live Workbench and Bounded Execution Bridge\n"
+        "# Changelog\n\n## Unreleased — Live Workbench and Bounded Execution Bridge\n"
     )
     assert "## 0.7.1 — Automatic Verification and Dormant Runner Qualification\n" in changelog
     assert execution_manifest.startswith(
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification 0.7.1\n"
     )
-    assert "`ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL`." in readme
+    assert "`FAILED — RELEASE GATES NOT MET`." in readme
 
 
 def test_distribution_declares_complete_runtime_payload_and_locked_build_tools() -> None:
@@ -155,6 +155,7 @@ def test_standard_ci_is_read_only_secretless_and_offline() -> None:
         "migrations/0008_workbench.sql",
         "migrations/0009_canonical_control_plane.sql",
         "migrations/0010_workbench_canonical_authority.sql",
+        "migrations/0011_canonical_active_cancellation.sql",
         "web/workbench/app.js",
         "web/workbench/index.html",
         "web/workbench/styles.css",

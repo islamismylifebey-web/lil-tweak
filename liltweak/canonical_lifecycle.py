@@ -131,10 +131,22 @@ LEGAL_TRANSITIONS: MappingProxyType[TaskState, frozenset[TaskState]] = MappingPr
             }
         ),
         TaskState.EXECUTING: frozenset(
-            {TaskState.TESTING, TaskState.FAILED, TaskState.ROLLBACK_PENDING, _E}
+            {
+                TaskState.TESTING,
+                TaskState.CANCELED,
+                TaskState.FAILED,
+                TaskState.ROLLBACK_PENDING,
+                _E,
+            }
         ),
         TaskState.TESTING: frozenset(
-            {TaskState.VERIFYING, TaskState.FAILED, TaskState.ROLLBACK_PENDING, _E}
+            {
+                TaskState.VERIFYING,
+                TaskState.CANCELED,
+                TaskState.FAILED,
+                TaskState.ROLLBACK_PENDING,
+                _E,
+            }
         ),
         TaskState.VERIFYING: frozenset(
             {TaskState.EVIDENCE_SEALED, TaskState.FAILED, TaskState.ROLLBACK_PENDING, _E}

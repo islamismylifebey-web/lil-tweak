@@ -10,7 +10,7 @@
 | Exact final tested tree | **PENDING**; the earlier 523/523 checkpoint is not final after later changes |
 | Environment | Private Codex Linux workspace, Python 3.12; host prerequisites below are unsatisfied |
 | Current focused command | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py` |
-| Current focused checkpoint | 80/80 tool, runner, checkpoint, and publisher tests passed on the mutable working tree |
+| Current focused checkpoint | 88/88 tool, runner, checkpoint, and publisher tests passed on the mutable working tree |
 | Runner qualification suite | 47 checks; digest `45197dc51a04a0a8f1a7a56183d326ee2fb758c2f013ef4a9ba314e0ff53f531` |
 | Runner source digest at authoring | `07809fb33a70d25f42c35d3ae13aa1fba1911c44b34b33b235e74444274038e0` |
 | Final qualification artifact/digest | **PENDING**; no signed live 47-check receipt exists |

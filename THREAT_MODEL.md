@@ -25,11 +25,11 @@ operational. In particular:
 - Mocks, fakes, in-memory adapters, configured model names, schema validation, and passing offline
   tests do not establish a live capability.
 
-The complete suite currently reports 597 passed, 0 failed, 0 skipped, and one known warning. Wheel
+An earlier mutable tree reported 597 passed, 0 failed, 0 skipped, and one known warning. Wheel
 and sdist builds pass with setuptools 82.0.1 and wheel 0.47.0. These results and the browser
 artifacts are mutable working-tree checkpoints, not immutable final-candidate evidence.
 
-The controlling verdict is **ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**. Every report
+The controlling verdict is **FAILED — RELEASE GATES NOT MET**. Every report
 must preserve the distinction between implemented, offline tested, installed, configured,
 connected, healthy, qualified, authorized, and operational.
 
@@ -139,6 +139,6 @@ recorded:
 7. Final supply-chain evidence from an available vulnerability database, disposition of three
    license reviews, a qualified runner/image, and a clean immutable candidate build.
 
-Until those gates pass, the exact verdict is **ARCHITECTURE IMPLEMENTED AND TESTED — NOT
-OPERATIONAL**. No component may infer authority or operational status from another component's
+Until those gates pass, the exact verdict is **FAILED — RELEASE GATES NOT MET**. No component may
+infer authority or operational status from another component's
 configuration or test double.

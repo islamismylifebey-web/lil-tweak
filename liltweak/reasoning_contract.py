@@ -197,6 +197,7 @@ class CompletionVerdict(StrEnum):
     FULLY_OPERATIONAL = "FULLY OPERATIONAL"
     PLANNING_ONLY = "OPERATIONAL FOR VERIFIED PLANNING ONLY"
     ARCHITECTURE_ONLY = "ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL"
+    FAILED = "FAILED — RELEASE GATES NOT MET"
 
 
 class StatusedContract(ReasoningSchema):
@@ -758,7 +759,14 @@ class CompletionReport(StatusedContract):
 
     @model_validator(mode="after")
     def validate_verdict_truthfulness(self) -> CompletionReport:
-        if self.verdict != CompletionVerdict.ARCHITECTURE_ONLY:
+        if self.status == OutcomeStatus.FAILED and self.verdict != CompletionVerdict.FAILED:
+            raise ValueError("a failed completion status requires the exact failed verdict")
+        if self.verdict == CompletionVerdict.FAILED and self.status != OutcomeStatus.FAILED:
+            raise ValueError("the failed verdict requires a failed completion status")
+        if self.verdict not in {
+            CompletionVerdict.ARCHITECTURE_ONLY,
+            CompletionVerdict.FAILED,
+        }:
             if self.status != OutcomeStatus.PASSED or self.remaining_blockers:
                 raise ValueError("an operational verdict cannot contain unresolved blockers")
             if not self.live_evidence_present or self.mocked_evidence_present:

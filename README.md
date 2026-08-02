@@ -1,6 +1,6 @@
 # Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1
 
-## Live Workbench 0.8.0 code-authored extension
+## Unreleased Live Workbench code-authored extension
 
 The additive private Workbench is served at `/workbench` when enabled. It reuses Creator
 compilation and routing, then adds server-owned repository inspection, immutable Git-free task
@@ -15,7 +15,10 @@ disabled. See `LOCAL_AGENT_ARCHITECTURE.md`, `LIL_TWEAK_LAUNCH_AND_OPERATIONS.md
 `LIL_TWEAK_CAPABILITY_DISCOVERY_REPORT.md`, and `LIL_TWEAK_REMAINING_BLOCKERS.md`.
 
 The current Sol High direct build is classified
-`ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL`.
+`FAILED — RELEASE GATES NOT MET`. Publication hardening found that the multi-role cognitive
+pipeline, relevance-based retrieval, durable memory/training authority, and server-owned tool
+registry are not integrated into the production Workbench path. The implemented surfaces remain
+preserved and fail closed while those directive gates are unresolved.
 Repository onboarding, private source capture, source-grounded planning context, approvals,
 evidence, recovery controls, and localhost operation are real. Live model planning and qualified
 command execution require the prerequisites documented in `LOCAL_AGENT_MODEL_ACTIVATION.md` and

@@ -2,7 +2,7 @@
 
 > Historical checkpoint — superseded by `MASTER_BUILDER_REMAINING_BLOCKERS.md`. The classification
 > and environment facts below describe the earlier baseline only. Current controlling verdict:
-> **ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**.
+> **FAILED — RELEASE GATES NOT MET**.
 
 ## Release classification
 

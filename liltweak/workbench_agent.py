@@ -215,6 +215,9 @@ class PersistentModelCallAdmission:
 
 class DisconnectedWorkbenchModelAdapter:
     connected = False
+    authorization_verified = False
+    health_verified = False
+    qualification_verified = False
     status = "disabled"
     provider_name = "disconnected"
     model_name = "none"

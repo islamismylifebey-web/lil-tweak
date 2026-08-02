@@ -286,7 +286,13 @@ async def main() -> None:
             for index, case in enumerate(cases, start=1)
         ]
     output = {"passed": all(item["passed"] for item in results), "results": results}
-    result_path = APP_ROOT / "evals" / "results" / "latest.json"
+    result_path = Path(
+        os.environ.get(
+            "LILTWEAK_EVAL_OUTPUT",
+            APP_ROOT / "evals" / "results" / "latest.json",
+        )
+    )
+    result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps(output, indent=2) + "\n")
     print(json.dumps(output, indent=2))
     raise SystemExit(0 if output["passed"] else 1)

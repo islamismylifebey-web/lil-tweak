@@ -10,7 +10,7 @@
 | Exact final tested tree | **PENDING**; the prior 523-test working-tree checkpoint predates later changes |
 | Environment | Private Codex Linux workspace, Python 3.12; no independent checkpoint backend configured |
 | Current focused command | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py` |
-| Current focused checkpoint | 80/80 tool, runner, checkpoint, and delivery tests passed on the mutable working tree |
+| Current focused checkpoint | 88/88 tool, runner, checkpoint, and delivery tests passed on the mutable working tree |
 | External-checkpoint source digest at authoring | `eb70542d2d7eb9ec2c0e54089d552f5f4d156407664f1c5293f724a28dc32e22` |
 | External-checkpoint test digest at authoring | `4c1f6f20c0569e1b28b127f0e72766628f583de0652f829c33750031bb8b06bd` |
 | Final checkpoint artifact/digest | **PENDING / ABSENT** |

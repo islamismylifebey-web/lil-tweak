@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -180,7 +181,12 @@ async def run() -> dict:
 
 def main() -> None:
     result = asyncio.run(run())
-    output = APP_ROOT / "evals" / "results" / "phase6-offline-latest.json"
+    output = Path(
+        os.environ.get(
+            "LILTWEAK_EVAL_OUTPUT",
+            APP_ROOT / "evals" / "results" / "phase6-offline-latest.json",
+        )
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     rendered = json.dumps(result, indent=2, sort_keys=True)
     output.write_text(rendered + "\n", encoding="utf-8")

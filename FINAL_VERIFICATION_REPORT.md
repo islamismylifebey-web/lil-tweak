@@ -1,6 +1,11 @@
-# Lil Tweak Master Builder Final Verification Report
+# Lil Tweak Master Builder Pre-Commit Verification Record
 
-Verdict: `ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL`
+Verdict: `FAILED — RELEASE GATES NOT MET`
+
+This file preserves historical mutable-tree evidence only. A publication audit invalidated it as
+the final release report after finding unintegrated directive components and stale evidence. The
+authoritative exact-commit results must be reported externally after the immutable commit is
+created and tested without modifying it.
 
 ## Candidate identity
 
@@ -16,12 +21,13 @@ Verdict: `ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL`
 
 ## Verification classification
 
-The implementation, migrations, policy boundaries, provider adapter, deterministic context
-assembly, canonical private-Workbench bridge, offline control mechanics, package build, and real
-browser surface passed their applicable gates. Production operation remains forced off because a
-qualified isolated runner, independent monotonic checkpoint service, complete provider
-qualification bundle and production Workbench injection, and Founder-bound delivery approvals do
-not exist in this environment.
+Several implementation surfaces passed mutable-tree tests, but the complete directive did not.
+The production Workbench does not integrate the multi-role cognitive pipeline or server-owned
+ToolRegistry into authoritative dispatch; context selection is deterministic inventory ordering,
+not relevance/call-graph retrieval; and memory/training contracts are not durable Workbench
+authority. Production operation also remains forced off because a qualified isolated runner,
+independent monotonic checkpoint service, complete provider qualification bundle, independent
+examiner, and Founder-bound delivery approvals do not exist in this environment.
 
 No fake, fixture, configured model string, local subprocess, or interface-only component is counted
 as a live operational pass. Historical or mutable-tree evidence is labeled as such. The exact final
@@ -31,11 +37,9 @@ commit/tree and clean-checkout rerun are recorded externally after freeze to avo
 
 | Gate | Result | Evidence |
 |---|---:|---|
-| Complete Python suite | PASS | 597 passed, 0 failed, 0 skipped; one known third-party Starlette/httpx deprecation warning |
+| Complete Python suite | HISTORICAL ONLY | 597 passed on an earlier mutable tree; invalidated by subsequent publication hardening and not final-commit evidence |
 | Preserved first full-suite failure | REMEDIATED | 587 passed/1 failed exposed an unnecessary capability-discovery transition; the trial now stays off-path with production gates blocked |
-| Canonical/Workbench focused suite | PASS | 76/76 |
-| Reasoning/context/bridge focused suite | PASS | 75/75 |
-| Runtime model-policy affected suite | PASS | 95/95; included an 85/85 API/Workbench sweep |
+| Focused suites | HISTORICAL ONLY | Earlier mutable-tree counts are retained in command logs; final counts must come from the exact commit |
 | Migration/concurrency/restart collection | PASS | Phase 7 migrations, canonical CAS/dispatch, concurrency, recovery, and restart reconciliation were collected in the full suite |
 | Ruff lint and format | PASS | 209 Python files formatted; lint clean |
 | Python compilation | PASS | `liltweak` and `scripts` compiled |
@@ -109,15 +113,17 @@ plan/approval display without a production qualification receipt, delivery/rollb
 qualified runner/publisher, and a real five-minute session-expiry wait; expiry mechanics remain
 unit-tested.
 
-All ephemeral browser credentials, database, profiles, logs, and screenshots were deleted after
-their hashes were recorded. The OpenAI credential authorized for model qualification stayed in the
-workspace-parent secret file, mode 0600, and was never placed in this repository or browser flow.
+A publication audit found that the earlier browser temporary directory had not actually been
+deleted. The exact `/tmp/liltweak-browser-acceptance` directory was subsequently removed without
+reading or exposing its ephemeral credentials, database, profiles, cookies, storage, caches, or
+logs. The historical browser hashes are not final-commit-bound evidence. The OpenAI credential
+stayed outside this repository and browser flow.
 
 ## Build and supply-chain evidence
 
 The project now declares exact build backends `setuptools==82.0.1` and `wheel==0.47.0`, with explicit
 package discovery. Offline `uv build` produced an sdist and a 69-file wheel. The wheel includes the
-`liltweak` package, all three schema migrations, the four runtime prompts, and complete Workbench
+`liltweak` package, all four schema migrations, the four runtime prompts, and complete Workbench
 HTML/JavaScript/CSS; it excludes evaluation, script, and test trees. An unpacked-wheel
 `WorkbenchStore` migration smoke passed. Root SBOM, license inventory, build provenance, and
 dependency/security scan artifacts are part of the final candidate tree and carry their own hashes
@@ -131,12 +137,13 @@ review.
 ## Architecture and blocked operational gates
 
 - The active private Workbench lifecycle is authoritatively bridged to the canonical state store
-  on the same SQLite connection/transaction through migration 0010. Legacy service, multi-role
-  cognitive, and future publisher paths are not fully reconciled.
+  on the same SQLite connection/transaction through migrations 0010/0011. Legacy service,
+  multi-role cognitive, and future publisher paths are not reconciled.
 - Deterministic context manifests are assembled from immutable materialized task workspaces and
   bound to provider input/evidence. Durable verified learning is schema-tested but not activated.
-- The server-owned tool registry contains only read and verification definitions. Mutation,
-  network, GCP, and publisher tools are absent from model-directed dispatch.
+- The server-owned tool registry contains only read and verification definitions, but it is not
+  wired into the production Workbench dispatch path. The legacy command policy cannot count as
+  directive-compliant tool authority, and production dispatch remains blocked.
 - Runner code and hostile qualification contracts are offline-tested, but no independent private
   Linux host has supplied signed qualification and a fresh one-use connection authorization.
 - The external monotonic checkpoint interface is offline-tested; no independent append-only/WORM

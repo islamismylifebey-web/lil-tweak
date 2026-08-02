@@ -1539,19 +1539,6 @@
       "version": "2025.9.1"
     },
     {
-      "bom-ref": "pkg:pypi/lil-tweak-engine@0.7.1",
-      "name": "lil-tweak-engine",
-      "properties": [
-        {
-          "name": "liltweak:lock-source",
-          "value": "{\"editable\": \".\"}"
-        }
-      ],
-      "purl": "pkg:pypi/lil-tweak-engine@0.7.1",
-      "type": "library",
-      "version": "0.7.1"
-    },
-    {
       "bom-ref": "pkg:pypi/mcp@1.28.1",
       "hashes": [
         {

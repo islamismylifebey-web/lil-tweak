@@ -11,7 +11,7 @@
 | Working candidate commit | **PENDING** — no candidate commit is claimed by this report |
 | Exact final tested tree | **PENDING** — the current evidence is a mutable working-tree checkpoint only |
 | Environment | Private Codex Linux workspace, Python 3.12, Chromium 149; disconnected runner; no GCP/public authorization |
-| Integrated checkpoint | `.venv/bin/pytest -q`: 597 passed, 0 failed, 0 skipped, with one known warning on the mutable working tree |
+| Integrated checkpoint | **HISTORICAL ONLY** — 597 passed on a mutable tree later changed by publication hardening |
 | Browser checkpoint | Chromium 149: 30 PASS / 3 BLOCKED / 0 FAIL; result SHA-256 `d0e150189eff95b10fb5e4fa68768020428bb4a1175c9c72aefc49295a87cb18`; screenshot SHA-256 `387e7ddce232bddbbb0f861dbcaa95b7f0797f5d16531d9d0a80243e3dd58542` |
 | Package checkpoint | Wheel and sdist builds passed after explicitly configuring setuptools 82.0.1 and wheel 0.47.0 |
 | Final artifacts and digests | **PENDING** — the candidate commit remains external/null, so these mutable checkpoints are not immutable clean-commit evidence |
@@ -22,10 +22,9 @@ The following blockers are ordered by dependency and blast radius.
 ## 1. Freeze and verify an exact candidate
 
 **Current state:** The working candidate SHA, exact tested tree, and immutable final evidence digest
-do not yet exist. The complete mutable-tree suite passed 597 tests with zero failures and zero skips
-and one known warning. Chromium 149 acceptance produced 30 PASS / 3 BLOCKED / 0 FAIL, and the wheel
-and sdist builds passed with the explicit build-tool configuration above. These are checkpoints,
-not final clean-commit evidence, and must be repeated after the candidate commit is frozen.
+do not yet exist. Earlier mutable-tree Python, browser, and package checkpoints were invalidated by
+the publication audit and subsequent hardening. They are historical evidence only and must be
+repeated after the candidate commit is frozen.
 
 **Required to unblock:**
 
@@ -41,17 +40,22 @@ Until this is done, merge and release evidence is incomplete.
 
 ## 2. Finish canonical reconciliation outside the private Workbench
 
-**Current state:** The active private Workbench now uses the canonical lifecycle authoritatively on
-one SQLite connection through migration `0010_workbench_canonical_authority.sql`. Its task,
-approval, dispatch, failure/cancellation, rollback, emergency, and completion guards are atomic
-with the compatibility projection. Its descriptor-pinned context integration is also complete and
-tested. Legacy API/service paths and a live delivery publisher are not yet reconciled, and crash
-recovery still intentionally engages emergency stop for unsafe states instead of automatically
-resuming work.
+**Current state:** The active private Workbench uses the canonical lifecycle on one SQLite
+connection through migrations `0010` and `0011`. Active dispatch now remains leased through test
+and verification commands, active cancellation revokes the lease, and rolled-back tasks are
+terminal. Pre-canonical databases containing tasks are deliberately refused before mutation
+because no safe backfill/export workflow exists. Legacy API/service paths and a live delivery
+publisher remain unreconciled.
 
 **Required to unblock:**
 
 - reconcile the remaining legacy API/service and future publisher paths onto the same lifecycle;
+- map the planner/implementer/critic/verifier/finalizer cognitive substates into production
+  Workbench analysis instead of the current single planner call;
+- replace path/category inventory ordering with objective-relevance, dependency, call-graph,
+  reference-expansion, and test-impact retrieval that is measured on frozen tasks;
+- connect memory and training-readiness records to durable, authenticated, one-use promotion and
+  invalidation authority before allowing either to affect a production prompt or model;
 - prove atomic state, event, outbox, approval-consumption, and evidence operations under restart,
   concurrency, stale-state, replay, and migration scenarios;
 - add a new-task revision workflow instead of attempting to rewind an approved canonical task;
@@ -91,7 +95,8 @@ Until then, keep `LILTWEAK_WORKBENCH_MODEL_ENABLED=false` and
 **Current state:** `TOOL_AUTHORITY_REGISTRY.json` truthfully exports two non-mutating definitions:
 repository read and named verification. The registry digest is
 `b6eab6b90ea8d90f21ede11de3bf751c6bd5535d933e1cd06de6f6d9d1a2b53f`. No mutation,
-publisher, network, or GCP tool is registered, and model-directed dispatch is disabled.
+publisher, network, or GCP tool is registered. Critically, this registry is not injected into the
+production Workbench dispatch path; production still uses the separate legacy command broker.
 
 **Required to unblock:**
 
@@ -176,15 +181,13 @@ self-attestation may substitute for the independent examiner.
 
 ## 9. Complete real-browser and private-session qualification
 
-**Current state:** Chromium 149 acceptance produced 30 PASS / 3 BLOCKED / 0 FAIL. Invalid Host was
-rejected with HTTP 400, cross-origin Origin with HTTP 403, the IPv6 listener was refused, and all
-test listeners were cleared. The result artifact SHA-256 is
+**Current state:** A historical Chromium 149 run reported 30 PASS / 3 BLOCKED / 0 FAIL. Its result
+artifact SHA-256 is
 `d0e150189eff95b10fb5e4fa68768020428bb4a1175c9c72aefc49295a87cb18`; the screenshot SHA-256 is
-`387e7ddce232bddbbb0f861dbcaa95b7f0797f5d16531d9d0a80243e3dd58542`. The three blocked cases are
-live planning/approval without a complete provider-qualification receipt, delivery/rollback
-without the qualified runner and publisher, and real-time session expiry under the current
-minimum 300-second TTL. Revocation is process-local, and this mutable-browser checkpoint is not
-bound to a final candidate commit.
+`387e7ddce232bddbbb0f861dbcaa95b7f0797f5d16531d9d0a80243e3dd58542`. The publication audit found
+that the committed harness does not itself prove the reported hostile Host/Origin, IPv6, or
+listener-cleanup assertions, and its temporary credential/browser directory had remained behind
+until this checkpoint removed it. The entire browser result is mutable and not final-commit-bound.
 
 **Required to unblock:**
 
@@ -200,9 +203,9 @@ bound to a final candidate commit.
 
 ## 10. Run the complete evaluation and adversarial matrix
 
-**Current state:** The full mutable-tree suite passed 597 tests with 0 failures, 0 skips, and one
-known warning, but no exact-candidate end-to-end run spans the production provider, independent
-orchestration, qualified runner, verifier, checkpoint, and production delivery.
+**Current state:** A prior mutable tree passed 597 tests, but that count was invalidated by later
+publication hardening. No exact-candidate end-to-end run spans the production provider,
+independent orchestration, qualified runner, verifier, checkpoint, and production delivery.
 
 **Required to unblock:** complete adversarial cases for injection, malicious repository content,
 secret exfiltration, symlink/TOCTOU, stale approval, replay, duplicate dispatch, crash/restart,
@@ -249,7 +252,7 @@ when its required evidence is tied to the exact candidate and independently veri
 
 ## Current determination
 
-**ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**
+**FAILED — RELEASE GATES NOT MET**
 
 The external checkpoint, qualified runner/image, production Workbench provider injection, live
 compaction/failure/cache scenarios, Founder-approved apply/commit/rollback, vulnerability database,

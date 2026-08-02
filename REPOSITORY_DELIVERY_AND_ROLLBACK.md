@@ -10,7 +10,7 @@
 | Exact final tested tree | **PENDING**; the 523-test checkpoint is not final after later changes |
 | Environment | Private Codex Linux workspace, Python 3.12; production publisher disabled |
 | Current focused command | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py` |
-| Current focused result | 80/80 passed on the mutable working tree |
+| Current focused result | 88/88 passed on the mutable working tree |
 | Delivery source digest at authoring | `8d3265dd7d0ba4c7d88be5ce0e42d9ab74e5ec33a3bfde2e9e2172f7caccce64` |
 | Delivery test digest at authoring | `77a3ddd296530116b6f648621859b0229c132888cfbe6d4e9508b20d6b5db397` |
 | Final delivery artifact/digest | **PENDING / ABSENT** |

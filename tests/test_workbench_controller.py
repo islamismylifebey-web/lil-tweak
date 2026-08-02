@@ -8,7 +8,12 @@ import pytest
 import liltweak.canonical_store as canonical_store_module
 import liltweak.workbench as workbench_module
 import liltweak.workbench_store as workbench_store_module
-from liltweak.canonical_lifecycle import TaskState
+from liltweak.canonical_lifecycle import (
+    CapabilityName,
+    CapabilityStatus,
+    DispatchLeaseStatus,
+    TaskState,
+)
 from liltweak.creator import CreatorService
 from liltweak.store import SQLiteStore
 from liltweak.workbench import WorkbenchController, WorkbenchError
@@ -43,7 +48,11 @@ class FakeModel:
     model_name = "fake-model"
     reasoning_tier = "high"
 
+    def __init__(self) -> None:
+        self.calls = 0
+
     async def plan(self, *, task: TaskImport, **_: object) -> ModelPlanResult:
+        self.calls += 1
         plan = WorkbenchPlan(
             summary="Run bounded checks.",
             reasoning="The smallest plan runs a test and independent verification command.",
@@ -103,7 +112,49 @@ def controller(tmp_path: Path) -> WorkbenchController:
 
 
 @pytest.mark.asyncio
-async def test_execution_stops_at_verified_without_independent_examiner(tmp_path: Path) -> None:
+async def test_canonical_model_gate_blocks_before_provider_call(tmp_path: Path) -> None:
+    control = controller(tmp_path)
+    source = control.workspaces.task_root("placeholder")
+    source_digest = control.workspaces.tree_digest(source)
+    task = control.receive(
+        TaskImport(
+            title="blocked planning",
+            direction="do not spend without canonical authority",
+            source_snapshot_digest=source_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    source.rmdir()
+    control.inspect(task.id)
+    current = control.store.canonical.capability(CapabilityName.MODEL)
+    control.store.canonical.update_capability(
+        CapabilityName.MODEL,
+        expected_version=current.version,
+        status=CapabilityStatus.BLOCKED,
+        feature_enabled=True,
+        installed=True,
+        configured=True,
+        connected=False,
+        healthy=False,
+        qualified=False,
+        authorized=False,
+        operational=False,
+        detail_code="test_model_gate_blocked",
+        actor_id="test:model_gate",
+    )
+
+    with pytest.raises(WorkbenchError, match="canonical model capability is not operational"):
+        await control.analyze(task.id)
+
+    assert isinstance(control.model, FakeModel)
+    assert control.model.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_execution_stops_at_verified_without_independent_examiner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     control = controller(tmp_path)
     empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
     imported = TaskImport(
@@ -123,7 +174,23 @@ async def test_execution_stops_at_verified_without_independent_examiner(tmp_path
         ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
     )
     assert approved.state == WorkbenchState.APPROVED
+    original_execute = control.executor.execute
+    observed_phases: list[StepPhase] = []
+
+    async def execute_with_live_lease(**values: object):
+        request = values["request"]
+        assert isinstance(request, ToolRequest)
+        leases = control.store.canonical.list_leases(task.id)
+        assert len(leases) == 1
+        assert leases[0].status == DispatchLeaseStatus.ACTIVE
+        assert control.store.canonical.get_task(task.id).state == TaskState.EXECUTING
+        observed_phases.append(request.phase)
+        return await original_execute(**values)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(control.executor, "execute", execute_with_live_lease)
     verified = await control.execute(task.id, approval.id)
+    assert observed_phases == [StepPhase.TEST, StepPhase.VERIFICATION]
+    assert control.store.canonical.list_leases(task.id)[0].status == DispatchLeaseStatus.COMPLETED
     assert control.store.canonical.get_task(task.id).state == TaskState.VERIFYING
     with pytest.raises(WorkbenchConflict, match="canonical completion"):
         control.store.transition(task.id, WorkbenchState.COMPLETED)
@@ -137,6 +204,71 @@ async def test_execution_stops_at_verified_without_independent_examiner(tmp_path
     assert verification.payload["completion_claim_allowed"] is False
     with pytest.raises(WorkbenchError, match="terminal execution result"):
         control.generate_submission(task.id)
+
+
+@pytest.mark.asyncio
+async def test_active_execution_can_be_canceled_with_lease_revocation(tmp_path: Path) -> None:
+    control = controller(tmp_path)
+    empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="cancel active work",
+            direction="run bounded tests",
+            source_snapshot_digest=empty_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, approval = await control.analyze(task.id)
+    approved = control.decide(
+        task.id,
+        approval.id,
+        ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
+    )
+    control.store.consume_approval(
+        approval.id,
+        task=approved,
+        expected_attempt=approval.execution_attempt,
+        tool_digests=approval.approved_tool_digests,
+        expected_purpose=approval.purpose,
+        expected_owner_id="owner",
+        policy_digest=control.policy.policy_digest,
+        runner_grant_digest=control.executor.authorization_digest,
+    )
+    testing = control.store.transition(task.id, WorkbenchState.TESTING)
+    assert testing.state == WorkbenchState.TESTING
+    assert control.store.canonical.get_task(task.id).state == TaskState.EXECUTING
+
+    canceled = control.cancel(task.id)
+
+    assert canceled.state == WorkbenchState.CANCELED
+    assert control.store.canonical.get_task(task.id).state == TaskState.CANCELED
+    assert control.store.canonical.list_leases(task.id)[0].status == DispatchLeaseStatus.CANCELED
+
+
+def test_rolled_back_task_requires_a_new_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    control = controller(tmp_path)
+    source_root = control.workspaces.task_root("placeholder")
+    source_digest = control.workspaces.tree_digest(source_root)
+    task = control.receive(
+        TaskImport(
+            title="terminal rollback",
+            direction="do not reopen canonical history",
+            source_snapshot_digest=source_digest,
+        )
+    )
+    task_root = control.workspaces.task_root(task.id)
+    source_root.rmdir()
+    assert control.workspaces.tree_digest(task_root) == source_digest
+    rolled_back = task.model_copy(update={"state": WorkbenchState.ROLLED_BACK})
+    monkeypatch.setattr(control.store, "get_task", lambda _task_id: rolled_back)
+
+    with pytest.raises(WorkbenchError, match="rolled-back tasks are terminal"):
+        control.retry_eligible_step(task.id)
 
 
 @pytest.mark.asyncio

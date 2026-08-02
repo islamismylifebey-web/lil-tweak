@@ -12,7 +12,7 @@
 | Environment | Current private Codex Linux workspace |
 | Qualification suite | 47 checks, digest `45197dc51a04a0a8f1a7a56183d326ee2fb758c2f013ef4a9ba314e0ff53f531` |
 | Focused command | `.venv/bin/pytest -q tests/test_tool_registry.py tests/test_runner_qualification.py tests/test_runner_qualification_cli.py tests/test_external_checkpoint.py tests/test_repository_delivery.py` |
-| Focused result | 80/80 passed; contract and fault-injection evidence only |
+| Focused result | 88/88 passed; contract and fault-injection evidence only |
 | Live runner trial | Not run; no qualified host or production transport exists |
 | Signed qualification artifact/digest | **PENDING / ABSENT** |
 | Final status | **BLOCKED — DISCONNECTED AND UNQUALIFIED** |

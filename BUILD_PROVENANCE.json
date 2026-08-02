@@ -13,7 +13,7 @@
   "candidate_commit_recorded_externally": false,
   "environment": {
     "SOURCE_DATE_EPOCH": "1735689600",
-    "platform": "Linux-6.12.13-x86_64-with-glibc2.39",
+    "platform": "linux-x86_64",
     "python": "3.12.13",
     "uv": "uv 0.11.33 (x86_64-unknown-linux-gnu)"
   },
@@ -21,7 +21,7 @@
     {
       "byte_count": 2261,
       "path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
-      "sha256": "61658065d6747d2b3e664e05ec88161a07ef133dc3a502d31cb827b800d76ddc"
+      "sha256": "179b1c0f2507c1a6fcc3a8a62535a1b3a09b576aabe8f032326f742fb1d31678"
     },
     {
       "byte_count": 11839,
@@ -29,13 +29,12 @@
       "sha256": "0f2599a12b9d87c4c52aa61d02b12d7789c782d64fc15720cdb329f6b986e44d"
     },
     {
-      "byte_count": 133518,
+      "byte_count": 133184,
       "path": "SUPPLY_CHAIN_SBOM.json",
-      "sha256": "c48f24838b8e66a6aa905e084f29a12b5d88505faf57e3f4680cb9394d82bd0e"
+      "sha256": "261994ece8d1bdda2cbb97ef1a3a762a3762438cc940f48a484ef5704d307e56"
     }
   ],
   "gcp_access_performed": false,
-  "generated_at": "2025-01-01T00:00:00+00:00",
   "materials": [
     {
       "path": "uv.lock",
@@ -43,25 +42,27 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "6cabebf0842f93983fa9911ef849d5ac4d334c739a8f9ba4633b3caea85ef9dd"
+      "sha256": "ddb93318d0de8d9002ad05bc27d9df8e41412e13fce15285f78661f98adc0a3c"
     }
   ],
+  "observation_time": "recorded externally with exact-commit verification",
   "public_deployment_performed": false,
   "repository": "github:islamismylifebey-web/lil-tweak",
+  "reproducible_build_epoch": "2025-01-01T00:00:00+00:00",
   "runner_image_built": false,
   "schema_version": "build-provenance-v1",
   "subjects": [
     {
       "artifact_type": "wheel",
-      "byte_count": 303055,
+      "byte_count": 303833,
       "path": "lil_tweak_engine-0.7.1-py3-none-any.whl",
-      "sha256": "03c56e46176fc9bbe02bdb325213113e4013bab3c57adf5c9a3240783580e4b2"
+      "sha256": "5f6206a66255c88c8e2f1a970867a70a871d5ead748a92e1cafac780f898483e"
     },
     {
       "artifact_type": "sdist",
-      "byte_count": 402730,
+      "byte_count": 404865,
       "path": "lil_tweak_engine-0.7.1.tar.gz",
-      "sha256": "6e46181e70e3f062b645e3adc03bc6c6b513d44c07d1c381e676a3a9aafa07f6"
+      "sha256": "ff1d44f74fa9cc674dbb106a8c6ec5bfc16c354bf899872779dbeedb057d4969"
     }
   ]
 }

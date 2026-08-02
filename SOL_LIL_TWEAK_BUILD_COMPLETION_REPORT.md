@@ -3,7 +3,7 @@
 > Historical checkpoint — superseded by the `MASTER_BUILDER_*` reports and
 > `FINAL_VERIFICATION_REPORT.md`. The classification and environment facts below describe the
 > earlier `373400cb` baseline only. Current controlling verdict:
-> **ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**.
+> **FAILED — RELEASE GATES NOT MET**.
 
 ## Final classification
 

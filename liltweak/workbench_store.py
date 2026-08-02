@@ -26,6 +26,7 @@ from .workbench_contract import (
     ApprovalPurpose,
     CandidateSubmission,
     EvidenceKind,
+    ToolRequest,
     ToolRunRecord,
     WorkbenchApproval,
     WorkbenchEvidence,
@@ -39,6 +40,9 @@ from .workbench_contract import (
 
 CANONICAL_BRIDGE_MIGRATION_PATH = (
     Path(__file__).resolve().parent.parent / "migrations" / "0010_workbench_canonical_authority.sql"
+)
+CANONICAL_CANCELLATION_MIGRATION_PATH = (
+    Path(__file__).resolve().parent.parent / "migrations" / "0011_canonical_active_cancellation.sql"
 )
 
 SCHEMA = """
@@ -204,7 +208,7 @@ _ALLOWED_TRANSITIONS: dict[WorkbenchState, frozenset[WorkbenchState]] = {
     WorkbenchState.COMPLETED: frozenset(),
     WorkbenchState.BLOCKED: frozenset({WorkbenchState.INSPECTING, WorkbenchState.CANCELED}),
     WorkbenchState.FAILED: frozenset({WorkbenchState.ANALYZED, WorkbenchState.ROLLED_BACK}),
-    WorkbenchState.ROLLED_BACK: frozenset({WorkbenchState.ANALYZED}),
+    WorkbenchState.ROLLED_BACK: frozenset(),
     WorkbenchState.CANCELED: frozenset(),
 }
 
@@ -237,6 +241,11 @@ class WorkbenchStore:
         self._connection = sqlite3.connect(self._path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._lock = RLock()
+        try:
+            self._refuse_implicit_legacy_task_migration()
+        except Exception:
+            self._connection.close()
+            raise
         with self._lock, self._connection:
             self._connection.execute("PRAGMA foreign_keys=ON")
             self._connection.execute("PRAGMA journal_mode=WAL")
@@ -252,10 +261,20 @@ class WorkbenchStore:
         )
         if not CANONICAL_BRIDGE_MIGRATION_PATH.is_file():
             raise WorkbenchStoreError("canonical Workbench bridge migration is missing")
+        if not CANONICAL_CANCELLATION_MIGRATION_PATH.is_file():
+            raise WorkbenchStoreError("canonical active-cancellation migration is missing")
         with self._lock:
             self._connection.executescript(
                 CANONICAL_BRIDGE_MIGRATION_PATH.read_text(encoding="utf-8")
             )
+            cancellation_applied = self._connection.execute(
+                "SELECT 1 FROM canonical_schema_migrations "
+                "WHERE migration_id='0011_canonical_active_cancellation'"
+            ).fetchone()
+            if cancellation_applied is None:
+                self._connection.executescript(
+                    CANONICAL_CANCELLATION_MIGRATION_PATH.read_text(encoding="utf-8")
+                )
         self._active_dispatch: dict[str, tuple[str, str]] = {}
         with self._lock:
             control_row = self._connection.execute(
@@ -266,6 +285,37 @@ class WorkbenchStore:
         if workbench_stopped != canonical_stopped:
             # Divergence can only be reconciled toward the safer stopped state.
             self.emergency_stop(True, actor_id=self._canonical.runtime_id)
+
+    def _refuse_implicit_legacy_task_migration(self) -> None:
+        """Do not strand pre-canonical Workbench tasks behind empty binding tables."""
+
+        task_table = self._connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workbench_tasks'"
+        ).fetchone()
+        if task_table is None:
+            return
+        task_count = int(
+            self._connection.execute("SELECT COUNT(*) FROM workbench_tasks").fetchone()[0]
+        )
+        if task_count == 0:
+            return
+        migrations_table = self._connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_schema_migrations'"
+        ).fetchone()
+        bridge_applied = False
+        if migrations_table is not None:
+            bridge_applied = (
+                self._connection.execute(
+                    "SELECT 1 FROM canonical_schema_migrations "
+                    "WHERE migration_id='0010_workbench_canonical_authority'"
+                ).fetchone()
+                is not None
+            )
+        if not bridge_applied:
+            raise WorkbenchStoreError(
+                "existing Workbench tasks predate canonical authority; open refused until "
+                "they are exported and migrated through an explicit recovery workflow"
+            )
 
     @property
     def canonical(self) -> CanonicalStateStore:
@@ -356,7 +406,7 @@ class WorkbenchStore:
         blocked_reason: str | None = None,
         increment_attempt: bool = False,
     ) -> WorkbenchTask:
-        dispatch_completed = False
+        dispatch_closed = False
         try:
             with self._lock, self._connection:
                 self._connection.execute("BEGIN IMMEDIATE")
@@ -386,14 +436,19 @@ class WorkbenchStore:
                     blocked_reason=blocked_reason,
                 )
                 self._save_task_locked(changed)
-                dispatch_completed = target == WorkbenchState.TESTING
+                dispatch_closed = target in {
+                    WorkbenchState.VERIFIED,
+                    WorkbenchState.FAILED,
+                    WorkbenchState.CANCELED,
+                    WorkbenchState.BLOCKED,
+                }
         except sqlite3.IntegrityError as exc:
             raise WorkbenchConflict("another Workbench task is active") from exc
         except CanonicalStoreError as exc:
             raise WorkbenchConflict(
                 "authoritative canonical lifecycle rejected the Workbench transition"
             ) from exc
-        if dispatch_completed:
+        if dispatch_closed:
             self._active_dispatch.pop(task_id, None)
         return changed
 
@@ -501,11 +556,25 @@ class WorkbenchStore:
             dispatch = self._active_dispatch.get(task.id)
             if canonical.state != TaskState.EXECUTING or dispatch is None:
                 raise WorkbenchConflict("canonical active dispatch authority is missing")
+            self._canonical.record_event_atomic(
+                task.id,
+                expected_version=canonical.version,
+                event_type="workbench.testing.started",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.VERIFIED:
+            dispatch = self._active_dispatch.get(task.id)
+            if canonical.state != TaskState.EXECUTING or dispatch is None:
+                raise WorkbenchConflict("canonical active dispatch authority is missing")
             lease_id, lease_token = dispatch
             rows = self._connection.execute(
-                "SELECT record_json FROM workbench_runs WHERE task_id=? ORDER BY created_at, id",
-                (task.id,),
+                "SELECT record_json FROM workbench_runs "
+                "WHERE task_id=? AND attempt=? ORDER BY created_at, id",
+                (task.id, task.active_attempt),
             ).fetchall()
+            if not rows:
+                raise WorkbenchConflict("canonical dispatch has no persisted execution results")
             result_digest = canonical_content_digest(
                 {
                     "schema_version": "workbench-dispatch-result-v1",
@@ -522,13 +591,9 @@ class WorkbenchStore:
             )
             if completed.state != TaskState.TESTING:
                 raise WorkbenchConflict("canonical dispatch did not enter testing")
-            return
-        if target == WorkbenchState.VERIFIED:
-            if canonical.state != TaskState.TESTING:
-                raise WorkbenchConflict("canonical task is not ready for verification")
             self._canonical.transition_with_evidence(
                 task.id,
-                expected_version=canonical.version,
+                expected_version=completed.version,
                 target=TaskState.VERIFYING,
                 event_type="workbench.verification.started",
                 payload=projection_payload,
@@ -953,6 +1018,40 @@ class WorkbenchStore:
                 )
         except sqlite3.IntegrityError as exc:
             raise WorkbenchConflict("duplicate tool run") from exc
+
+    def assert_active_dispatch_authority(
+        self,
+        task_id: str,
+        *,
+        expected_attempt: int,
+        request: ToolRequest,
+    ) -> None:
+        with self._lock:
+            task = self._get_task_locked(task_id)
+            if (
+                task.state not in {WorkbenchState.EXECUTING, WorkbenchState.TESTING}
+                or task.active_attempt != expected_attempt
+                or task.plan is None
+            ):
+                raise WorkbenchConflict("Workbench dispatch binding is no longer active")
+            approved_request = next(
+                (step for step in task.plan.steps if step.tool_id == request.tool_id),
+                None,
+            )
+            if (
+                approved_request is None
+                or approved_request.request_digest != request.request_digest
+            ):
+                raise WorkbenchConflict("tool request is not bound to the active exact plan")
+            dispatch = self._active_dispatch.get(task_id)
+            if dispatch is None:
+                raise WorkbenchConflict("canonical active dispatch authority is missing")
+            lease_id, lease_token = dispatch
+            self._canonical.assert_dispatch_active(
+                task_id,
+                lease_id,
+                lease_token=lease_token,
+            )
 
     def claim_model_admission(
         self,
@@ -1708,7 +1807,7 @@ class WorkbenchStore:
             ),
             WorkbenchState.APPROVED: frozenset({TaskState.APPROVED, TaskState.ROLLBACK_PENDING}),
             WorkbenchState.EXECUTING: frozenset({TaskState.EXECUTING}),
-            WorkbenchState.TESTING: frozenset({TaskState.TESTING}),
+            WorkbenchState.TESTING: frozenset({TaskState.EXECUTING}),
             WorkbenchState.VERIFIED: frozenset(
                 {
                     TaskState.VERIFYING,

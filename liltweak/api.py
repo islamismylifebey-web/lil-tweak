@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from .agent import DeterministicPlanner, PlanningProviderError
 from .approvals import ApprovalError
 from .artifacts import ArtifactIntegrityError, EncryptedArtifactStore
+from .canonical_lifecycle import CapabilityName, CapabilityStatus
 from .config import Settings
 from .costs import BudgetExceededError, CostGuard
 from .creator import (
@@ -309,6 +310,48 @@ def create_app(
                 if settings.workbench_model_enabled and workbench_reasoning_provider is not None
                 else DisconnectedWorkbenchModelAdapter()
             )
+            model_connected = bool(workbench_model.connected)
+            model_authorized = bool(getattr(workbench_model, "authorization_verified", False))
+            model_healthy = bool(getattr(workbench_model, "health_verified", False))
+            model_qualified = bool(getattr(workbench_model, "qualification_verified", False))
+            model_operational = bool(
+                model_connected and model_authorized and model_healthy and model_qualified
+            )
+            current_model_gate = workbench_store.canonical.capability(CapabilityName.MODEL)
+            model_gate_values = {
+                "status": (
+                    CapabilityStatus.OPERATIONAL
+                    if model_operational
+                    else CapabilityStatus.BLOCKED
+                    if settings.workbench_model_enabled
+                    else CapabilityStatus.DISABLED_BY_POLICY
+                ),
+                "feature_enabled": settings.workbench_model_enabled,
+                "installed": workbench_reasoning_provider is not None,
+                "configured": workbench_reasoning_provider is not None,
+                "connected": model_connected,
+                "healthy": model_healthy,
+                "qualified": model_qualified,
+                "authorized": model_authorized,
+                "operational": model_operational,
+                "detail_code": (
+                    "qualified_provider_injected"
+                    if model_operational
+                    else "provider_not_qualified"
+                    if settings.workbench_model_enabled
+                    else "model_disabled_by_policy"
+                ),
+            }
+            if any(
+                getattr(current_model_gate, name) != value
+                for name, value in model_gate_values.items()
+            ):
+                workbench_store.canonical.update_capability(
+                    CapabilityName.MODEL,
+                    expected_version=current_model_gate.version,
+                    actor_id="factory:model_capability_sync",
+                    **model_gate_values,
+                )
             workbench_controller = WorkbenchController(
                 creator=creator_service,
                 store=workbench_store,
