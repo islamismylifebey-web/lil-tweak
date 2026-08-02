@@ -1,5 +1,16 @@
 # Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1
 
+## Live Workbench 0.8.0 code-authored extension
+
+The additive private Workbench is served at /workbench when enabled. It reuses Creator
+compilation and routing, then adds immutable task import, a no-tools live planning adapter,
+exact one-time approval, typed workspace and command tools, GCP examination locks, authentic
+evidence, recovery snapshots, and candidate submission locking.
+
+The model and qualified command transport are disabled by default. The Workbench never treats
+its candidate evidence as Sol's independent GCP verification. See ARCHITECTURE.md,
+SECURITY_BOUNDARIES.md, GCP_EXAMINATION_MODE.md, and BUILDER_HANDOFF.md.
+
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
 use the same bounded API without policy-bypass authority.

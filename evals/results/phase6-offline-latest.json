@@ -1,0 +1,1053 @@
+{
+  "blocked_high_stakes": 20,
+  "case_count": 120,
+  "passed": true,
+  "provider_fixture_calls": 80,
+  "ready_runs": 80,
+  "real_provider_calls": 0,
+  "repository_executions": 0,
+  "results": [
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-000",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-001",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-002",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-003",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-004",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-005",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-006",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-007",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-008",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-009",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-010",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-011",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-012",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-013",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-014",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-015",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-016",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-017",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-018",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-019",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-020",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-021",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-022",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-023",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-024",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-025",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-026",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-027",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-028",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-029",
+      "model": "gpt-5.6-luna",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-030",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-031",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-032",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-033",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-034",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-035",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-036",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-037",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-038",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-039",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-040",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-041",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-042",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-043",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-044",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-045",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-046",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-047",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-048",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-049",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-050",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-051",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-052",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-053",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-054",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-055",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-056",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-057",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-058",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-059",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-060",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-061",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-062",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-063",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-064",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-065",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-066",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-067",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-068",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-069",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-070",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-071",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-072",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-073",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-074",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-075",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-076",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-077",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-078",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    },
+    {
+      "checks": {
+        "approved": true,
+        "cost_bounded": true,
+        "no_completion_claim": true,
+        "no_execution": true,
+        "no_tools": true,
+        "one_request": true
+      },
+      "id": "ready-079",
+      "model": "gpt-5.6-terra",
+      "passed": true
+    }
+  ],
+  "tampered_route_rejections": 20,
+  "tool_calls": 0
+}

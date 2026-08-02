@@ -35,3 +35,4 @@ Mode: deterministic offline
 
 The benchmark proves deterministic route consistency and boundary enforcement. It does not prove
 real provider price savings, live model quality, or sandbox isolation.
+

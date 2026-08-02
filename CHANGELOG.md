@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — Live Workbench and Bounded Execution Bridge
+
+- Added the private owner Workbench UI and session/CSRF API.
+- Added immutable tasks, live typed planning, exact one-time approvals, bounded file and command
+  tools, isolated task workspaces, recovery snapshots, evidence, and locked submissions.
+- Added GCP Qualification bindings and fail-closed project, identity, region, zone, IAM, billing,
+  credential, deletion, audit, and administrative-exposure guards.
+- Kept live planning and the qualified command runner disabled by default.
+
 ## 0.7.1 — Automatic Verification and Dormant Runner Qualification
 
 - Added automatic GitHub-hosted deterministic verification for pull requests and `main`.

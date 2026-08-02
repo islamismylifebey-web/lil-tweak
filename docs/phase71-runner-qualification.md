@@ -115,3 +115,4 @@ A valid offline report is not live authorization. The decision type fixes
 - independent runner destruction and orphan recovery.
 
 Until all of those exist, `execution_connected=false` is mandatory.
+

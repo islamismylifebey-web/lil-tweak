@@ -13,3 +13,4 @@
 {"id":"phase3-production","objective":"Prepare a production deployment plan without executing it.","environment":"production","expected_status":"AWAITING_APPROVAL","must_have_plan":true,"must_have_inspection":false,"must_block_execution":true}
 {"id":"phase3-cancel","objective":"Prepare a database inspection plan.","cancel":true,"expected_status":"CANCELED","must_have_plan":false,"must_have_inspection":false,"must_block_execution":true}
 {"id":"phase3-emergency","objective":"Prepare a repository inspection plan.","emergency_stop":true,"expected_status":"CANCELED","must_have_plan":false,"must_have_inspection":false,"must_block_execution":true}
+

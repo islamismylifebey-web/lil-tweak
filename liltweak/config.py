@@ -116,6 +116,15 @@ class Settings:
     repository_execution_enabled: bool = False
     execution_runtime_root: Path = Path("./runtime-root")
     execution_image_ref: str | None = None
+    workbench_enabled: bool = False
+    workbench_model_enabled: bool = False
+    workbench_model: str = "gpt-5.6-terra"
+    workbench_reasoning_tier: str = "high"
+    workbench_workspace_root: Path = Path("./workbench-tasks")
+    workbench_session_ttl_seconds: int = 3_600
+    workbench_rate_limit_per_minute: int = 120
+    workbench_cost_ceiling_usd: float = 0.10
+    workbench_monthly_limit_usd: float = 5.0
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -156,6 +165,31 @@ class Settings:
             raise ValueError("LILTWEAK_LIVE_INPUT_TOKEN_LIMIT is invalid")
         if self.live_output_token_limit < 1_024 or self.live_output_token_limit > 32_000:
             raise ValueError("LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT is invalid")
+        if self.workbench_reasoning_tier not in {"low", "medium", "high", "xhigh"}:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_TIER is invalid")
+        if self.workbench_session_ttl_seconds < 300 or self.workbench_session_ttl_seconds > 86_400:
+            raise ValueError("LILTWEAK_WORKBENCH_SESSION_TTL_SECONDS is invalid")
+        if (
+            self.workbench_rate_limit_per_minute < 10
+            or self.workbench_rate_limit_per_minute > 10_000
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE is invalid")
+        if (
+            not math.isfinite(self.workbench_cost_ceiling_usd)
+            or self.workbench_cost_ceiling_usd <= 0
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_COST_CEILING_USD must be positive")
+        if (
+            not math.isfinite(self.workbench_monthly_limit_usd)
+            or self.workbench_monthly_limit_usd < self.workbench_cost_ceiling_usd
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD must cover one call ceiling")
+        if self.workbench_enabled and not self.dev_api_key:
+            raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
+        if self.workbench_model_enabled and not os.getenv("OPENAI_API_KEY"):
+            raise ValueError(
+                "enabled Workbench model adapter requires configured provider credentials"
+            )
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -253,4 +287,17 @@ class Settings:
                 os.getenv("LILTWEAK_EXECUTION_RUNTIME_ROOT", "./runtime-root")
             ),
             execution_image_ref=os.getenv("LILTWEAK_EXECUTION_IMAGE_REF"),
+            workbench_enabled=_bool_env("LILTWEAK_WORKBENCH_ENABLED", False),
+            workbench_model_enabled=_bool_env("LILTWEAK_WORKBENCH_MODEL_ENABLED"),
+            workbench_model=os.getenv("LILTWEAK_WORKBENCH_MODEL", "gpt-5.6-terra"),
+            workbench_reasoning_tier=os.getenv("LILTWEAK_WORKBENCH_REASONING_TIER", "high"),
+            workbench_workspace_root=Path(
+                os.getenv("LILTWEAK_WORKBENCH_WORKSPACE_ROOT", "./workbench-tasks")
+            ),
+            workbench_session_ttl_seconds=_int_env("LILTWEAK_WORKBENCH_SESSION_TTL_SECONDS", 3_600),
+            workbench_rate_limit_per_minute=_int_env(
+                "LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE", 120
+            ),
+            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.10),
+            workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
         )

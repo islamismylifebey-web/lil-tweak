@@ -182,3 +182,4 @@ uv run --env-file ../.env.local python main.py phase3-live-smoke
 - defense-in-depth secret scanning beyond deterministic credential patterns;
 - Terhuti integration;
 - Full Voice Access.
+

@@ -379,3 +379,4 @@ jobs:
           test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
           echo "Signed candidate evidence passed after cleanup; execution remains disconnected." \
             >> "$GITHUB_STEP_SUMMARY"
+

@@ -90,6 +90,20 @@ from .store import (
     SQLiteStore,
     StoreStateConflictError,
 )
+from .workbench import WorkbenchController
+from .workbench_agent import (
+    DisconnectedWorkbenchModelAdapter,
+    OpenAIWorkbenchModelAdapter,
+    PersistentModelCallAdmission,
+)
+from .workbench_api import mount_workbench
+from .workbench_executor import (
+    BoundedToolExecutor,
+    DisconnectedProcessTransport,
+    TaskWorkspaceManager,
+)
+from .workbench_policy import ToolPolicyBroker
+from .workbench_store import WorkbenchStore
 
 
 class ApiModel(BaseModel):
@@ -158,6 +172,7 @@ def create_app(
     creator_service: CreatorService | None = None,
     live_controller: LiveCreatorController | None = None,
     execution_controller: RepositoryExecutionController | None = None,
+    workbench_controller: WorkbenchController | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -216,10 +231,55 @@ def create_app(
             "learning, and a disabled-by-default read-only repository execution plane."
         ),
     )
+    if settings.workbench_enabled:
+        if workbench_controller is None:
+            workbench_store = WorkbenchStore(settings.database_path)
+            workbench_workspaces = TaskWorkspaceManager(settings.workbench_workspace_root)
+            workbench_model = (
+                OpenAIWorkbenchModelAdapter(
+                    model=settings.workbench_model,
+                    reasoning_tier=settings.workbench_reasoning_tier,
+                    admission=PersistentModelCallAdmission(
+                        store=workbench_store,
+                        reservation_usd=settings.workbench_cost_ceiling_usd,
+                        monthly_limit_usd=settings.workbench_monthly_limit_usd,
+                    ),
+                    enabled=True,
+                )
+                if settings.workbench_model_enabled
+                else DisconnectedWorkbenchModelAdapter()
+            )
+            workbench_controller = WorkbenchController(
+                creator=creator_service,
+                store=workbench_store,
+                model=workbench_model,
+                executor=BoundedToolExecutor(
+                    workbench_workspaces,
+                    DisconnectedProcessTransport(),
+                ),
+                workspaces=workbench_workspaces,
+                policy=ToolPolicyBroker(),
+                owner_id=settings.owner_id,
+                cost_ceiling_usd=settings.workbench_cost_ceiling_usd,
+                authorized_repositories=frozenset(settings.repository_mappings),
+            )
+        session_key = creator_key
+        if session_key is None and settings.dev_api_key:
+            session_key = hashlib.sha256(
+                settings.dev_api_key.encode("utf-8") + b"LilTweakWorkbenchSessionV1"
+            ).digest()
+        if session_key is None:
+            session_key = secrets.token_bytes(32)
+        mount_workbench(
+            app,
+            controller=workbench_controller,
+            settings=settings,
+            session_signing_key=session_key,
+        )
 
     @app.middleware("http")
     async def private_api_headers(request: Request, call_next):
-        if request.url.path.startswith("/v1/creator/") and request.method in {
+        if request.url.path.startswith(("/v1/creator/", "/v1/workbench/")) and request.method in {
             "POST",
             "PUT",
             "PATCH",
@@ -228,20 +288,36 @@ def create_app(
             if len(body) > MAX_CREATOR_REQUEST_BYTES:
                 return JSONResponse(
                     status_code=413,
-                    content={"detail": "Creator request is too large."},
+                    content={"detail": "Private API request is too large."},
                 )
-            try:
-                json.loads(body, object_pairs_hook=_reject_duplicate_json_keys)
-            except (_DuplicateJsonKeyError, json.JSONDecodeError, UnicodeDecodeError):
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": "Creator request JSON is invalid."},
-                )
+            if body:
+                try:
+                    json.loads(body, object_pairs_hook=_reject_duplicate_json_keys)
+                except (_DuplicateJsonKeyError, json.JSONDecodeError, UnicodeDecodeError):
+                    surface = (
+                        "Creator" if request.url.path.startswith("/v1/creator/") else "Workbench"
+                    )
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": f"{surface} request JSON is invalid."},
+                    )
         response = await call_next(request)
-        if request.url.path.startswith("/v1/"):
+        if request.url.path.startswith(("/v1/", "/workbench")):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Pragma"] = "no-cache"
             response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self'; "
+                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+                "base-uri 'none'; form-action 'self'"
+            )
+            if request.url.scheme == "https":
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
         return response
 
     @app.exception_handler(NotFoundError)

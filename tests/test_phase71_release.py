@@ -58,8 +58,9 @@ def test_phase71_release_versions_are_consistent() -> None:
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1\n"
     )
     assert changelog.startswith(
-        "# Changelog\n\n## 0.7.1 — Automatic Verification and Dormant Runner Qualification\n"
+        "# Changelog\n\n## 0.8.0 — Live Workbench and Bounded Execution Bridge\n"
     )
+    assert "## 0.7.1 — Automatic Verification and Dormant Runner Qualification\n" in changelog
     assert execution_manifest.startswith(
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification 0.7.1\n"
     )

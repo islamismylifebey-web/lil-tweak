@@ -1,0 +1,1201 @@
+{
+  "schema_version": "1.0",
+  "package": "lil-tweak-live-workbench-sol-code",
+  "baseline_repository": "islamismylifebey-web/lil-tweak",
+  "baseline_commit": "51f9fda931318b598b07b34d5b736daed6197593",
+  "self_excluded_from_hash_list": true,
+  "authoring_phase_verification": {
+    "dependencies_installed": false,
+    "build_executed": false,
+    "tests_executed": false,
+    "deployment_performed": false,
+    "gcp_accessed": false
+  },
+  "file_count_excluding_manifest": 148,
+  "files": [
+    {
+      "relative_path": ".env.example",
+      "purpose": "Safe configuration template with disabled-by-default Workbench controls",
+      "status": "modified",
+      "sha256": "9719357507019c66d1aa2dfed5eecca1758e7561d4d1db48b9c1300f2b8b46c9",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": ".github/workflows/ci.yml",
+      "purpose": "Pinned baseline CI or qualification workflow",
+      "status": "unchanged",
+      "sha256": "f9f2a893dcdf0be46aada535cdae652f33e1c1ea1c76642caf77e9c5cae06bea",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": ".github/workflows/runner-qualification.yml",
+      "purpose": "Pinned baseline CI or qualification workflow",
+      "status": "unchanged",
+      "sha256": "2542672dcbf62471f290463c361d6e15c52bff31601ee1a3d8d528b8d3cf3e7d",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": ".gitignore",
+      "purpose": "Pinned baseline project asset",
+      "status": "unchanged",
+      "sha256": "23f1696cbc17e9f8d33af50d6b44deb43dde42315083f538d61ac5157d48ccd3",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "ARCHITECTURE.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "78193f32f46a423f3324aba37effd86bffaa2d92083d8efb2184a3872507f97c",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "BUILD_COMMANDS_LINUX.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "6ba51f9c95c167a55910026b9aac0c6faa317dac3248385a794ed1ebad335220",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "BUILD_COMMANDS_WINDOWS.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "5b8e3e247329f1160b843c327c77fdedf905c1e0af8873dc125923110b60aea3",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "BUILDER_EXECUTION_PROMPT.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "01759f79e7590c375b3b0d16b660d2df32b84eca5a521fe0905c4c7152a27d9e",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "BUILDER_HANDOFF.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "7c96c30ff555bbc811432be766536df88cede60e3d82a46a73ef5927202a8b1a",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "CHANGELOG_WORKBENCH.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "122d0b9d6a5185ae0f00419023a9e0e4674af1bf2bf063ef3da3b88637d76e78",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "CHANGELOG.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "modified",
+      "sha256": "1cd1169591b8c4ec9ae2c78fa00a0dbddf54acf802dd84d14fed01a48c540e5c",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "CREATOR-MANIFEST.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "da92fff2fc697c9fea945908cf1b3336b7867647a528a125adb418374cb996dc",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/agent-interactions.png",
+      "purpose": "Pinned baseline project asset",
+      "status": "unchanged",
+      "sha256": "b629e2f4536cc723704f9e32efb0d8d460144dc1442000be590f1785c02f2112",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/agent-sequence.png",
+      "purpose": "Pinned baseline project asset",
+      "status": "unchanged",
+      "sha256": "d4a83ac5bd703618570e87be91fcba888e61371e1b0fbb4b04dcd8ffb1de728e",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/api-compatibility-0.7.0.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "e052f90d900a4d24a8946b1776b13ca82ef1f16459725b5460a3a3c1ad1f0318",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/api-compatibility-0.7.1.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "309c443bf104eecfcfbea347fd7e41105906d5f2eed0bafa7fa5cff5935ec7ad",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/build-brief.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "fa17f84b26e0a0f1b59c6546d9de9ddcf1508941b76d2622dcc9a35a222caf25",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/creator-benchmark-report.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "44aa3e3e6e792e108d330a457fd4d856cdf9b5a21085572a535a32b510939c7d",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/creator-live-prompt.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "4a870b42046d65836b58ebf4ab75a824dc543e40f61804fad013cf209bea49de",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/creator-model-foundation.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "7b158bacc77edbdf00119d68d15a95904b78bb5bf2eef922d441276cdf2bd537",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/engineering-prompt.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "1d0cddd8fa33d00231f0808ce09398877bbe6340dfba250df26e3b9afe52958c",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/engineering-trial-report.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "874875445b05ab6dcf0086d11134cadb6507731f365f4f4a2bc52afe2bd10cc5",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/engineering-trial.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "f7cf8f1768fdba687d0d49089edef55cceab13ba09ce511fce2965402dd6abdb",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/gauntlet-report.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "255a8ca40d606337e477d7d09cf747d3f03c6728fc7e70b342291726612c05a2",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase6-build-brief.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "1fba0766cb4378dc9cd9300605200855bbc7c25fc1d01affdbc62df06218fb47",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase6-live-evidence.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "4c18374fd800384f4ea1aaf09330e422d35e37e2a752e36ec33811c22144641a",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase7-batch-ingestion-evidence.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "433ab946906be23ed8df606874f2ead3d9cbafc1a58e2095e1835ba32adfc2b0",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase7-build-brief.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "0f33d353185821ec419921ac7518bfc963dff8c1e6f9a566668f8a70c8461668",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase7-isolation-evidence.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "ea233d95d699dd9d135b046af93868df56e3e13956b60e71d38c72d9652ddadf",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase7-security-boundaries.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "5207e303e0c2ece161220b38b68683f6811eee32a972a45eddc0b0757a22123e",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/phase71-runner-qualification.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "29e1a6a0cde5b6715ecb7e848de3148b15429d504b1c32b37014e746ba4a7b00",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/prompt.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "77690e443b27db6696382be01b07cf2c3ec07cf323f30d352d4bbd99656c47ff",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/security-boundaries.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "fb00fb8d86a3f001abe8d2985e11dac7f1e77f9f155a83aa4b9c0a79e9eb0d92",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "docs/workbench-agent-prompt.md",
+      "purpose": "Bounded live planner instruction contract",
+      "status": "new",
+      "sha256": "8c5473572e698598761cf78c4a62ac782282e19939482e7501ee163da0caba63",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "evals/cases.jsonl",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "ebe357361fa60c9b03c22c0c735db4eaea0464dbc2df06c7b2d81bd18fa8036a",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/engineering_cases.jsonl",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "b1255f8db6369d8814f8ae4b457709d90fb8c9abb8972c29d85044f1f79c53ad",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/gauntlet_cases.jsonl",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "eff22d1a428d45ba94be6e05166d32ca53ea8e776ea53cdfa01ba1b45129950d",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/results/.gitignore",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "bdd48ccea6b18f8688edc1f9395de3bcd655df3a0e4827c7a25a0ec359a37358",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_creator_benchmark.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "d9f4360da84efdfac570f8bc6e477274cd7f2e275d9b58914ab132f1b6a97b75",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_engineering_trial.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "4244053af8d85938720511397acec4935df3bfcbcc500e4f3da0538510d93004",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_gauntlet.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "bb7fd05df8ac7ae23444aecfc691d809a986e3b66cc3e2b7a7a042556b119197",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_local.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "3929daed2d6ce2b61c8244baa6674ad4e2b9530353b372904481cf4df56a6694",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_phase6_live.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "39180298c7d06df81537f90348d81b0a46e4c3115069348f8bb761d8a05ba5a6",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_phase6_offline.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "a378f2a8c639e940d9527c8037daa328d8c65d2ec15990bee9ad64edce97cca3",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_phase7_offline.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "659d2b7fb1b4be9cfba8c24d5ed4981a960970153ef5a02a02435ff608481c71",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "evals/run_phase7_snapshot_benchmark.py",
+      "purpose": "Pinned baseline evaluation asset",
+      "status": "unchanged",
+      "sha256": "58892a348a0191854fc8807b03dc36ca14f44e2d78ea366be9cabd77cff211b0",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "EXECUTION-MANIFEST.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "facf8a96a61b9ca9202d2cb22440e4c643669a2fb00ca4e7993aa7202b7ff826",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "GCP_EXAMINATION_MODE.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "694f5efb449cb3d8daff3228772aab4072e7e7e202df354e5846aa9c77ddc087",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "KNOWN_LIMITATIONS.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "263157d6723235ffaf5ee7e1d01d423eb29d030cca3f6d7f2996e9d07b80e094",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/__init__.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "9a39d6419e5e884357910871e859a4f2fd75b5d414cba12e12f3682b5af04068",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/agent.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "2ea7a4a559776afa8c6869dbcdd1917a8534fc857aa332a693bc79b814d078f8",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/api.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "modified",
+      "sha256": "b333c028034b75b09da0cf307013a00dec95564804d91bd2dd71466c34a4c9b3",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "liltweak/approvals.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "4b00d82602fb927fab5428b005c16147f0778b5d095f4567f6081ac283872e8b",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/artifacts.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "66945ef1aaacd64ea381073ef685b45be9e96434d158eab34d1f5ddc111358ae",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/config.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "modified",
+      "sha256": "a678142f583b9e22f13166a664c5aebc413e69c5bae2c5297011f3c609f2f9ee",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "liltweak/costs.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "7ffdbc9a2180afe1f78f05f851e7bb9b5fdf19675bd55c881ede17ec9b424281",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/creator_contract.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "9d64f5f1d8fafbc3ab78fc813a2653bbc5e86a44264e89e3d4cd06d97c132f7c",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/creator_runtime.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "f9085a4c723d40d26a90ec1a141ca1f03db49a07599e98dd86fa90371742f317",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/creator.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "modified",
+      "sha256": "68396ae38b53e92883f35723c5982a12ee481043ef13ddd6140a668ce0500df6",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "liltweak/engineering_contract.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "c9269b7cdd4dbee39406ea96da429dfe9a30b0d715512c1f27ea8dd9e3579cd9",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/engineering_model.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "de6bec4a7e0f75da7c4a49019c9c2872d8d33e95f1eb93ab2f069e88566350d5",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/evidence.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "aa83299fe88c13b18aed87b88c71a956508ad79276e8abf74c3c5b75ae9e85c8",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/execution_contract.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "0a9f359b26b65729bc6e0f2389e1980b550cd193190c87e8657e36eb8e840a88",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/execution_plane.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "67d05663c7cf85282e08bc9884291aa2f344ae994e53dce0e1d636a1697f574f",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/hosted_sandbox.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "4cfeab1851eac2b6f33533c58a233514867f36e90901e5f66b8c30943c996274",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/isolated_runner.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "eeee2834231c28913d29c181d11d61144e62ec7dce98aea1b665dfa2f6bc68b5",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/live_contract.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "4fc356e47d83d736e3271045298568fdc2a9a0c64e9b89f45ee6240b52870ea5",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/live_model.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "3ac077e49355d49409e56df3936fd9d16d3095830c6d461a502bcbede1a53ad9",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/models.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "03fa4f06db9a1d1771ac63ce59a1dbc39bd949189efe8c0a0b7cb8478a9bc373",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/policy.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "04877dd5419f42cfd1e2f79d42c7e6f7233080ebf60894210957cec062f7ed64",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/recovery.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "92d1766fe9ae13c9945f4683700e6306fd23c6071fddb8c2f919473a6e577825",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/repository.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "c900f16af91c5fa7a9e96fb9ddd674c5dccf890246cf069d30244c7cd1177822",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/runner_qualification.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "427c2cd5fe2f89c985fbc0dc28c7ece990c605a7d980083a813502939d4b2f26",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/service.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "c8157c47cfe4a32bf5c480cdf9b2c25bee9b881d6e62355a8ac22c31e647b033",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/source_snapshot.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "8c537f21361afc01c072823defa0b28041c8d4da386c84ca109bc1544eea6b04",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/states.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "3112f451ec4b5557524abf1e8ee0d5ab862c59b84e9c0a333bd54af85107a95f",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/store.py",
+      "purpose": "Lil Tweak application source retained or compatibly extended",
+      "status": "unchanged",
+      "sha256": "a5460e859e5fc75463d5496b025d7d7c2798b8ec5323610171e84dbb526b36c7",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_agent.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "38de55334a34d06c480b78a8e887d3453a8c437e4961de15b75d9248af653c57",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_api.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "1e7a05d212a55ee23e17da6fb90540f881183348a1cb7f087d1c51646da9da4f",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_contract.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "c7dc58fed19d9a62335bcfab4638f4121dc7f48fe0e4cc1d201ed4686a207d2c",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_executor.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "3e984f8135adc20fab66503e16c1779752f83d5a8e623b605176c3181c5a46e1",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_policy.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "a14f094e509aae069a888138e890d8643ee0027bd6af07f3ebcced9253a1bf35",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_security.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "54eaa4d4a0a3a7faef595d40d9260d0d564f221f174a8210880502306eba8992",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench_store.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "37f7f67eefc5d0e8142416bdda45d5a03c58523dcc093f8e06e68bdedb113806",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "liltweak/workbench.py",
+      "purpose": "Live Workbench backend, security, policy, persistence, model, or execution bridge source",
+      "status": "new",
+      "sha256": "1c8e0431869eb78f53795a30eb7bddf40579cf855a77e93022fdba31de923922",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "LIVE_ACCEPTANCE_TEST.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "24af63ef76083db55373e30d50988dfa7e16094ddb8b115a58668e0bb3619f4c",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "main.py",
+      "purpose": "Pinned baseline project asset",
+      "status": "unchanged",
+      "sha256": "836020afbd8d71ce82138340328a05fba33a8bf0873c0e515cc05f09d06ce4cd",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "MANIFEST.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "bb3962391284ba0c097ad8f1cdae792645fd1bcfa21e5616cc4795b7d682233a",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "migrations/0008_workbench.sql",
+      "purpose": "Additive Workbench database migration",
+      "status": "new",
+      "sha256": "099ea28ed28ae6cde4c450569207ee49da1a0198b6d8350021d11097a174c652",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "OPERATIONS_RUNBOOK.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "e3768368bb180af3a37b81fd16ab3dbae56a735500829b159a42953539b801e8",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "PATCH.diff",
+      "purpose": "Exact patch against the pinned GitHub baseline",
+      "status": "new",
+      "sha256": "3b69d8b0fc4e3171c94204d4b858f43e89480cb2eef5dd162d6b15d51e44ab60",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "pyproject.toml",
+      "purpose": "Pinned Python dependency and build metadata",
+      "status": "modified",
+      "sha256": "a73bcb7ac00de3a73a2828020b4b5d20978b0831446373bb86124b3b3a9ab945",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "README.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "modified",
+      "sha256": "05c94f16f307bbeb3ebb052da28514dbb28cf775aac503571f54d02d08d52d6e",
+      "baseline_relationship": "Compatible extension of the same relative path at the pinned baseline commit.",
+      "builder_action": "Review and apply this exact compatible change."
+    },
+    {
+      "relative_path": "RECOVERY_AND_ROLLBACK.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "fdc88a3b2ca5a2bedc5f44511c9956f9f32f5fed02fce8b6bf9d244276368901",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "RECOVERY-MANIFEST.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "unchanged",
+      "sha256": "78019cdb8df825a976d9625b22e391246844341c8c48bfc85e4b057f9ffb6cfb",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "scripts/generate_diagrams.py",
+      "purpose": "Pinned baseline maintenance or qualification script",
+      "status": "unchanged",
+      "sha256": "002e7edd19ee672fce1b8a7852f2a3d510075ca7e13d97a0809892f1df076399",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "scripts/verify_runner_qualification.py",
+      "purpose": "Pinned baseline maintenance or qualification script",
+      "status": "unchanged",
+      "sha256": "ffa1b24482b09bf6f3107dc85c5cbb8f7c7e7d49c1cb29192c24e5a87d690309",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "SECURITY_BOUNDARIES.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "caee506d71776721f42100d5cbb84a32f04f1df424ddbea208ee8747bd7faddd",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "SOL_CODE_PACKAGE_REPORT.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "c937a1c176c2d13ff9f5d9d8133a4289bcd5faf4228ae63f9cb7b0cc2ef8daa8",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "SOL_CODE_REVIEW.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "ecf3f4cc41ef362385cb6e77cdd748c88b0fa57c0db85c219aefd21ba34ae696",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "TEST_MATRIX.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "8d61bc4730deb7c6fd41826ec5e634569e42fe6f01b3fd4f5485bc6ee4edcb15",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/conftest.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "a671d080c422382d33304004d70bf1be67ec60d82cea1ad23df088ae25ed95b2",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/repository_helpers.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "638949616faa1a5c6c2f02bd843885512abf5ca60668d6ab9e807e69b7a43af3",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_api.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "07f2a7d074d2a507c690e121807c31a53f2e88a6a4fb069d848f036c3c32b4ab",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_approvals.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "e6d072e871fcc1fae21d2f63b4ed75613c44f5a2a448b63ce6510b89f7d86da8",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_costs.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "d0c40e43723aec16b9d065d3596948bd2cc777844c7fda8d91f0e4acc7190372",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_creator_api.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "a9b4095058f63be4616c3de612ba5ba93058af43d89b12406976371cc1b52155",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_creator_runtime.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "3731d92c7d4f15ce24eaf8b638d95991c61336bd1a9e94cb314636b2a6e2f5e4",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_creator.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "9027014eacd329946e9ad5245dce0381597cfe86a42b8a0a894255bdbbe14151",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_engineering_contract.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "53bbb2b9ca4f23601bf8d6447c6e04612c5dedd87eeef8d927b72aa0dad105f9",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_engineering_trial.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "4fff9795ad50d720a2e2e7549ce92a834a91572df3650f836ed730285ac3d975",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_evidence.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "7e0dff516bac8e3647ca80d7d72e52bd6865dd33227d8902120e223af6f1e6ae",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_foundation_security.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "02baf01479d7cd581808733881c51f3ad9564864a49c014d1290156b125ac4da",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_gauntlet_concurrency.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "bfa5723178e9f93f91086e5d3a0fdf0b7829b51d7eea2ae6f3a28b1f3b18ca68",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_gauntlet_flood.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "f580ff836a7d8c978ecf6351018fb0cad56003e3f39016f811e31175e9122361",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_hosted_sandbox.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "528686f46b22bd310a3afd29e70ec9ff5d9f4ba70f57a899170f38b8008502cd",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_jobs.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "7f57f4372d7c59f1fc2a26dc31d333f2fd2f4cd91e3298e378c314e6505d7039",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_live_api.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "68d1b1820cc3b0256361977b4def617ef909fc92d49d0d89541649ba14d5ab7c",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_live_model.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "69cca47e4fe97ebacf89c12fbbd5437dedb465e758c87d4b7d3c81801ea633c3",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase3_contract_invariants.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "1a094f0d423aa22342ebcbdcc174fc4a5950331544cc983ce3f883a340592bc3",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase7_execution.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "763aedd2f87d774b50b2f7672b4bf79b21a6ca4e38b8293b750d5d48e8f594b2",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase7_migrations.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "4ce3153ee038bccab6bb0900e0900e09ec6f8fec5eb81648d361560699fcb9e6",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase7_runner.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "5294497ec44cdcebb99ebff16d1b85f9d5b12b00e0b9e684b4c5106219ac314b",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase7_snapshot.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "d3b8be456d7fac5aaf6f78071abaaa69584444275678916c0d7ea76b705970ef",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_phase71_release.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "2267b32bb68be3bd79998a680e9a95250ef902ddad87cac8584a11c11fa13a2f",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_policy.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "6a3d8b847b35c22c99950c56970616ca04ffac376553165a8e41a831b2c2342f",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_recovery_adversarial.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "3809fdfae7cc814226cec03b0335b1ccacd127e227b33b42190b9f1f1feba778",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_recovery_plumbing.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "468dcdcb9dc508a973b475839af82aa68298faa324acc1821d05bc9d0d5719ae",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_recovery.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "05d5a295afe6a5cfc91d6ed0378683415b8b2860ee13893be362a63ce370a4a7",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_repository_service.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "aa29bbf23d5f8f89319567c56a005f34476c1c83d9ca3cc6569bfb576e50db7f",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_repository.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "6925124013d6a664ddf8f38314bc522b96cb6705bae0d9d5be653235e75ea21d",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_runner_qualification_cli.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "f976d9cff65bc978a15fe4ac157b11c5a14fff88298765dc27c4f0e909eb5b43",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_runner_qualification.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "c13a5a61ed58ac356f9fe3a3f7a0916f6ab7bbc53c0e0e10bbd797ff34559b32",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_states.py",
+      "purpose": "Pinned baseline regression test",
+      "status": "unchanged",
+      "sha256": "b440b8b8adb5fa57e383ff7521babdc5523e1caaf263167b11bc85af67c54556",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_api_security.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "f218d48c59fb2ad4a9b8367c7a9c5290427167111c4697528fd3c79b2a0d19ec",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_approval_security.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "367f358c68fb584e6b6db951ce2b8eca91f6a293d9ec519d54dc7e4ed67bec45",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_contract.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "80aedc89effa86ed3a368bbd576b4175afc6e64132558d6877029b74c52b9efd",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_controller.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "e1d13dfd35724a1fb065150c2d74655d67941ee423ee2f973b43339754d67a36",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_executor.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "2feab1c60ac9c5369c5c41e5c0eadb82529ad9514fd89b76b5765a03bf193ed2",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_frontend.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "7e3b4245470ab4ace135ada97298538b0b855e48e09ddf7b1b6f94ba725be05b",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_policy.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "2f16a9902c3a95a8787053eaa69a24dcebe17a56844bf7ecac36a9c45c36a7ac",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_security.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "5891e10de79f6c02c4f999ba17cb92ef04eb7813dcc794a042a0e68f4147e818",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "tests/test_workbench_store.py",
+      "purpose": "Authored Workbench unit, API, integration, security, or frontend test",
+      "status": "new",
+      "sha256": "c80b3797ca92fc445192fba3c99ed0f62bb7884c8fece2209e5e9aa9e773c95f",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "THREAT_MODEL.md",
+      "purpose": "Architecture, security, operations, verification, or builder handoff documentation",
+      "status": "new",
+      "sha256": "03e558a126d24dd33b3e97c349a0865ff8268baaddc955a41cc9a327a3710a45",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "uv.lock",
+      "purpose": "Pinned Python dependency and build metadata",
+      "status": "unchanged",
+      "sha256": "cf30b77be699627b8a12af162b1a7d0330095ca91118a97c462be7dbe9b5a8c1",
+      "baseline_relationship": "Byte-identical to islamismylifebey-web/lil-tweak commit 51f9fda931318b598b07b34d5b736daed6197593.",
+      "builder_action": "Preserve this baseline file and include it in regression verification."
+    },
+    {
+      "relative_path": "web/workbench/app.js",
+      "purpose": "Private responsive Workbench frontend asset",
+      "status": "new",
+      "sha256": "76d199ae9c5a1ebf9006c4f668a8d3298ae0bacf66c2038e8dd070e9fdf29e12",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "web/workbench/index.html",
+      "purpose": "Private responsive Workbench frontend asset",
+      "status": "new",
+      "sha256": "a143221bee4b0ad3163e4f56d19745ece7e80cce311f858f9dff71d8cb35e6c1",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    },
+    {
+      "relative_path": "web/workbench/styles.css",
+      "purpose": "Private responsive Workbench frontend asset",
+      "status": "new",
+      "sha256": "d0ec1c00e683bd9047ebd895920fc851e26f79c3326051924c3671335752f136",
+      "baseline_relationship": "Additive file with no path at the pinned baseline commit.",
+      "builder_action": "Add this file at the listed relative path and review it before verification."
+    }
+  ]
+}

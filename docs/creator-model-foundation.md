@@ -73,3 +73,4 @@ in the trusted harness; future disposable compute will receive only bounded work
 The next execution phase must add an isolated sandbox adapter, exact approval consumption,
 artifact review, and test-result capture without moving trusted control state into model-directed
 compute.
+

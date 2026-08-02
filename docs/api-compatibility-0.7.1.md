@@ -24,3 +24,4 @@ Phase 7.1 is a fail-closed patch release over private `main`
 Qualification evidence is not written to the Lil Tweak state database and has no HTTP write
 route. Its decision structurally fixes `connection_authorized=false`, so parsing or verifying a
 report cannot activate execution or invalidate existing signed records.
+
