@@ -175,3 +175,19 @@ def test_credential_shaped_command_arguments_are_denied() -> None:
     )
     with pytest.raises(ToolPolicyError, match="credential"):
         ToolPolicyBroker().authorize(bound, request)
+
+
+def test_gcp_http_client_cannot_bypass_project_and_identity_binding() -> None:
+    request = ToolRequest(
+        tool_id="gcp-http-bypass",
+        kind=ToolKind.COMMAND,
+        phase=StepPhase.VERIFICATION,
+        purpose="attempt direct Cloud API access",
+        command=CommandRequest(
+            executable="curl",
+            args=("https://compute.googleapis.com/compute/v1/projects/other-project-1",),
+            network=NetworkMode.TASK_SCOPED,
+        ),
+    )
+    with pytest.raises(ToolPolicyError, match="project-bound gcloud"):
+        ToolPolicyBroker().authorize(task(), request)

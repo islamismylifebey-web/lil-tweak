@@ -15,7 +15,10 @@ Primary threats:
 - Process escape, orphaning, timeout bypass, output flooding, and network misuse.
 - Submission or evidence mutation after locking.
 
-Controls include frozen schemas, canonical digests, exact one-time approval consumption, dedicated workspaces, atomic conditional writes, executable allowlists, no shell strings, qualified runner injection, output limits, redaction, process-tree termination, GCP deny rules, hash-chained evidence, server-only sessions, CSRF, rate limits, and immutable submissions.
+Implemented controls include frozen schemas, canonical digests, exact one-time approval consumption,
+dedicated workspaces, atomic conditional writes, executable allowlists, no shell strings, redaction,
+GCP deny rules, HMAC-anchored evidence, server-only sessions, CSRF, rate limits, and immutable submissions.
 
-Residual risk: the candidate process transport is not production-connected until an independently qualified sandbox prefix is injected.
-
+Residual risk: no Workbench runner provider exists. Process isolation, output limits, timeout,
+cancellation, process-tree termination, network policy, and GCP identity enforcement remain live
+acceptance requirements for that future provider; a sandbox prefix alone is insufficient.

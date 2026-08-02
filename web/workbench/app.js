@@ -2,8 +2,9 @@
 
 const state = {
   csrf: "", task: null, approval: null, runs: [], evidence: [], submission: "",
-  submissionLocked: false,
+  submissionLocked: false, health: null, repositories: [], inspection: null,
 };
+const terminalSubmissionStates = new Set(["COMPLETED", "BLOCKED", "FAILED"]);
 const $ = (id) => document.getElementById(id);
 const json = (value) => JSON.stringify(value, null, 2);
 let busyCount = 0;
@@ -32,6 +33,20 @@ async function api(path, options = {}) {
   let payload = null;
   try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
   if (!response.ok) throw new Error((payload && payload.detail) || payload || response.statusText);
+  return payload;
+}
+
+async function apiText(path) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    headers: { Accept: "text/plain, text/x-diff" },
+  });
+  const payload = await response.text();
+  if (!response.ok) {
+    let detail = payload;
+    try { detail = JSON.parse(payload).detail || payload; } catch { /* Text response. */ }
+    throw new Error(detail || response.statusText);
+  }
   return payload;
 }
 
@@ -69,12 +84,26 @@ $("logout-button").addEventListener("click", async () => {
   finally { location.reload(); }
 });
 
-document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => {
+const tabs = [...document.querySelectorAll("[data-view]")];
+tabs.forEach((button, index) => { button.tabIndex = index === 0 ? 0 : -1; });
+tabs.forEach((button) => button.addEventListener("click", () => {
   document.querySelectorAll(".view").forEach((view) => { view.hidden = view.id !== button.dataset.view; });
-  document.querySelectorAll("[data-view]").forEach((item) => {
+  tabs.forEach((item) => {
     item.setAttribute("aria-selected", String(item === button));
+    item.tabIndex = item === button ? 0 : -1;
   });
   $("main").focus();
+}));
+tabs.forEach((button, index) => button.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  let next = index;
+  if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+  if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+  if (event.key === "Home") next = 0;
+  if (event.key === "End") next = tabs.length - 1;
+  tabs[next].focus();
+  tabs[next].click();
 }));
 
 function showView(id) {
@@ -82,38 +111,21 @@ function showView(id) {
   if (button) button.click();
 }
 
-$("task-mode").addEventListener("change", () => {
-  $("exam-fields").hidden = $("task-mode").value !== "gcp_qualification";
-});
-
 $("task-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  setBusy(true, "Importing immutable task…");
-  const mode = $("task-mode").value;
+  setBusy(true, "Inspecting and importing repository task…");
+  const repositoryId = $("repository-id").value;
   const body = {
-    mode,
     title: $("task-title").value,
     direction: $("task-direction").value,
-    repository_id: $("repository-id").value || null,
-    source_snapshot_digest: $("source-digest").value,
-    examination: null,
   };
-  if (mode === "gcp_qualification") {
-    body.examination = {
-      examination_id: $("exam-id").value,
-      examiner: "Sol",
-      candidate: "Lil Tweak",
-      authorized_project: $("gcp-project").value,
-      candidate_service_account: $("gcp-identity").value,
-      region: $("gcp-region").value,
-      zone: $("gcp-zone").value,
-      spending_ceiling_usd: Number($("gcp-ceiling").value),
-      current_task_number: Number($("task-number").value),
-    };
-  }
   try {
-    state.task = await api("/v1/workbench/tasks", { method: "POST", body: json(body) });
-    toast("Immutable task imported.");
+    if (!repositoryId) throw new Error("Select a configured repository first.");
+    state.task = await api(
+      "/v1/workbench/repositories/" + encodeURIComponent(repositoryId) + "/tasks",
+      { method: "POST", body: json(body) }
+    );
+    toast("Repository-bound immutable task imported.");
     showView("active-task");
     await refresh();
   } catch (error) { toast(error.message); }
@@ -123,28 +135,37 @@ $("task-form").addEventListener("submit", async (event) => {
 async function refresh() {
   setBusy(true, "Refreshing Workbench…");
   try {
+    const repositoryResponse = await api("/v1/workbench/repositories");
+    state.repositories = repositoryResponse.repository_ids || [];
+    renderRepositoryOptions();
     const tasks = await api("/v1/workbench/tasks?limit=100");
     if (!state.task && tasks.length) state.task = tasks[0];
     const suffix = state.task ? "?task_id=" + encodeURIComponent(state.task.id) : "";
     const health = await api("/v1/workbench/health" + suffix);
+    state.health = health;
     renderHealth(health);
     renderProjects(tasks);
     if (!state.task) return;
     const root = "/v1/workbench/tasks/" + encodeURIComponent(state.task.id);
+    state.approval = null;
     state.task = await api(root);
     state.runs = await api(root + "/runs");
     state.evidence = await api(root + "/evidence");
     renderTask();
+    renderPlan();
     renderRuns();
     renderEvidence();
     renderGcp();
     renderRecovery();
     const approvalEvent = [...state.evidence].reverse().find(
       (item) => item.event_type === "approval_requested" ||
-        item.event_type === "rollback_approval_requested"
+        item.event_type === "rollback_approval_requested" ||
+        item.event_type === "approval_reissued"
     );
-    if (approvalEvent && approvalEvent.payload && approvalEvent.payload.approval_id) {
-      try { state.approval = await api(root + "/approvals/" + encodeURIComponent(approvalEvent.payload.approval_id)); }
+    const approvalId = approvalEvent && approvalEvent.payload &&
+      (approvalEvent.payload.replacement_approval_id || approvalEvent.payload.approval_id);
+    if (approvalId) {
+      try { state.approval = await api(root + "/approvals/" + encodeURIComponent(approvalId)); }
       catch { state.approval = null; }
     }
     renderApproval();
@@ -161,6 +182,23 @@ async function refresh() {
     renderTask();
   } catch (error) { toast(error.message); }
   finally { setBusy(false); }
+}
+
+function renderRepositoryOptions() {
+  const options = state.repositories.map((repositoryId) =>
+    '<option value="' + escapeHtml(repositoryId) + '">' +
+    escapeHtml(repositoryId) + "</option>").join("");
+  ["repository-id", "inspection-repository"].forEach((id) => {
+    const prior = $(id).value;
+    $(id).innerHTML = options || '<option value="">No configured repositories</option>';
+    if (state.repositories.includes(prior)) $(id).value = prior;
+  });
+}
+
+function renderPlan() {
+  $("plan-json").textContent = state.task && state.task.plan ?
+    json({ plan_digest: state.task.plan_digest, plan: state.task.plan }) :
+    "No plan produced.";
 }
 
 function renderHealth(health) {
@@ -183,22 +221,39 @@ function renderTask() {
     APPROVED: ["execute-button", "cancel-button"],
     EXECUTING: ["cancel-button"],
     TESTING: ["cancel-button"],
-    COMPLETED: ["submission-button"],
   };
   const controls = ["inspect-button", "analyze-button", "execute-button", "cancel-button",
     "retry-button", "submission-button", "lock-submission-button",
     "reopen-submission-button",
-    "request-rollback-button", "rollback-button"];
+    "request-rollback-button", "rollback-button", "open-diff-button",
+    "export-patch-button"];
   controls.forEach((id) => { $(id).disabled = true; });
   (map[state.task.state] || []).forEach((id) => { $(id).disabled = false; });
+  if (terminalSubmissionStates.has(state.task.state)) {
+    $("submission-button").disabled = false;
+  }
+  if (state.task.state === "ANALYZED" && state.health && !state.health.model_connected) {
+    $("analyze-button").disabled = true;
+  }
+  if (state.task.state === "APPROVED" && state.health && !state.health.runner_connected) {
+    $("execute-button").disabled = true;
+  }
   if (state.submission && !state.submissionLocked) $("lock-submission-button").disabled = false;
   if (state.submissionLocked) $("reopen-submission-button").disabled = false;
   if (state.task.state === "FAILED") $("request-rollback-button").disabled = false;
+  if (["VERIFIED", "COMPLETED"].includes(state.task.state)) {
+    $("open-diff-button").disabled = false;
+    $("export-patch-button").disabled = false;
+  }
   if (state.task.state === "APPROVED" && state.approval && state.approval.purpose === "rollback") {
     $("execute-button").disabled = true;
     $("rollback-button").disabled = false;
   }
   $("active-prerequisite").textContent =
+    state.task.state === "ANALYZED" && state.health && !state.health.model_connected ?
+      "Produce Exact Plan is disabled: the live Lil Tweak model adapter is disconnected." :
+    state.task.state === "APPROVED" && state.health && !state.health.runner_connected ?
+      "Start Execution is disabled: no independently qualified runner provider is connected." :
     state.task.state === "APPROVED" ? "Start Execution consumes the exact approval once." :
     state.task.state === "AWAITING_APPROVAL" ? "Approve or reject the exact digest in Approvals." :
     state.task.state === "FAILED" ? "Request and approve rollback before retrying." :
@@ -214,16 +269,40 @@ function renderProjects(tasks) {
     escapeHtml(item.state) + "</button>").join("");
   document.querySelectorAll(".task-select").forEach((button) => button.addEventListener("click", async () => {
     state.task = { id: button.dataset.id };
+    state.approval = null;
     await refresh();
     showView("active-task");
   }));
 }
 
+$("repository-inspection-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const repositoryId = $("inspection-repository").value;
+  if (!repositoryId) return toast("No configured repository is available.");
+  setBusy(true, "Inspecting registered repository…");
+  try {
+    state.inspection = await api(
+      "/v1/workbench/repositories/" + encodeURIComponent(repositoryId) + "/inspect",
+      {
+        method: "POST",
+        body: json({ direction: $("inspection-direction").value }),
+      }
+    );
+    $("repository-inspection-output").textContent = json(state.inspection);
+    toast("Repository inspection completed without changing the owner source.");
+  } catch (error) { toast(error.message); }
+  finally { setBusy(false); }
+});
+
 function renderApproval() {
   $("approval-json").textContent = state.approval ? json(state.approval) : "No current approval.";
   ["approve-button", "reject-button", "revision-button"].forEach((id) => {
-    $(id).disabled = !state.approval || state.approval.status !== "pending";
+    $(id).disabled = !state.approval || state.approval.status !== "pending" ||
+      !state.task || state.task.state !== "AWAITING_APPROVAL";
   });
+  $("reissue-approval-button").disabled = !state.approval ||
+    state.approval.status !== "expired" || !state.task ||
+    !["AWAITING_APPROVAL", "APPROVED"].includes(state.task.state);
 }
 
 function renderRuns() {
@@ -257,11 +336,10 @@ function renderRecovery() {
 }
 
 function renderGcp() {
-  const exam = state.task && state.task.imported && state.task.imported.examination;
-  $("gcp-summary").innerHTML = exam ? Object.entries(exam).map(([key, value]) =>
-    '<div class="status-item"><strong>' + escapeHtml(key.replaceAll("_", " ")) +
-    "</strong><span>" + escapeHtml(String(value)) + "</span></div>").join("") :
-    "<p>The active task is not a GCP qualification task.</p>";
+  $("gcp-summary").innerHTML =
+    '<div class="status-item"><strong>connection</strong><span>DISABLED</span></div>' +
+    '<div class="status-item"><strong>network</strong><span>DENIED</span></div>' +
+    '<div class="status-item"><strong>deployment</strong><span>NONE</span></div>';
 }
 
 async function action(path, body = {}) {
@@ -300,8 +378,43 @@ async function decide(decision) {
 $("approve-button").onclick = () => decide("approve");
 $("reject-button").onclick = () => decide("reject");
 $("revision-button").onclick = () => decide("request_revision");
-$("emergency-button").onclick = () => action("/v1/workbench/emergency-stop");
+$("reissue-approval-button").onclick = () => action(
+  taskRoot() + "/approvals/" + encodeURIComponent(state.approval.id) + "/reissue"
+);
+$("emergency-button").onclick = async () => {
+  const confirmed = window.confirm(
+    "Emergency Stop blocks approvals and execution and cancels active tasks. Continue?"
+  );
+  if (!confirmed) return;
+  await action("/v1/workbench/emergency-stop");
+};
+$("emergency-reset-button").onclick = async () => {
+  const ownerKey = $("emergency-reset-key").value;
+  if (!ownerKey) return toast("Re-enter the owner key before emergency reset.");
+  const confirmed = window.confirm(
+    "Reset Emergency Stop only after all tasks are terminal and the runner is disconnected. Continue?"
+  );
+  if (!confirmed) return;
+  try {
+    await action("/v1/workbench/emergency-stop/reset", { owner_key: ownerKey });
+  } finally {
+    $("emergency-reset-key").value = "";
+  }
+};
 $("refresh-button").onclick = refresh;
+
+$("open-diff-button").onclick = async () => {
+  if (!state.task) return;
+  setBusy(true, "Opening verified diff…");
+  try {
+    $("diff-output").textContent = await apiText(taskRoot() + "/patch/export");
+    showView("diff");
+  } catch (error) { toast(error.message); }
+  finally { setBusy(false); }
+};
+$("export-patch-button").onclick = () => {
+  if (state.task) location.href = taskRoot() + "/patch/export";
+};
 
 $("copy-submission-button").onclick = async () => {
   if (!state.submission) return toast("No submission to copy.");

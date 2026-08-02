@@ -22,8 +22,10 @@ from liltweak.workbench_contract import (
 )
 from liltweak.workbench_executor import (
     BoundedToolExecutor,
+    DisconnectedProcessTransport,
     ProcessResult,
     TaskWorkspaceManager,
+    ToolExecutionError,
 )
 from liltweak.workbench_policy import ToolPolicyBroker
 from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
@@ -63,6 +65,9 @@ class FakeModel:
 
 class FakeTransport:
     connected = True
+    provider_name = "test-qualified-runner"
+    qualification_status = "qualified"
+    authorization_digest = "a" * 64
 
     async def run(self, **_: object) -> ProcessResult:
         return ProcessResult(0, b"passed", b"", False, False)
@@ -80,7 +85,11 @@ def controller(tmp_path: Path) -> WorkbenchController:
         creator=creator,
         store=WorkbenchStore(tmp_path / "creator.db"),
         model=FakeModel(),
-        executor=BoundedToolExecutor(workspaces, FakeTransport()),
+        executor=BoundedToolExecutor(
+            workspaces,
+            FakeTransport(),
+            allow_test_transport=True,
+        ),
         workspaces=workspaces,
         policy=ToolPolicyBroker(),
         owner_id="owner",
@@ -113,6 +122,197 @@ async def test_complete_loop_requires_exact_approval_and_test_evidence(tmp_path:
     submission = control.generate_submission(task.id)
     assert submission.status.value == "COMPLETE"
     assert control.lock_submission(task.id).locked is True
+
+
+@pytest.mark.asyncio
+async def test_change_required_task_cannot_complete_with_an_empty_patch(tmp_path: Path) -> None:
+    control = controller(tmp_path)
+    empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="mutation required",
+            direction="make a bounded source change",
+            source_snapshot_digest=empty_digest,
+            requires_changes=True,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, approval = await control.analyze(task.id)
+    control.decide(
+        task.id,
+        approval.id,
+        ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
+    )
+
+    with pytest.raises(WorkbenchError, match="required a source change"):
+        await control.execute(task.id, approval.id)
+
+    assert control.store.get_task(task.id).state == WorkbenchState.FAILED
+    assert all(
+        item.event_type != "execution_completed" for item in control.store.list_evidence(task.id)
+    )
+
+
+@pytest.mark.asyncio
+async def test_patch_tampering_blocks_export_submission_and_lock(tmp_path: Path) -> None:
+    control = controller(tmp_path)
+    empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="test",
+            direction="run bounded tests",
+            source_snapshot_digest=empty_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, approval = await control.analyze(task.id)
+    control.decide(
+        task.id,
+        approval.id,
+        ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
+    )
+    await control.execute(task.id, approval.id)
+    completion = next(
+        item
+        for item in control.store.list_evidence(task.id)
+        if item.event_type == "execution_completed"
+    )
+    artifact = (
+        control.workspaces.root / "_artifacts" / task.id / str(completion.payload["patch_name"])
+    )
+    artifact.write_text("tampered\n", encoding="utf-8")
+
+    with pytest.raises(ToolExecutionError, match="authenticated digest"):
+        control.export_patch(task.id)
+    with pytest.raises(ToolExecutionError, match="authenticated digest"):
+        control.generate_submission(task.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approved_before_expiry", [False, True])
+async def test_expired_approval_can_be_reissued_without_a_dead_end(
+    tmp_path: Path,
+    approved_before_expiry: bool,
+) -> None:
+    control = controller(tmp_path)
+    empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="refresh approval",
+            direction="run bounded tests",
+            source_snapshot_digest=empty_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, approval = await control.analyze(task.id)
+    if approved_before_expiry:
+        control.decide(
+            task.id,
+            approval.id,
+            ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
+        )
+    control.store._set_approval_status(approval, "expired")
+
+    replacement = control.reissue_expired_approval(task.id, approval.id)
+
+    assert replacement.status == "pending"
+    assert replacement.id != approval.id
+    assert replacement.approval_digest != approval.approval_digest
+    assert replacement.purpose == approval.purpose
+    assert control.store.get_task(task.id).state == WorkbenchState.AWAITING_APPROVAL
+    assert control.store.list_evidence(task.id)[-1].event_type == "approval_reissued"
+
+
+@pytest.mark.asyncio
+async def test_genuine_owner_decision_consumes_once_and_replay_fails(
+    tmp_path: Path,
+) -> None:
+    control = controller(tmp_path)
+    source_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="single-use approval",
+            direction="run bounded tests",
+            source_snapshot_digest=source_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, pending = await control.analyze(task.id)
+    approved_task = control.decide(
+        task.id,
+        pending.id,
+        ApprovalDecision(
+            decision="approve",
+            approval_digest=pending.approval_digest,
+        ),
+    )
+
+    consumed = control.store.consume_approval(
+        pending.id,
+        task=approved_task,
+        expected_attempt=pending.execution_attempt,
+        tool_digests=pending.approved_tool_digests,
+        expected_purpose=pending.purpose,
+        expected_owner_id="owner",
+        policy_digest=control.policy.policy_digest,
+        runner_grant_digest=control.executor.authorization_digest,
+    )
+    assert consumed.status == "consumed"
+    with pytest.raises(WorkbenchConflict, match="not approved"):
+        control.store.consume_approval(
+            pending.id,
+            task=approved_task,
+            expected_attempt=pending.execution_attempt,
+            tool_digests=pending.approved_tool_digests,
+            expected_purpose=pending.purpose,
+            expected_owner_id="owner",
+            policy_digest=control.policy.policy_digest,
+            runner_grant_digest=control.executor.authorization_digest,
+        )
+
+
+@pytest.mark.asyncio
+async def test_disconnected_runner_blocks_execution_before_consumption_or_snapshot(
+    tmp_path: Path,
+) -> None:
+    control = controller(tmp_path)
+    empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
+    task = control.receive(
+        TaskImport(
+            title="disconnected",
+            direction="run bounded tests",
+            source_snapshot_digest=empty_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    control.workspaces.task_root("placeholder").rmdir()
+    control.inspect(task.id)
+    _, approval = await control.analyze(task.id)
+    control.decide(
+        task.id,
+        approval.id,
+        ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
+    )
+    control.executor = BoundedToolExecutor(
+        control.workspaces,
+        DisconnectedProcessTransport(),
+    )
+
+    with pytest.raises(WorkbenchError, match="runner is disconnected"):
+        await control.execute(task.id, approval.id)
+
+    assert control.store.get_task(task.id).state == WorkbenchState.APPROVED
+    assert control.store.get_approval(approval.id).status == "approved"
+    assert control.store.list_runs(task.id) == []
+    assert not (control.workspaces.root / "_recovery").exists()
 
 
 @pytest.mark.asyncio
@@ -239,3 +439,45 @@ def test_emergency_stop_cancels_active_work_and_blocks_new_tasks(tmp_path: Path)
                 source_snapshot_digest="b" * 64,
             )
         )
+
+
+def test_emergency_reset_requires_disconnected_runner_and_no_active_task(
+    tmp_path: Path,
+) -> None:
+    connected_root = tmp_path / "connected"
+    connected_root.mkdir(mode=0o700)
+    connected = controller(connected_root)
+    connected.store.emergency_stop(True, actor_id="owner")
+    with pytest.raises(WorkbenchError, match="disconnected runner"):
+        connected.reset_emergency_stop()
+    assert connected.store.is_emergency_stopped() is True
+
+    active_root = tmp_path / "active"
+    active_root.mkdir(mode=0o700)
+    active = controller(active_root)
+    active.receive(
+        TaskImport(
+            title="active",
+            direction="bounded work",
+            source_snapshot_digest="a" * 64,
+        )
+    )
+    active.executor = BoundedToolExecutor(
+        active.workspaces,
+        DisconnectedProcessTransport(),
+    )
+    active.store.emergency_stop(True, actor_id="owner")
+    with pytest.raises(WorkbenchError, match="every task to be terminal"):
+        active.reset_emergency_stop()
+    assert active.store.is_emergency_stopped() is True
+
+    safe_root = tmp_path / "safe"
+    safe_root.mkdir(mode=0o700)
+    safe = controller(safe_root)
+    safe.executor = BoundedToolExecutor(
+        safe.workspaces,
+        DisconnectedProcessTransport(),
+    )
+    safe.store.emergency_stop(True, actor_id="owner")
+    safe.reset_emergency_stop()
+    assert safe.store.is_emergency_stopped() is False

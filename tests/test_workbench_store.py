@@ -49,7 +49,7 @@ def test_state_machine_and_evidence_chain(tmp_path: Path) -> None:
 
 
 def test_evidence_tampering_is_detected(tmp_path: Path) -> None:
-    store = WorkbenchStore(tmp_path / "workbench.db")
+    store = WorkbenchStore(tmp_path / "workbench.db", signing_key=b"e" * 32)
     item = store.create_task(make_task())
     evidence = store.append_evidence(
         item.id,
@@ -63,6 +63,28 @@ def test_evidence_tampering_is_detected(tmp_path: Path) -> None:
     )
     with pytest.raises(WorkbenchConflict, match="integrity"):
         store.list_evidence(item.id)
+
+
+def test_evidence_anchor_is_durable_and_key_authenticated(tmp_path: Path) -> None:
+    database = tmp_path / "workbench.db"
+    key = b"e" * 32
+    store = WorkbenchStore(database, signing_key=key)
+    item = store.create_task(make_task())
+    evidence = store.append_evidence(
+        item.id,
+        kind=EvidenceKind.TASK,
+        event_type="task_received",
+        payload={"truth": True},
+    )
+    store.close()
+
+    reopened = WorkbenchStore(database, signing_key=key)
+    assert reopened.list_evidence(item.id) == [evidence]
+    reopened.close()
+
+    wrong_key = WorkbenchStore(database, signing_key=b"x" * 32)
+    with pytest.raises(WorkbenchConflict, match="authenticated anchor"):
+        wrong_key.list_evidence(item.id)
 
 
 def test_invalid_state_transition_fails_closed(tmp_path: Path) -> None:
@@ -178,7 +200,7 @@ def test_locked_submission_requires_auditable_reopen(tmp_path: Path) -> None:
         submission_digest=content_digest(values),
     )
     store.save_submission(submission)
-    assert store.lock_submission(item.id).locked is True
+    assert store.lock_submission(item.id, actor_id="owner").locked is True
     with pytest.raises(WorkbenchConflict, match="locked"):
         store.save_submission(submission)
-    assert store.reopen_submission(item.id).locked is False
+    assert store.reopen_submission(item.id, actor_id="owner").locked is False

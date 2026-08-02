@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import json
 import math
 import os
@@ -42,8 +43,10 @@ def _repository_mappings_env() -> dict[str, str]:
     for key, value in payload.items():
         if not isinstance(key, str) or not isinstance(value, str):
             raise ValueError("repository mapping keys and values must be strings")
-        if not key.startswith(("local:", "github:")):
-            raise ValueError("repository mapping keys must start with local: or github:")
+        if re.fullmatch(r"(?:local|github):[A-Za-z0-9][A-Za-z0-9._:-]{0,120}", key) is None:
+            raise ValueError(
+                "repository mapping keys must be URL-safe opaque local: or github: identifiers"
+            )
         mappings[key] = value
     return mappings
 
@@ -116,6 +119,7 @@ class Settings:
     repository_execution_enabled: bool = False
     execution_runtime_root: Path = Path("./runtime-root")
     execution_image_ref: str | None = None
+    server_host: str = "127.0.0.1"
     workbench_enabled: bool = False
     workbench_model_enabled: bool = False
     workbench_model: str = "gpt-5.6-terra"
@@ -184,6 +188,24 @@ class Settings:
             or self.workbench_monthly_limit_usd < self.workbench_cost_ceiling_usd
         ):
             raise ValueError("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD must cover one call ceiling")
+        if (
+            not isinstance(self.server_host, str)
+            or not self.server_host
+            or len(self.server_host) > 253
+            or any(ord(character) < 33 or ord(character) == 127 for character in self.server_host)
+        ):
+            raise ValueError("LILTWEAK_SERVER_HOST is invalid")
+        if self.workbench_enabled:
+            try:
+                bind_address = ipaddress.ip_address(self.server_host)
+            except ValueError as exc:
+                raise ValueError(
+                    "private Workbench requires LILTWEAK_SERVER_HOST to be a loopback IP literal"
+                ) from exc
+            if not bind_address.is_loopback:
+                raise ValueError(
+                    "private Workbench requires LILTWEAK_SERVER_HOST to be a loopback IP literal"
+                )
         if self.workbench_enabled and not self.dev_api_key:
             raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
         if self.workbench_model_enabled and not os.getenv("OPENAI_API_KEY"):
@@ -287,6 +309,7 @@ class Settings:
                 os.getenv("LILTWEAK_EXECUTION_RUNTIME_ROOT", "./runtime-root")
             ),
             execution_image_ref=os.getenv("LILTWEAK_EXECUTION_IMAGE_REF"),
+            server_host=os.getenv("LILTWEAK_SERVER_HOST", "127.0.0.1"),
             workbench_enabled=_bool_env("LILTWEAK_WORKBENCH_ENABLED", False),
             workbench_model_enabled=_bool_env("LILTWEAK_WORKBENCH_MODEL_ENABLED"),
             workbench_model=os.getenv("LILTWEAK_WORKBENCH_MODEL", "gpt-5.6-terra"),

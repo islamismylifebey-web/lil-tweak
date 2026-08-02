@@ -24,6 +24,9 @@ from liltweak.workbench_executor import (
 
 class FakeTransport:
     connected = True
+    provider_name = "test-qualified-runner"
+    qualification_status = "qualified"
+    authorization_digest = "a" * 64
 
     async def run(self, **kwargs: object) -> ProcessResult:
         cancel_event = kwargs["cancel_event"]
@@ -33,6 +36,9 @@ class FakeTransport:
 
 class FailedTransport:
     connected = True
+    provider_name = "test-qualified-runner"
+    qualification_status = "qualified"
+    authorization_digest = "a" * 64
 
     def __init__(self, result: ProcessResult) -> None:
         self.result = result
@@ -59,7 +65,7 @@ def test_qualified_transport_rejects_unpinned_or_shell_prefix() -> None:
 @pytest.mark.asyncio
 async def test_atomic_file_write_and_structured_command(tmp_path: Path) -> None:
     workspaces = TaskWorkspaceManager(tmp_path / "tasks")
-    executor = BoundedToolExecutor(workspaces, FakeTransport())
+    executor = BoundedToolExecutor(workspaces, FakeTransport(), allow_test_transport=True)
     task_id = "task:one"
     workspaces.task_root(task_id)
 
@@ -91,9 +97,39 @@ async def test_atomic_file_write_and_structured_command(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_candidate_transport_cannot_self_authorize_or_mutate_files(tmp_path: Path) -> None:
+    transport = QualifiedProcessTransport(
+        sandbox_prefix=("bwrap", "--unshare-all"),
+        qualification_digest="a" * 64,
+        network_namespace_enforced=True,
+    )
+    workspaces = TaskWorkspaceManager(tmp_path / "tasks")
+    executor = BoundedToolExecutor(workspaces, transport)
+    request = ToolRequest(
+        tool_id="write-disconnected",
+        kind=ToolKind.WRITE_FILE,
+        phase=StepPhase.MUTATION,
+        purpose="must remain blocked",
+        file=FileRequest(path="blocked.txt", content="must not be written"),
+    )
+
+    run = await executor.execute(
+        task_id="task:dormant",
+        attempt=1,
+        request=request,
+        evidence_id="evidence:dormant",
+    )
+
+    assert transport.connected is False
+    assert run.success is False
+    assert "disconnected" in run.redacted_output
+    assert not (workspaces.task_root("task:dormant") / "blocked.txt").exists()
+
+
+@pytest.mark.asyncio
 async def test_conditional_patch_rejects_changed_source(tmp_path: Path) -> None:
     workspaces = TaskWorkspaceManager(tmp_path / "tasks")
-    executor = BoundedToolExecutor(workspaces, FakeTransport())
+    executor = BoundedToolExecutor(workspaces, FakeTransport(), allow_test_transport=True)
     task_id = "task:one"
     target = workspaces.task_root(task_id) / "file.txt"
     target.write_text("changed", encoding="utf-8")
@@ -130,7 +166,7 @@ async def test_timeout_cancel_and_output_limit_never_report_success(
     expected: str,
 ) -> None:
     workspaces = TaskWorkspaceManager(tmp_path / "tasks")
-    executor = BoundedToolExecutor(workspaces, FailedTransport(result))
+    executor = BoundedToolExecutor(workspaces, FailedTransport(result), allow_test_transport=True)
     request = ToolRequest(
         tool_id="bounded-run",
         kind=ToolKind.COMMAND,
@@ -154,7 +190,7 @@ async def test_output_is_redacted_before_run_record_persistence(tmp_path: Path) 
     transport = FailedTransport(
         ProcessResult(1, b"token=secret-value-123456789", b"", False, False)
     )
-    executor = BoundedToolExecutor(workspaces, transport)
+    executor = BoundedToolExecutor(workspaces, transport, allow_test_transport=True)
     request = ToolRequest(
         tool_id="redact-run",
         kind=ToolKind.COMMAND,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from datetime import timedelta
 
@@ -12,9 +13,11 @@ from .creator_contract import (
     RoutePreviewRequest,
     RouteStatus,
 )
+from .repository import secret_rule_ids
 from .workbench_agent import ModelPlanResult, WorkbenchModelAdapter
 from .workbench_contract import (
     ApprovalDecision,
+    ApprovalPurpose,
     CandidateSubmission,
     EvidenceKind,
     NetworkMode,
@@ -31,6 +34,11 @@ from .workbench_contract import (
 )
 from .workbench_executor import BoundedToolExecutor, TaskWorkspaceManager
 from .workbench_policy import ToolPolicyBroker
+from .workbench_repository import (
+    WorkbenchRepositoryError,
+    WorkbenchRepositoryInspection,
+    WorkbenchRepositoryRegistry,
+)
 from .workbench_store import WorkbenchConflict, WorkbenchStore
 
 
@@ -52,6 +60,7 @@ class WorkbenchController:
         approval_ttl_minutes: int = 15,
         cost_ceiling_usd: float = 0.10,
         authorized_repositories: frozenset[str] = frozenset(),
+        repository_registry: WorkbenchRepositoryRegistry | None = None,
     ) -> None:
         self.creator = creator
         self.store = store
@@ -63,15 +72,30 @@ class WorkbenchController:
         self.approval_ttl_minutes = approval_ttl_minutes
         self.cost_ceiling_usd = cost_ceiling_usd
         self.authorized_repositories = authorized_repositories
+        self.repository_registry = repository_registry
 
-    def receive(self, imported: TaskImport) -> WorkbenchTask:
+    def receive(self, imported: TaskImport, *, task_id: str | None = None) -> WorkbenchTask:
         if self.store.is_emergency_stopped():
             raise WorkbenchError("emergency stop is active")
+        ingress = json.dumps(
+            {"title": imported.title, "direction": imported.direction},
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        if secret_rule_ids(ingress):
+            raise WorkbenchError("task input contains secret-shaped material")
         if (
             imported.repository_id is not None
             and imported.repository_id not in self.authorized_repositories
         ):
             raise WorkbenchError("repository identity is not in the server-owned registry")
+        if (
+            imported.repository_id is not None
+            and self.repository_registry is not None
+            and imported.repository_fingerprint is None
+        ):
+            raise WorkbenchError("repository tasks require a server-generated source binding")
         request = self._creator_request(imported)
         if imported.examination is None:
             envelope = self.creator.compile(request, actor_id=self.owner_id)
@@ -92,7 +116,7 @@ class WorkbenchController:
             ):
                 raise WorkbenchError("GCP examination direction requires qualified domain review")
         task = WorkbenchTask(
-            id=f"task:{uuid.uuid4().hex}",
+            id=task_id or f"task:{uuid.uuid4().hex}",
             imported=imported,
             task_digest=imported.task_digest,
             state=WorkbenchState.RECEIVED,
@@ -107,12 +131,64 @@ class WorkbenchController:
             payload={
                 "task_digest": task.task_digest,
                 "source_snapshot_digest": imported.source_snapshot_digest,
+                "repository_fingerprint": imported.repository_fingerprint,
                 "mode": imported.mode.value,
                 "creator_route_status": route.status.value,
                 "trusted_prerequisites_pending": list(envelope.brief.trusted_prerequisites),
             },
         )
         return task
+
+    def receive_repository_task(
+        self,
+        *,
+        repository_id: str,
+        title: str,
+        direction: str,
+    ) -> WorkbenchTask:
+        if self.repository_registry is None:
+            raise WorkbenchError("local repository onboarding is not configured")
+        inspection = self.repository_registry.inspect(repository_id, direction=direction)
+        if not inspection.candidate_commands:
+            raise WorkbenchError("repository has no server-discovered bounded acceptance command")
+        task_id = f"task:{uuid.uuid4().hex}"
+        destination = self.workspaces.task_root(task_id)
+        try:
+            self.repository_registry.materialize(
+                repository_id,
+                expected_source_fingerprint=inspection.source_fingerprint,
+                destination=destination,
+            )
+            source_digest = self.workspaces.tree_digest(destination)
+            imported = TaskImport(
+                title=title,
+                direction=direction,
+                repository_id=repository_id,
+                repository_fingerprint=inspection.source_fingerprint,
+                source_snapshot_digest=source_digest,
+                requires_changes=True,
+                acceptance_commands=inspection.candidate_commands,
+            )
+            return self.receive(imported, task_id=task_id)
+        except Exception:
+            self.workspaces.discard_task_workspace(task_id)
+            raise
+
+    def inspect_repository(
+        self,
+        repository_id: str,
+        *,
+        direction: str = "",
+    ) -> WorkbenchRepositoryInspection:
+        if self.repository_registry is None:
+            raise WorkbenchError("local repository onboarding is not configured")
+        return self.repository_registry.inspect(repository_id, direction=direction)
+
+    @property
+    def repository_ids(self) -> tuple[str, ...]:
+        if self.repository_registry is None:
+            return ()
+        return self.repository_registry.repository_ids
 
     def inspect(self, task_id: str) -> WorkbenchTask:
         if self.store.is_emergency_stopped():
@@ -127,6 +203,18 @@ class WorkbenchController:
             digest = self.workspaces.tree_digest(guard.root)
             if digest != task.imported.source_snapshot_digest:
                 raise WorkbenchError("workspace source does not match the imported snapshot")
+            repository_facts: dict[str, object] = {}
+            if task.imported.repository_id is not None:
+                inspection = self._inspect_bound_repository(task)
+                repository_facts = {
+                    "repository_fingerprint": inspection.source_fingerprint,
+                    "branch": inspection.git.branch,
+                    "head": inspection.git.head,
+                    "dirty": inspection.git.dirty,
+                    "languages": inspection.languages,
+                    "framework_clues": list(inspection.framework_clues),
+                    "screened_file_count": inspection.screened_file_count,
+                }
             self.store.append_evidence(
                 task_id,
                 kind=EvidenceKind.SOURCE,
@@ -136,6 +224,7 @@ class WorkbenchController:
                     "file_count": file_count,
                     "total_bytes": total_bytes,
                     "read_only_observation": True,
+                    **repository_facts,
                 },
             )
             if task.imported.examination is not None:
@@ -204,14 +293,24 @@ class WorkbenchController:
         if not task.creator_brief_digest or not task.creator_route_digest:
             raise WorkbenchError("Creator control-plane bindings are missing")
         source_evidence = self.store.list_evidence(task_id)
-        summary = next(
-            (
-                canonical_summary(record.payload)
-                for record in reversed(source_evidence)
-                if record.event_type == "source_inspected"
-            ),
-            "No source inspection evidence is available.",
-        )
+        if task.imported.repository_id is not None:
+            inspection = self._inspect_bound_repository(task)
+            assert self.repository_registry is not None
+            summary = json.dumps(
+                self.repository_registry.planning_context(inspection),
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        else:
+            summary = next(
+                (
+                    canonical_summary(record.payload)
+                    for record in reversed(source_evidence)
+                    if record.event_type == "source_inspected"
+                ),
+                "No source inspection evidence is available.",
+            )
         result = await self.model.plan(
             task=task.imported,
             creator_brief_digest=task.creator_brief_digest,
@@ -282,7 +381,13 @@ class WorkbenchController:
             task_id,
             kind=EvidenceKind.APPROVAL,
             event_type="approval_decided",
-            payload={"approval_id": approval.id, "decision": decision.decision},
+            payload={
+                "approval_id": approval.id,
+                "approval_digest": approval.approval_digest,
+                "decision": decision.decision,
+                "actor_id": self.owner_id,
+                "decided_at": approval.decided_at.isoformat() if approval.decided_at else None,
+            },
         )
         if decision.decision == "approve":
             return self.store.transition(task_id, WorkbenchState.APPROVED)
@@ -290,14 +395,55 @@ class WorkbenchController:
             return self.store.transition(task_id, WorkbenchState.ANALYZED)
         return self.store.transition(task_id, WorkbenchState.CANCELED)
 
+    def reissue_expired_approval(
+        self,
+        task_id: str,
+        approval_id: str,
+    ) -> WorkbenchApproval:
+        task = self.store.get_task(task_id)
+        approval = self.store.get_approval(approval_id)
+        if approval.task_id != task_id or approval.status != "expired":
+            raise WorkbenchError("only an expired approval for this task can be reissued")
+        if task.state not in {
+            WorkbenchState.AWAITING_APPROVAL,
+            WorkbenchState.APPROVED,
+        }:
+            raise WorkbenchError("task is not waiting on an expired approval")
+        if task.state == WorkbenchState.APPROVED:
+            task = self.store.transition(task_id, WorkbenchState.AWAITING_APPROVAL)
+        replacement = self._new_approval(
+            task,
+            purpose=approval.purpose,
+            tool_digests=approval.approved_tool_digests,
+            attempt=approval.execution_attempt,
+        )
+        self.store.publish_approval(replacement)
+        self.store.append_evidence(
+            task_id,
+            kind=EvidenceKind.APPROVAL,
+            event_type="approval_reissued",
+            payload={
+                "expired_approval_id": approval.id,
+                "replacement_approval_id": replacement.id,
+                "replacement_approval_digest": replacement.approval_digest,
+                "purpose": replacement.purpose.value,
+                "actor_id": self.owner_id,
+            },
+        )
+        return replacement
+
     async def execute(self, task_id: str, approval_id: str) -> WorkbenchTask:
         task = self.store.get_task(task_id)
         if task.state != WorkbenchState.APPROVED or task.plan is None:
             raise WorkbenchError("task is not approved for execution")
         if self.store.is_emergency_stopped():
             raise WorkbenchError("emergency stop is active")
+        if not self.executor.connected:
+            raise WorkbenchError("qualified bounded command runner is disconnected")
+        if task.imported.repository_id is not None:
+            self._inspect_bound_repository(task)
         approval = self.store.get_approval(approval_id)
-        if approval.purpose != "execute":
+        if approval.purpose != ApprovalPurpose.EXECUTE:
             raise WorkbenchError("rollback approval cannot authorize plan execution")
         attempt = task.active_attempt + 1
         tool_digests = tuple(step.request_digest for step in task.plan.steps)
@@ -313,6 +459,10 @@ class WorkbenchController:
                 task=task,
                 expected_attempt=attempt,
                 tool_digests=tool_digests,
+                expected_purpose=ApprovalPurpose.EXECUTE,
+                expected_owner_id=self.owner_id,
+                policy_digest=self.policy.policy_digest,
+                runner_grant_digest=self.executor.authorization_digest,
             )
         except Exception:
             self.workspaces.discard_snapshot(snapshot)
@@ -399,11 +549,53 @@ class WorkbenchController:
             test_ids = {
                 step.tool_id
                 for step in task.plan.steps
-                if step.required and step.phase in {StepPhase.TEST, StepPhase.VERIFICATION}
+                if step.required and step.phase == StepPhase.TEST
+            }
+            verification_ids = {
+                step.tool_id
+                for step in task.plan.steps
+                if step.required and step.phase == StepPhase.VERIFICATION
             }
             passed_ids = {run.tool_id for run in current if run.success}
-            if not test_ids or not test_ids.issubset(passed_ids):
+            if (
+                not test_ids
+                or not verification_ids
+                or not test_ids.issubset(passed_ids)
+                or not verification_ids.issubset(passed_ids)
+            ):
                 raise WorkbenchError("required test and verification evidence is incomplete")
+            removed_transients = self.workspaces.discard_server_transients(task_id, snapshot)
+            verified_artifacts = self.workspaces.expected_artifacts(
+                task_id,
+                task.plan.expected_artifacts,
+            )
+            final_tree_digest = self.workspaces.tree_digest(self.workspaces.task_root(task_id))
+            patch_name, patch_digest, changed_paths = self.workspaces.generate_patch(
+                task_id,
+                attempt,
+                snapshot,
+            )
+            if task.imported.requires_changes and not changed_paths:
+                raise WorkbenchError("repository task required a source change but produced none")
+            completion = self.store.append_evidence(
+                task_id,
+                kind=EvidenceKind.EXECUTED,
+                event_type="execution_completed",
+                payload={
+                    "attempt": attempt,
+                    "source_snapshot_digest": snapshot_digest,
+                    "final_tree_digest": final_tree_digest,
+                    "patch_name": patch_name,
+                    "patch_digest": patch_digest,
+                    "changed_paths": list(changed_paths),
+                    "removed_server_transients": list(removed_transients),
+                    "verified_artifacts": list(verified_artifacts),
+                    "test_tool_ids": sorted(test_ids),
+                    "verification_tool_ids": sorted(verification_ids),
+                    "runner_provider": self.executor.provider_name,
+                    "runner_grant_digest": self.executor.authorization_digest,
+                },
+            )
             task = self.store.transition(task_id, WorkbenchState.VERIFIED)
             self.store.append_evidence(
                 task_id,
@@ -412,7 +604,11 @@ class WorkbenchController:
                 payload={
                     "verified": True,
                     "test_tool_ids": sorted(test_ids),
+                    "verification_tool_ids": sorted(verification_ids),
                     "run_ids": [run.id for run in current],
+                    "completion_evidence_id": completion.id,
+                    "final_tree_digest": final_tree_digest,
+                    "patch_digest": patch_digest,
                     "independent_examiner_verification": False,
                 },
             )
@@ -449,7 +645,7 @@ class WorkbenchController:
         return canceled
 
     def emergency_stop(self) -> list[str]:
-        self.store.emergency_stop(True)
+        self.store.emergency_stop(True, actor_id=self.owner_id)
         canceled: list[str] = []
         for task in self.store.list_tasks(limit=200):
             if task.state in {
@@ -477,6 +673,26 @@ class WorkbenchController:
                 )
         return canceled
 
+    def reset_emergency_stop(self) -> None:
+        if self.executor.connected:
+            raise WorkbenchError(
+                "emergency reset requires a disconnected runner with no possible active process"
+            )
+        nonterminal = {
+            WorkbenchState.RECEIVED,
+            WorkbenchState.INSPECTING,
+            WorkbenchState.ANALYZED,
+            WorkbenchState.PLAN_READY,
+            WorkbenchState.AWAITING_APPROVAL,
+            WorkbenchState.APPROVED,
+            WorkbenchState.EXECUTING,
+            WorkbenchState.TESTING,
+            WorkbenchState.VERIFIED,
+        }
+        if any(task.state in nonterminal for task in self.store.list_tasks(limit=200)):
+            raise WorkbenchError("emergency reset requires every task to be terminal")
+        self.store.emergency_stop(False, actor_id=self.owner_id)
+
     def request_rollback(self, task_id: str) -> tuple[WorkbenchTask, WorkbenchApproval]:
         task = self.store.get_task(task_id)
         if task.state != WorkbenchState.FAILED or task.plan is None:
@@ -490,7 +706,7 @@ class WorkbenchController:
         task = self.store.transition(task_id, WorkbenchState.AWAITING_APPROVAL)
         approval = self._new_approval(
             task,
-            purpose="rollback",
+            purpose=ApprovalPurpose.ROLLBACK,
             tool_digests=(snapshot_digest,),
             attempt=task.active_attempt,
         )
@@ -512,7 +728,7 @@ class WorkbenchController:
         if task.state != WorkbenchState.APPROVED or task.plan is None:
             raise WorkbenchError("rollback is not approved")
         approval = self.store.get_approval(approval_id)
-        if approval.purpose != "rollback":
+        if approval.purpose != ApprovalPurpose.ROLLBACK:
             raise WorkbenchError("execution approval cannot authorize rollback")
         snapshot = self.workspaces.root / "_recovery" / f"{task.id}-{task.active_attempt}"
         if not snapshot.is_dir():
@@ -523,6 +739,10 @@ class WorkbenchController:
             task=task,
             expected_attempt=task.active_attempt,
             tool_digests=(snapshot_digest,),
+            expected_purpose=ApprovalPurpose.ROLLBACK,
+            expected_owner_id=self.owner_id,
+            policy_digest=self.policy.policy_digest,
+            runner_grant_digest=None,
         )
         after_digest = self.workspaces.rollback(task_id, snapshot)
         if after_digest != task.imported.source_snapshot_digest:
@@ -577,7 +797,33 @@ class WorkbenchController:
             if task.state == WorkbenchState.BLOCKED
             else SubmissionStatus.FAILED
         )
-        resources = list(task.plan.expected_artifacts if task.plan else ())
+        completion = next(
+            (item for item in reversed(evidence) if item.event_type == "execution_completed"),
+            None,
+        )
+        if status == SubmissionStatus.COMPLETE and completion is None:
+            raise WorkbenchError("completed task is missing final execution evidence")
+        if completion is not None:
+            self._verify_completion_artifacts(task, completion.payload)
+        resources: list[str] = []
+        if completion is not None:
+            resources.extend(
+                [
+                    f"final_tree_sha256={completion.payload['final_tree_digest']}",
+                    (
+                        f"patch={completion.payload['patch_name']} "
+                        f"sha256={completion.payload['patch_digest']}"
+                    ),
+                ]
+            )
+            resources.extend(
+                (
+                    f"artifact={item['path']} sha256={item['sha256']} "
+                    f"bytes={item['bytes']} executable={str(item['executable']).lower()}"
+                )
+                for item in completion.payload.get("verified_artifacts", [])
+                if isinstance(item, dict)
+            )
         if task.imported.examination is not None:
             resources.extend(
                 [
@@ -629,28 +875,20 @@ class WorkbenchController:
         return submission
 
     def lock_submission(self, task_id: str) -> CandidateSubmission:
-        locked = self.store.lock_submission(task_id)
-        self.store.append_evidence(
-            task_id,
-            kind=EvidenceKind.SUBMISSION,
-            event_type="submission_locked",
-            payload={"submission_id": locked.id, "submission_digest": locked.submission_digest},
-        )
-        return locked
+        task = self.store.get_task(task_id)
+        if task.state == WorkbenchState.COMPLETED:
+            evidence = self.store.list_evidence(task_id)
+            completion = next(
+                (item for item in reversed(evidence) if item.event_type == "execution_completed"),
+                None,
+            )
+            if completion is None:
+                raise WorkbenchError("completed task is missing final execution evidence")
+            self._verify_completion_artifacts(task, completion.payload)
+        return self.store.lock_submission(task_id, actor_id=self.owner_id)
 
     def reopen_submission(self, task_id: str) -> CandidateSubmission:
-        reopened = self.store.reopen_submission(task_id)
-        self.store.append_evidence(
-            task_id,
-            kind=EvidenceKind.SUBMISSION,
-            event_type="submission_reopened",
-            payload={
-                "submission_id": reopened.id,
-                "submission_digest": reopened.submission_digest,
-                "actor": self.owner_id,
-            },
-        )
-        return reopened
+        return self.store.reopen_submission(task_id, actor_id=self.owner_id)
 
     def health(self, task_id: str | None = None) -> WorkbenchHealth:
         task = self.store.get_task(task_id) if task_id else None
@@ -662,10 +900,24 @@ class WorkbenchController:
             missing.append("qualified bounded command runner is disconnected")
         if self.store.is_emergency_stopped():
             missing.append("emergency stop is active")
+        evidence_integrity = (
+            "durable_hmac" if self.store.durable_evidence_integrity else "ephemeral_hmac"
+        )
+        if task is not None:
+            try:
+                self.store.list_evidence(task.id)
+            except WorkbenchConflict:
+                evidence_integrity = "invalid"
+                missing.append("evidence integrity verification failed")
         return WorkbenchHealth(
             provider=self.model.provider_name,
             model=self.model.model_name,
             reasoning_tier=self.model.reasoning_tier,
+            model_connected=self.model.connected,
+            model_status=("connected" if self.model.connected else "disabled"),
+            runner_provider=self.executor.provider_name,
+            runner_qualification=self.executor.qualification_status,
+            runner_connection=("connected" if self.executor.connected else "disconnected"),
             runner_connected=self.executor.connected,
             repository=task.imported.repository_id if task else None,
             project=exam.authorized_project if exam else None,
@@ -683,6 +935,7 @@ class WorkbenchController:
             ),
             cost_ceiling_usd=self.cost_ceiling_usd,
             emergency_stopped=self.store.is_emergency_stopped(),
+            evidence_integrity=evidence_integrity,
             missing_prerequisites=tuple(missing),
         )
 
@@ -691,6 +944,18 @@ class WorkbenchController:
             raise WorkbenchError("model plan is bound to another source snapshot")
         for step in result.plan.steps:
             self.policy.authorize(task, step)
+        if task.imported.repository_id is not None:
+            planned_commands = {
+                " ".join((step.command.executable, *step.command.args))
+                for step in result.plan.steps
+                if step.required
+                and step.command is not None
+                and step.phase in {StepPhase.TEST, StepPhase.VERIFICATION}
+            }
+            if not planned_commands.intersection(task.imported.acceptance_commands):
+                raise WorkbenchError(
+                    "plan omits every server-discovered repository acceptance command"
+                )
         if task.imported.examination is not None:
             estimated_cloud_cost = sum(
                 step.command.estimated_cost_usd
@@ -707,11 +972,32 @@ class WorkbenchController:
                 ):
                     self.policy.gcp.validate(step.command, task.imported.examination)
 
+    def _inspect_bound_repository(
+        self,
+        task: WorkbenchTask,
+    ) -> WorkbenchRepositoryInspection:
+        if (
+            self.repository_registry is None
+            or task.imported.repository_id is None
+            or task.imported.repository_fingerprint is None
+        ):
+            raise WorkbenchError("server-owned repository binding is incomplete")
+        try:
+            inspection = self.repository_registry.inspect(
+                task.imported.repository_id,
+                direction=task.imported.direction,
+            )
+        except WorkbenchRepositoryError as exc:
+            raise WorkbenchError("registered repository inspection failed closed") from exc
+        if inspection.source_fingerprint != task.imported.repository_fingerprint:
+            raise WorkbenchError("registered repository changed after task import")
+        return inspection
+
     def _new_approval(
         self,
         task: WorkbenchTask,
         *,
-        purpose: str = "execute",
+        purpose: ApprovalPurpose = ApprovalPurpose.EXECUTE,
         tool_digests: tuple[str, ...] | None = None,
         attempt: int | None = None,
     ) -> WorkbenchApproval:
@@ -726,13 +1012,22 @@ class WorkbenchController:
         )
         bindings = {
             "task_id": task.id,
-            "purpose": purpose,
+            "task_digest": task.task_digest,
+            "purpose": purpose.value,
             "plan_digest": task.plan_digest,
             "source_snapshot_digest": task.imported.source_snapshot_digest,
+            "repository_id": task.imported.repository_id,
+            "examination_digest": exam.config_digest if exam else None,
             "project": exam.authorized_project if exam else None,
             "candidate_identity": exam.candidate_service_account if exam else None,
             "execution_attempt": attempt,
             "approved_tool_digests": tool_digests,
+            "policy_digest": self.policy.policy_digest,
+            "runner_grant_digest": (
+                self.executor.authorization_digest if purpose == ApprovalPurpose.EXECUTE else None
+            ),
+            "network_mode": self._plan_network_mode(task, purpose).value,
+            "nonce": f"nonce:{uuid.uuid4().hex}",
         }
         now = utc_now()
         return WorkbenchApproval(
@@ -743,6 +1038,61 @@ class WorkbenchController:
             created_at=now,
             expires_at=now + timedelta(minutes=self.approval_ttl_minutes),
         )
+
+    @staticmethod
+    def _plan_network_mode(task: WorkbenchTask, purpose: ApprovalPurpose) -> NetworkMode:
+        if purpose != ApprovalPurpose.EXECUTE or task.plan is None:
+            return NetworkMode.DENIED
+        if any(
+            step.command is not None and step.command.network == NetworkMode.TASK_SCOPED
+            for step in task.plan.steps
+        ):
+            return NetworkMode.TASK_SCOPED
+        return NetworkMode.DENIED
+
+    def export_patch(self, task_id: str) -> str:
+        task = self.store.get_task(task_id)
+        if task.state not in {WorkbenchState.VERIFIED, WorkbenchState.COMPLETED}:
+            raise WorkbenchError("patch export requires verified execution")
+        evidence = self.store.list_evidence(task_id)
+        completion = next(
+            (item for item in reversed(evidence) if item.event_type == "execution_completed"),
+            None,
+        )
+        if completion is None:
+            raise WorkbenchError("verified task is missing authenticated patch evidence")
+        self._verify_completion_artifacts(task, completion.payload)
+        return self.workspaces.read_patch(
+            task_id,
+            str(completion.payload["patch_name"]),
+            str(completion.payload["patch_digest"]),
+        )
+
+    def _verify_completion_artifacts(
+        self,
+        task: WorkbenchTask,
+        payload: dict[str, object],
+    ) -> None:
+        required = {
+            "attempt",
+            "final_tree_digest",
+            "patch_name",
+            "patch_digest",
+            "verified_artifacts",
+        }
+        if not required.issubset(payload):
+            raise WorkbenchError("authenticated completion manifest is incomplete")
+        if payload["attempt"] != task.active_attempt:
+            raise WorkbenchError("authenticated patch attempt does not match the task")
+        final_digest = self.workspaces.tree_digest(self.workspaces.task_root(task.id))
+        if final_digest != payload["final_tree_digest"]:
+            raise WorkbenchError("completed source tree changed after verification")
+        self.workspaces.read_patch(
+            task.id,
+            str(payload["patch_name"]),
+            str(payload["patch_digest"]),
+        )
+        self.workspaces.verify_artifacts(task.id, payload["verified_artifacts"])
 
 
 def canonical_summary(payload: dict[str, object]) -> str:

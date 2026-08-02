@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
 import secrets
 import sqlite3
 from pathlib import Path
 from threading import RLock
 
 from .workbench_contract import (
+    ApprovalPurpose,
     CandidateSubmission,
     EvidenceKind,
     ToolRunRecord,
@@ -15,6 +18,7 @@ from .workbench_contract import (
     WorkbenchPlan,
     WorkbenchState,
     WorkbenchTask,
+    canonical_json,
     content_digest,
     utc_now,
 )
@@ -25,6 +29,7 @@ CREATE TABLE IF NOT EXISTS workbench_tasks (
     task_digest TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL,
     record_json TEXT NOT NULL,
+    record_signature TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -38,6 +43,7 @@ CREATE TABLE IF NOT EXISTS workbench_approvals (
     status TEXT NOT NULL,
     approval_digest TEXT NOT NULL UNIQUE,
     record_json TEXT NOT NULL,
+    record_signature TEXT NOT NULL,
     created_at TEXT NOT NULL,
     FOREIGN KEY(task_id) REFERENCES workbench_tasks(id)
 );
@@ -50,6 +56,7 @@ CREATE TABLE IF NOT EXISTS workbench_runs (
     tool_id TEXT NOT NULL,
     request_digest TEXT NOT NULL,
     record_json TEXT NOT NULL,
+    record_signature TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE(task_id, attempt, tool_id),
     FOREIGN KEY(task_id) REFERENCES workbench_tasks(id)
@@ -85,12 +92,22 @@ CREATE TABLE IF NOT EXISTS workbench_evidence (
     FOREIGN KEY(task_id) REFERENCES workbench_tasks(id)
 );
 
+CREATE TABLE IF NOT EXISTS workbench_evidence_anchors (
+    task_id TEXT PRIMARY KEY,
+    sequence INTEGER NOT NULL,
+    head_hash TEXT NOT NULL,
+    anchor_signature TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES workbench_tasks(id)
+);
+
 CREATE TABLE IF NOT EXISTS workbench_submissions (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
     locked INTEGER NOT NULL DEFAULT 0,
     submission_digest TEXT NOT NULL UNIQUE,
     record_json TEXT NOT NULL,
+    record_signature TEXT NOT NULL,
     created_at TEXT NOT NULL,
     FOREIGN KEY(task_id) REFERENCES workbench_tasks(id)
 );
@@ -98,10 +115,23 @@ CREATE TABLE IF NOT EXISTS workbench_submissions (
 CREATE TABLE IF NOT EXISTS workbench_control (
     name TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    audit_sequence INTEGER NOT NULL DEFAULT 0,
+    audit_hash TEXT,
+    record_signature TEXT
 );
 INSERT OR IGNORE INTO workbench_control(name, value, updated_at)
 VALUES ('emergency_stop', 'false', CURRENT_TIMESTAMP);
+
+CREATE TABLE IF NOT EXISTS workbench_control_events (
+    sequence INTEGER PRIMARY KEY,
+    action TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    record_hash TEXT NOT NULL UNIQUE,
+    record_signature TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 _ALLOWED_TRANSITIONS: dict[WorkbenchState, frozenset[WorkbenchState]] = {
@@ -132,6 +162,7 @@ _ALLOWED_TRANSITIONS: dict[WorkbenchState, frozenset[WorkbenchState]] = {
     ),
     WorkbenchState.APPROVED: frozenset(
         {
+            WorkbenchState.AWAITING_APPROVAL,
             WorkbenchState.EXECUTING,
             WorkbenchState.CANCELED,
             WorkbenchState.BLOCKED,
@@ -173,7 +204,11 @@ class WorkbenchConflict(WorkbenchStoreError):
 
 
 class WorkbenchStore:
-    def __init__(self, database_path: Path | str) -> None:
+    def __init__(self, database_path: Path | str, *, signing_key: bytes | None = None) -> None:
+        self._signing_key = secrets.token_bytes(32) if signing_key is None else signing_key
+        if not isinstance(self._signing_key, bytes) or len(self._signing_key) != 32:
+            raise ValueError("Workbench evidence signing key must contain exactly 32 bytes")
+        self.durable_evidence_integrity = signing_key is not None
         self._path = str(database_path)
         self._connection = sqlite3.connect(self._path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
@@ -183,6 +218,8 @@ class WorkbenchStore:
             self._connection.execute("PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA busy_timeout=30000")
             self._connection.executescript(SCHEMA)
+            self._ensure_record_signature_columns()
+            self._ensure_control_integrity()
 
     def close(self) -> None:
         self._connection.close()
@@ -191,20 +228,23 @@ class WorkbenchStore:
         if task.state != WorkbenchState.RECEIVED:
             raise WorkbenchConflict("new workbench tasks must start in RECEIVED")
         record = task.model_dump_json()
+        signature = self._sign_record("task", task.id, record)
         try:
             with self._lock, self._connection:
                 self._connection.execute(
                     """
                     INSERT INTO workbench_tasks(
-                        id, task_digest, state, record_json, created_at, updated_at
+                        id, task_digest, state, record_json, record_signature,
+                        created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task.id,
                         task.task_digest,
                         task.state.value,
                         record,
+                        signature,
                         task.created_at.isoformat(),
                         task.updated_at.isoformat(),
                     ),
@@ -215,19 +255,19 @@ class WorkbenchStore:
 
     def get_task(self, task_id: str) -> WorkbenchTask:
         row = self._connection.execute(
-            "SELECT record_json FROM workbench_tasks WHERE id=?", (task_id,)
+            "SELECT * FROM workbench_tasks WHERE id=?", (task_id,)
         ).fetchone()
         if row is None:
             raise WorkbenchNotFound("workbench task was not found")
-        return WorkbenchTask.model_validate_json(row["record_json"])
+        return self._task_from_row(row)
 
     def list_tasks(self, *, limit: int = 100) -> list[WorkbenchTask]:
         if limit < 1 or limit > 200:
             raise ValueError("task list limit is invalid")
         rows = self._connection.execute(
-            "SELECT record_json FROM workbench_tasks ORDER BY created_at DESC LIMIT ?", (limit,)
+            "SELECT * FROM workbench_tasks ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
-        return [WorkbenchTask.model_validate_json(row["record_json"]) for row in rows]
+        return [self._task_from_row(row) for row in rows]
 
     def transition(
         self,
@@ -283,13 +323,19 @@ class WorkbenchStore:
             return changed
 
     def publish_approval(self, approval: WorkbenchApproval) -> None:
+        if approval.status != "pending" or approval.approved_by is not None:
+            raise WorkbenchConflict("only pending owner approvals may be published")
         try:
             with self._lock, self._connection:
+                task = self._get_task_locked(approval.task_id)
+                if task.state != WorkbenchState.AWAITING_APPROVAL:
+                    raise WorkbenchConflict("approval task is not awaiting approval")
                 self._connection.execute(
                     """
                     INSERT INTO workbench_approvals(
-                        id, task_id, status, approval_digest, record_json, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        id, task_id, status, approval_digest, record_json,
+                        record_signature, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         approval.id,
@@ -297,6 +343,7 @@ class WorkbenchStore:
                         approval.status,
                         approval.approval_digest,
                         approval.model_dump_json(),
+                        self._sign_record("approval", approval.id, approval.model_dump_json()),
                         approval.created_at.isoformat(),
                     ),
                 )
@@ -305,11 +352,11 @@ class WorkbenchStore:
 
     def get_approval(self, approval_id: str) -> WorkbenchApproval:
         row = self._connection.execute(
-            "SELECT record_json FROM workbench_approvals WHERE id=?", (approval_id,)
+            "SELECT * FROM workbench_approvals WHERE id=?", (approval_id,)
         ).fetchone()
         if row is None:
             raise WorkbenchNotFound("workbench approval was not found")
-        approval = WorkbenchApproval.model_validate_json(row["record_json"])
+        approval = self._approval_from_row(row)
         if approval.status in {"pending", "approved"} and utc_now() >= approval.expires_at:
             approval = self._set_approval_status(approval, "expired")
         return approval
@@ -356,23 +403,67 @@ class WorkbenchStore:
         task: WorkbenchTask,
         expected_attempt: int,
         tool_digests: tuple[str, ...],
+        expected_purpose: ApprovalPurpose,
+        expected_owner_id: str,
+        policy_digest: str,
+        runner_grant_digest: str | None,
     ) -> WorkbenchApproval:
         with self._lock, self._connection:
             self._connection.execute("BEGIN IMMEDIATE")
+            current = self._get_task_locked(task.id)
             approval = self._get_approval_locked(approval_id)
             if approval.status != "approved":
                 raise WorkbenchConflict("approval is not approved")
+            if approval.approved_by != expected_owner_id:
+                raise WorkbenchConflict("approval was not granted by the configured owner")
             if utc_now() >= approval.expires_at:
                 self._save_approval_locked(approval.model_copy(update={"status": "expired"}))
                 raise WorkbenchConflict("approval expired")
             if (
-                approval.task_id != task.id
-                or approval.plan_digest != task.plan_digest
-                or approval.source_snapshot_digest != task.imported.source_snapshot_digest
+                current != task
+                or current.state != WorkbenchState.APPROVED
+                or approval.task_id != current.id
+                or approval.task_digest != current.task_digest
+                or approval.purpose != expected_purpose
+                or approval.plan_digest != current.plan_digest
+                or approval.source_snapshot_digest != current.imported.source_snapshot_digest
+                or approval.repository_id != current.imported.repository_id
+                or approval.examination_digest
+                != (
+                    current.imported.examination.config_digest
+                    if current.imported.examination is not None
+                    else None
+                )
+                or approval.project
+                != (
+                    current.imported.examination.authorized_project
+                    if current.imported.examination is not None
+                    else None
+                )
+                or approval.candidate_identity
+                != (
+                    current.imported.examination.candidate_service_account
+                    if current.imported.examination is not None
+                    else None
+                )
                 or approval.execution_attempt != expected_attempt
                 or approval.approved_tool_digests != tool_digests
+                or approval.policy_digest != policy_digest
+                or approval.runner_grant_digest != runner_grant_digest
             ):
                 raise WorkbenchConflict("approval binding changed")
+            matching_decision = any(
+                record.event_type == "approval_decided"
+                and record.payload.get("approval_id") == approval.id
+                and record.payload.get("approval_digest") == approval.approval_digest
+                and record.payload.get("decision") == "approve"
+                and record.payload.get("actor_id") == expected_owner_id
+                and record.payload.get("decided_at")
+                == (approval.decided_at.isoformat() if approval.decided_at else None)
+                for record in self._verify_evidence_locked(task.id)
+            )
+            if not matching_decision:
+                raise WorkbenchConflict("authenticated owner approval decision is missing")
             changed = approval.model_copy(update={"status": "consumed", "consumed_at": utc_now()})
             changed = WorkbenchApproval.model_validate(changed.model_dump(mode="python"))
             self._save_approval_locked(changed)
@@ -384,8 +475,9 @@ class WorkbenchStore:
                 self._connection.execute(
                     """
                     INSERT INTO workbench_runs(
-                        id, task_id, attempt, tool_id, request_digest, record_json, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        id, task_id, attempt, tool_id, request_digest, record_json,
+                        record_signature, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         run.id,
@@ -394,6 +486,7 @@ class WorkbenchStore:
                         run.tool_id,
                         run.request_digest,
                         run.model_dump_json(),
+                        self._sign_record("run", run.id, run.model_dump_json()),
                         run.started_at.isoformat(),
                     ),
                 )
@@ -496,10 +589,10 @@ class WorkbenchStore:
 
     def list_runs(self, task_id: str) -> list[ToolRunRecord]:
         rows = self._connection.execute(
-            "SELECT record_json FROM workbench_runs WHERE task_id=? ORDER BY created_at, tool_id",
+            "SELECT * FROM workbench_runs WHERE task_id=? ORDER BY created_at, tool_id",
             (task_id,),
         ).fetchall()
-        return [ToolRunRecord.model_validate_json(row["record_json"]) for row in rows]
+        return [self._run_from_row(row) for row in rows]
 
     def append_evidence(
         self,
@@ -509,59 +602,92 @@ class WorkbenchStore:
         event_type: str,
         payload: dict[str, object],
     ) -> WorkbenchEvidence:
-        now = utc_now()
         with self._lock, self._connection:
             self._connection.execute("BEGIN IMMEDIATE")
-            row = self._connection.execute(
-                """
-                SELECT sequence, record_hash FROM workbench_evidence
-                WHERE task_id=? ORDER BY sequence DESC LIMIT 1
-                """,
-                (task_id,),
-            ).fetchone()
-            sequence = 1 if row is None else int(row["sequence"]) + 1
-            previous_hash = None if row is None else str(row["record_hash"])
-            digest_payload = {
-                "task_id": task_id,
-                "sequence": sequence,
-                "kind": kind.value,
-                "event_type": event_type,
-                "payload": payload,
-                "previous_hash": previous_hash,
-                "created_at": now.isoformat(),
-            }
-            record_hash = content_digest(digest_payload)
-            evidence = WorkbenchEvidence(
-                id=f"evidence:{record_hash[:24]}",
-                task_id=task_id,
-                sequence=sequence,
+            return self._append_evidence_locked(
+                task_id,
                 kind=kind,
                 event_type=event_type,
                 payload=payload,
-                previous_hash=previous_hash,
-                record_hash=record_hash,
-                created_at=now,
             )
-            self._connection.execute(
-                """
-                INSERT INTO workbench_evidence(
-                    id, task_id, sequence, kind, event_type, record_json, record_hash, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    evidence.id,
-                    task_id,
-                    sequence,
-                    kind.value,
-                    event_type,
-                    evidence.model_dump_json(),
-                    record_hash,
-                    now.isoformat(),
-                ),
-            )
-            return evidence
+
+    def _append_evidence_locked(
+        self,
+        task_id: str,
+        *,
+        kind: EvidenceKind,
+        event_type: str,
+        payload: dict[str, object],
+    ) -> WorkbenchEvidence:
+        now = utc_now()
+        existing = self._verify_evidence_locked(task_id)
+        sequence = len(existing) + 1
+        previous_hash = existing[-1].record_hash if existing else None
+        digest_payload = {
+            "task_id": task_id,
+            "sequence": sequence,
+            "kind": kind.value,
+            "event_type": event_type,
+            "payload": payload,
+            "previous_hash": previous_hash,
+            "created_at": now.isoformat(),
+        }
+        record_hash = content_digest(digest_payload)
+        evidence = WorkbenchEvidence(
+            id=f"evidence:{record_hash[:24]}",
+            task_id=task_id,
+            sequence=sequence,
+            kind=kind,
+            event_type=event_type,
+            payload=payload,
+            previous_hash=previous_hash,
+            record_hash=record_hash,
+            created_at=now,
+        )
+        self._connection.execute(
+            """
+            INSERT INTO workbench_evidence(
+                id, task_id, sequence, kind, event_type, record_json, record_hash, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                evidence.id,
+                task_id,
+                sequence,
+                kind.value,
+                event_type,
+                evidence.model_dump_json(),
+                record_hash,
+                now.isoformat(),
+            ),
+        )
+        anchor_payload = {
+            "schema": "liltweak-workbench-evidence-anchor-v1",
+            "task_id": task_id,
+            "sequence": sequence,
+            "head_hash": record_hash,
+        }
+        anchor_signature = self._sign_anchor(anchor_payload)
+        self._connection.execute(
+            """
+            INSERT INTO workbench_evidence_anchors(
+                task_id, sequence, head_hash, anchor_signature, updated_at
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(task_id) DO UPDATE SET
+                sequence=excluded.sequence,
+                head_hash=excluded.head_hash,
+                anchor_signature=excluded.anchor_signature,
+                updated_at=excluded.updated_at
+            """,
+            (task_id, sequence, record_hash, anchor_signature, now.isoformat()),
+        )
+        return evidence
 
     def list_evidence(self, task_id: str) -> list[WorkbenchEvidence]:
+        with self._lock:
+            return self._verify_evidence_locked(task_id)
+
+    def _verify_evidence_locked(self, task_id: str) -> list[WorkbenchEvidence]:
         rows = self._connection.execute(
             "SELECT record_json, record_hash FROM workbench_evidence "
             "WHERE task_id=? ORDER BY sequence",
@@ -582,12 +708,38 @@ class WorkbenchStore:
             }
             if (
                 record.record_hash != row["record_hash"]
+                or record.id != f"evidence:{record.record_hash[:24]}"
                 or record.previous_hash != previous
                 or record.record_hash != content_digest(payload)
             ):
                 raise WorkbenchConflict("workbench evidence integrity chain is invalid")
             previous = record.record_hash
             records.append(record)
+        anchor = self._connection.execute(
+            """
+                SELECT sequence, head_hash, anchor_signature
+                FROM workbench_evidence_anchors WHERE task_id=?
+                """,
+            (task_id,),
+        ).fetchone()
+        if records:
+            if anchor is None:
+                raise WorkbenchConflict("workbench evidence authenticated anchor is missing")
+            anchor_payload = {
+                "schema": "liltweak-workbench-evidence-anchor-v1",
+                "task_id": task_id,
+                "sequence": int(anchor["sequence"]),
+                "head_hash": str(anchor["head_hash"]),
+            }
+            expected = self._sign_anchor(anchor_payload)
+            if (
+                int(anchor["sequence"]) != len(records)
+                or str(anchor["head_hash"]) != previous
+                or not hmac.compare_digest(str(anchor["anchor_signature"]), expected)
+            ):
+                raise WorkbenchConflict("workbench evidence authenticated anchor is invalid")
+        elif anchor is not None:
+            raise WorkbenchConflict("workbench evidence anchor exists without a ledger")
         return records
 
     def save_submission(self, submission: CandidateSubmission) -> CandidateSubmission:
@@ -602,8 +754,9 @@ class WorkbenchStore:
             self._connection.execute(
                 """
                 INSERT INTO workbench_submissions(
-                    id, task_id, locked, submission_digest, record_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    id, task_id, locked, submission_digest, record_json,
+                    record_signature, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     submission.id,
@@ -611,6 +764,7 @@ class WorkbenchStore:
                     int(submission.locked),
                     submission.submission_digest,
                     submission.model_dump_json(),
+                    self._sign_record("submission", submission.id, submission.model_dump_json()),
                     submission.created_at.isoformat(),
                 ),
             )
@@ -621,7 +775,7 @@ class WorkbenchStore:
     ) -> CandidateSubmission | None:
         row = self._connection.execute(
             """
-            SELECT record_json FROM workbench_submissions
+            SELECT * FROM workbench_submissions
             WHERE task_id=? ORDER BY created_at DESC LIMIT 1
             """,
             (task_id,),
@@ -630,9 +784,9 @@ class WorkbenchStore:
             if required:
                 raise WorkbenchNotFound("candidate submission was not found")
             return None
-        return CandidateSubmission.model_validate_json(row["record_json"])
+        return self._submission_from_row(row)
 
-    def lock_submission(self, task_id: str) -> CandidateSubmission:
+    def lock_submission(self, task_id: str, *, actor_id: str) -> CandidateSubmission:
         with self._lock, self._connection:
             self._connection.execute("BEGIN IMMEDIATE")
             submission = self.get_submission_for_task(task_id)
@@ -643,12 +797,29 @@ class WorkbenchStore:
             locked = submission.model_copy(update={"locked": True, "locked_at": utc_now()})
             locked = CandidateSubmission.model_validate(locked.model_dump(mode="python"))
             self._connection.execute(
-                "UPDATE workbench_submissions SET locked=1, record_json=? WHERE id=?",
-                (locked.model_dump_json(), locked.id),
+                """
+                UPDATE workbench_submissions
+                SET locked=1, record_json=?, record_signature=? WHERE id=?
+                """,
+                (
+                    locked.model_dump_json(),
+                    self._sign_record("submission", locked.id, locked.model_dump_json()),
+                    locked.id,
+                ),
+            )
+            self._append_evidence_locked(
+                task_id,
+                kind=EvidenceKind.SUBMISSION,
+                event_type="submission_locked",
+                payload={
+                    "submission_id": locked.id,
+                    "submission_digest": locked.submission_digest,
+                    "actor_id": actor_id,
+                },
             )
             return locked
 
-    def reopen_submission(self, task_id: str) -> CandidateSubmission:
+    def reopen_submission(self, task_id: str, *, actor_id: str) -> CandidateSubmission:
         with self._lock, self._connection:
             self._connection.execute("BEGIN IMMEDIATE")
             submission = self.get_submission_for_task(task_id)
@@ -659,54 +830,146 @@ class WorkbenchStore:
             reopened = submission.model_copy(update={"locked": False, "locked_at": None})
             reopened = CandidateSubmission.model_validate(reopened.model_dump(mode="python"))
             self._connection.execute(
-                "UPDATE workbench_submissions SET locked=0, record_json=? WHERE id=?",
-                (reopened.model_dump_json(), reopened.id),
+                """
+                UPDATE workbench_submissions
+                SET locked=0, record_json=?, record_signature=? WHERE id=?
+                """,
+                (
+                    reopened.model_dump_json(),
+                    self._sign_record("submission", reopened.id, reopened.model_dump_json()),
+                    reopened.id,
+                ),
+            )
+            self._append_evidence_locked(
+                task_id,
+                kind=EvidenceKind.SUBMISSION,
+                event_type="submission_reopened",
+                payload={
+                    "submission_id": reopened.id,
+                    "submission_digest": reopened.submission_digest,
+                    "actor_id": actor_id,
+                },
             )
             return reopened
 
-    def emergency_stop(self, enabled: bool = True) -> None:
+    def emergency_stop(self, enabled: bool = True, *, actor_id: str = "system") -> None:
+        if (
+            not actor_id
+            or len(actor_id) > 128
+            or any(ord(character) < 32 or ord(character) == 127 for character in actor_id)
+        ):
+            raise WorkbenchConflict("control actor identifier is invalid")
         with self._lock, self._connection:
+            self._connection.execute("BEGIN IMMEDIATE")
+            row = self._verified_control_locked()
+            events = self._verify_control_events_locked(row)
+            sequence = len(events) + 1
+            previous_hash = events[-1]["record_hash"] if events else None
+            now = utc_now().isoformat()
+            payload = {
+                "schema": "liltweak-workbench-control-event-v1",
+                "sequence": sequence,
+                "action": "engage" if enabled else "reset",
+                "actor_id": actor_id,
+                "enabled": enabled,
+                "previous_hash": previous_hash,
+                "created_at": now,
+            }
+            record = canonical_json(payload)
+            record_hash = content_digest(payload)
             self._connection.execute(
                 """
-                UPDATE workbench_control SET value=?, updated_at=? WHERE name='emergency_stop'
+                INSERT INTO workbench_control_events(
+                    sequence, action, actor_id, record_json, record_hash,
+                    record_signature, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("true" if enabled else "false", utc_now().isoformat()),
+                (
+                    sequence,
+                    payload["action"],
+                    actor_id,
+                    record,
+                    record_hash,
+                    self._sign_record("control_event", str(sequence), record),
+                    now,
+                ),
+            )
+            value = "true" if enabled else "false"
+            control_record = canonical_json(
+                {
+                    "name": "emergency_stop",
+                    "value": value,
+                    "updated_at": now,
+                    "audit_sequence": sequence,
+                    "audit_hash": record_hash,
+                }
+            )
+            self._connection.execute(
+                """
+                UPDATE workbench_control
+                SET value=?, updated_at=?, audit_sequence=?, audit_hash=?, record_signature=?
+                WHERE name='emergency_stop'
+                """,
+                (
+                    value,
+                    now,
+                    sequence,
+                    record_hash,
+                    self._sign_record("control", "emergency_stop", control_record),
+                ),
             )
 
     def is_emergency_stopped(self) -> bool:
-        row = self._connection.execute(
-            "SELECT value FROM workbench_control WHERE name='emergency_stop'"
-        ).fetchone()
-        return row is not None and row["value"] == "true"
+        with self._lock:
+            row = self._verified_control_locked()
+            self._verify_control_events_locked(row)
+            return row["value"] == "true"
 
     def _get_task_locked(self, task_id: str) -> WorkbenchTask:
         row = self._connection.execute(
-            "SELECT record_json FROM workbench_tasks WHERE id=?", (task_id,)
+            "SELECT * FROM workbench_tasks WHERE id=?", (task_id,)
         ).fetchone()
         if row is None:
             raise WorkbenchNotFound("workbench task was not found")
-        return WorkbenchTask.model_validate_json(row["record_json"])
+        return self._task_from_row(row)
 
     def _save_task_locked(self, task: WorkbenchTask) -> None:
+        record = task.model_dump_json()
         self._connection.execute(
             """
-            UPDATE workbench_tasks SET state=?, record_json=?, updated_at=? WHERE id=?
+            UPDATE workbench_tasks
+            SET state=?, record_json=?, record_signature=?, updated_at=? WHERE id=?
             """,
-            (task.state.value, task.model_dump_json(), task.updated_at.isoformat(), task.id),
+            (
+                task.state.value,
+                record,
+                self._sign_record("task", task.id, record),
+                task.updated_at.isoformat(),
+                task.id,
+            ),
         )
 
     def _get_approval_locked(self, approval_id: str) -> WorkbenchApproval:
         row = self._connection.execute(
-            "SELECT record_json FROM workbench_approvals WHERE id=?", (approval_id,)
+            "SELECT * FROM workbench_approvals WHERE id=?", (approval_id,)
         ).fetchone()
         if row is None:
             raise WorkbenchNotFound("workbench approval was not found")
-        return WorkbenchApproval.model_validate_json(row["record_json"])
+        return self._approval_from_row(row)
 
     def _save_approval_locked(self, approval: WorkbenchApproval) -> None:
+        record = approval.model_dump_json()
         self._connection.execute(
-            "UPDATE workbench_approvals SET status=?, record_json=? WHERE id=?",
-            (approval.status, approval.model_dump_json(), approval.id),
+            """
+            UPDATE workbench_approvals
+            SET status=?, record_json=?, record_signature=? WHERE id=?
+            """,
+            (
+                approval.status,
+                record,
+                self._sign_record("approval", approval.id, record),
+                approval.id,
+            ),
         )
 
     def _set_approval_status(self, approval: WorkbenchApproval, status: str) -> WorkbenchApproval:
@@ -715,3 +978,216 @@ class WorkbenchStore:
         with self._lock, self._connection:
             self._save_approval_locked(changed)
         return changed
+
+    def _ensure_record_signature_columns(self) -> None:
+        for table in (
+            "workbench_tasks",
+            "workbench_approvals",
+            "workbench_runs",
+            "workbench_submissions",
+        ):
+            columns = {
+                str(row["name"])
+                for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if "record_signature" not in columns:
+                self._connection.execute(f"ALTER TABLE {table} ADD COLUMN record_signature TEXT")
+
+    def _ensure_control_integrity(self) -> None:
+        columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(workbench_control)").fetchall()
+        }
+        additions = {
+            "audit_sequence": "INTEGER NOT NULL DEFAULT 0",
+            "audit_hash": "TEXT",
+            "record_signature": "TEXT",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                self._connection.execute(
+                    f"ALTER TABLE workbench_control ADD COLUMN {name} {declaration}"
+                )
+        row = self._connection.execute(
+            "SELECT * FROM workbench_control WHERE name='emergency_stop'"
+        ).fetchone()
+        if row is None:
+            raise WorkbenchConflict("emergency control state is missing")
+        if row["record_signature"] is None:
+            task_count = int(
+                self._connection.execute(
+                    "SELECT COUNT(*) AS count FROM workbench_tasks"
+                ).fetchone()["count"]
+            )
+            event_count = int(
+                self._connection.execute(
+                    "SELECT COUNT(*) AS count FROM workbench_control_events"
+                ).fetchone()["count"]
+            )
+            if (
+                task_count != 0
+                or event_count != 0
+                or row["value"] != "false"
+                or int(row["audit_sequence"]) != 0
+                or row["audit_hash"] is not None
+            ):
+                raise WorkbenchConflict("unsigned emergency control state cannot be trusted")
+            record = self._control_record(row)
+            self._connection.execute(
+                """
+                UPDATE workbench_control SET record_signature=?
+                WHERE name='emergency_stop'
+                """,
+                (self._sign_record("control", "emergency_stop", record),),
+            )
+
+    @staticmethod
+    def _control_record(row: sqlite3.Row) -> str:
+        return canonical_json(
+            {
+                "name": row["name"],
+                "value": row["value"],
+                "updated_at": row["updated_at"],
+                "audit_sequence": int(row["audit_sequence"]),
+                "audit_hash": row["audit_hash"],
+            }
+        )
+
+    def _verified_control_locked(self) -> sqlite3.Row:
+        row = self._connection.execute(
+            "SELECT * FROM workbench_control WHERE name='emergency_stop'"
+        ).fetchone()
+        if row is None or row["value"] not in {"true", "false"}:
+            raise WorkbenchConflict("emergency control state is invalid")
+        signature = row["record_signature"]
+        expected = self._sign_record("control", "emergency_stop", self._control_record(row))
+        if not isinstance(signature, str) or not hmac.compare_digest(signature, expected):
+            raise WorkbenchConflict("emergency control state signature is invalid")
+        return row
+
+    def _verify_control_events_locked(self, control: sqlite3.Row) -> list[dict[str, object]]:
+        rows = self._connection.execute(
+            "SELECT * FROM workbench_control_events ORDER BY sequence"
+        ).fetchall()
+        events: list[dict[str, object]] = []
+        previous_hash: str | None = None
+        for expected_sequence, row in enumerate(rows, start=1):
+            record = self._verify_record(
+                "control_event",
+                str(row["sequence"]),
+                row["record_json"],
+                row["record_signature"],
+            )
+            try:
+                payload = json.loads(record)
+            except json.JSONDecodeError as exc:
+                raise WorkbenchConflict("control audit record is malformed") from exc
+            if (
+                not isinstance(payload, dict)
+                or int(row["sequence"]) != expected_sequence
+                or payload.get("sequence") != expected_sequence
+                or row["action"] != payload.get("action")
+                or row["actor_id"] != payload.get("actor_id")
+                or row["created_at"] != payload.get("created_at")
+                or payload.get("previous_hash") != previous_hash
+                or row["record_hash"] != content_digest(payload)
+            ):
+                raise WorkbenchConflict("control audit chain is invalid")
+            previous_hash = str(row["record_hash"])
+            events.append({**payload, "record_hash": previous_hash})
+        if int(control["audit_sequence"]) != len(events) or control["audit_hash"] != previous_hash:
+            raise WorkbenchConflict("emergency control audit anchor is invalid")
+        return events
+
+    def _sign_record(self, domain: str, record_id: str, record_json: str) -> str:
+        payload = {
+            "schema": "liltweak-workbench-authenticated-row-v1",
+            "domain": domain,
+            "record_id": record_id,
+            "record_json": record_json,
+        }
+        return hmac.new(
+            self._signing_key,
+            content_digest(payload).encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    def _verify_record(
+        self,
+        domain: str,
+        record_id: object,
+        record_json: object,
+        signature: object,
+    ) -> str:
+        if not isinstance(record_id, str) or not isinstance(record_json, str):
+            raise WorkbenchConflict("authenticated Workbench row is malformed")
+        if not isinstance(signature, str) or not hmac.compare_digest(
+            signature,
+            self._sign_record(domain, record_id, record_json),
+        ):
+            raise WorkbenchConflict("authenticated Workbench row signature is invalid")
+        return record_json
+
+    def _task_from_row(self, row: sqlite3.Row) -> WorkbenchTask:
+        record = self._verify_record("task", row["id"], row["record_json"], row["record_signature"])
+        task = WorkbenchTask.model_validate_json(record)
+        if (
+            row["id"] != task.id
+            or row["task_digest"] != task.task_digest
+            or row["state"] != task.state.value
+            or row["created_at"] != task.created_at.isoformat()
+            or row["updated_at"] != task.updated_at.isoformat()
+        ):
+            raise WorkbenchConflict("authenticated Workbench task columns do not match")
+        return task
+
+    def _approval_from_row(self, row: sqlite3.Row) -> WorkbenchApproval:
+        record = self._verify_record(
+            "approval", row["id"], row["record_json"], row["record_signature"]
+        )
+        approval = WorkbenchApproval.model_validate_json(record)
+        if (
+            row["id"] != approval.id
+            or row["task_id"] != approval.task_id
+            or row["status"] != approval.status
+            or row["approval_digest"] != approval.approval_digest
+            or row["created_at"] != approval.created_at.isoformat()
+        ):
+            raise WorkbenchConflict("authenticated Workbench approval columns do not match")
+        return approval
+
+    def _run_from_row(self, row: sqlite3.Row) -> ToolRunRecord:
+        record = self._verify_record("run", row["id"], row["record_json"], row["record_signature"])
+        run = ToolRunRecord.model_validate_json(record)
+        if (
+            row["id"] != run.id
+            or row["task_id"] != run.task_id
+            or int(row["attempt"]) != run.attempt
+            or row["tool_id"] != run.tool_id
+            or row["request_digest"] != run.request_digest
+            or row["created_at"] != run.started_at.isoformat()
+        ):
+            raise WorkbenchConflict("authenticated Workbench run columns do not match")
+        return run
+
+    def _submission_from_row(self, row: sqlite3.Row) -> CandidateSubmission:
+        record = self._verify_record(
+            "submission", row["id"], row["record_json"], row["record_signature"]
+        )
+        submission = CandidateSubmission.model_validate_json(record)
+        if (
+            row["id"] != submission.id
+            or row["task_id"] != submission.task_id
+            or bool(row["locked"]) != submission.locked
+            or row["submission_digest"] != submission.submission_digest
+            or row["created_at"] != submission.created_at.isoformat()
+        ):
+            raise WorkbenchConflict("authenticated Workbench submission columns do not match")
+        return submission
+
+    def _sign_anchor(self, payload: dict[str, object]) -> str:
+        return hmac.new(
+            self._signing_key,
+            content_digest(payload).encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()

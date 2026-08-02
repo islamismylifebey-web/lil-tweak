@@ -258,7 +258,7 @@ def main() -> None:
         settings = Settings.from_env()
         uvicorn.run(
             create_app(settings=settings),
-            host="0.0.0.0",
+            host=settings.server_host,
             port=int(port),
             log_level="info",
         )

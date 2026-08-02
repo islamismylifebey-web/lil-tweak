@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -11,6 +12,9 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from threading import Lock
+
+from .repository import secret_rule_ids
 
 _SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization:\s*bearer\s+)[^\s]+"),
@@ -26,6 +30,8 @@ class SecurityBoundaryError(ValueError):
 
 def redact(value: str, *, limit: int = 100_000) -> str:
     bounded = value[:limit]
+    if secret_rule_ids(bounded.encode("utf-8", errors="replace")):
+        return "[REDACTED: credential-shaped output omitted]"
     for pattern in _SECRET_PATTERNS:
         bounded = pattern.sub(
             lambda match: f"{match.group(1) if match.groups() else ''}[REDACTED]",
@@ -59,6 +65,8 @@ class WorkspacePathGuard:
             path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts)
         ):
             raise SecurityBoundaryError("workspace path must be canonical and relative")
+        if any(part.casefold() == ".git" for part in path.parts):
+            raise SecurityBoundaryError("Git control directories are prohibited in task workspaces")
         return path
 
     def resolve(self, value: str, *, allow_missing: bool = False) -> Path:
@@ -91,6 +99,11 @@ class WorkspacePathGuard:
         count = 0
         total = 0
         for path in self.root.rglob("*"):
+            relative = path.relative_to(self.root)
+            if any(part.casefold() == ".git" for part in relative.parts):
+                raise SecurityBoundaryError(
+                    "task workspace contains a prohibited Git control directory"
+                )
             metadata = path.lstat()
             if stat.S_ISLNK(metadata.st_mode):
                 raise SecurityBoundaryError("task workspace contains a symlink")
@@ -122,6 +135,12 @@ class SessionManager:
         self.ttl_seconds = ttl_seconds
 
     def create(self, actor_id: str) -> tuple[Session, str]:
+        if (
+            not actor_id
+            or len(actor_id) > 128
+            or any(ord(character) < 32 or ord(character) == 127 for character in actor_id)
+        ):
+            raise SecurityBoundaryError("session actor identifier is invalid")
         now = int(time.time())
         session_id = secrets.token_urlsafe(24)
         session = Session(
@@ -132,25 +151,49 @@ class SessionManager:
             ).hexdigest(),
             expires_at=now + self.ttl_seconds,
         )
-        payload = f"{session.session_id}.{session.actor_id}.{int(session.expires_at)}"
-        signature = hmac.new(self._key, payload.encode("utf-8"), hashlib.sha256).digest()
-        cookie = (
-            base64.urlsafe_b64encode(payload.encode("utf-8") + b"." + signature)
-            .decode()
-            .rstrip("=")
+        payload = json.dumps(
+            {
+                "actor": session.actor_id,
+                "expires": int(session.expires_at),
+                "session": session.session_id,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
         )
+        signature = hmac.new(self._key, payload.encode("utf-8"), hashlib.sha256).digest()
+        encoded_payload = base64.urlsafe_b64encode(payload.encode("utf-8")).decode().rstrip("=")
+        encoded_signature = base64.urlsafe_b64encode(signature).decode().rstrip("=")
+        cookie = f"{encoded_payload}.{encoded_signature}"
         return session, cookie
+
+    @staticmethod
+    def _decode_component(value: str) -> bytes:
+        if re.fullmatch(r"[A-Za-z0-9_-]+", value) is None:
+            raise ValueError("session component is not URL-safe base64")
+        return base64.urlsafe_b64decode(value + ("=" * (-len(value) % 4)))
 
     def verify(self, cookie: str | None) -> Session:
         if not cookie:
             raise SecurityBoundaryError("owner session is required")
         try:
-            raw = base64.urlsafe_b64decode(cookie + ("=" * (-len(cookie) % 4)))
-            payload_raw, signature = raw.rsplit(b".", 1)
-            payload = payload_raw.decode("utf-8")
-            session_id, actor_id, expires_text = payload.split(".", 2)
-            expires_at = float(expires_text)
-        except (ValueError, UnicodeDecodeError) as exc:
+            payload_text, signature_text = cookie.split(".")
+            payload_raw = self._decode_component(payload_text)
+            signature = self._decode_component(signature_text)
+            payload = json.loads(payload_raw.decode("utf-8"))
+            if not isinstance(payload, dict) or set(payload) != {"actor", "expires", "session"}:
+                raise ValueError("session payload shape is invalid")
+            session_id = payload["session"]
+            actor_id = payload["actor"]
+            expires_at = float(payload["expires"])
+            if (
+                not isinstance(session_id, str)
+                or not isinstance(actor_id, str)
+                or not session_id
+                or not actor_id
+            ):
+                raise ValueError("session payload values are invalid")
+        except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise SecurityBoundaryError("owner session is invalid") from exc
         expected = hmac.new(self._key, payload_raw, hashlib.sha256).digest()
         if not hmac.compare_digest(signature, expected) or time.time() >= expires_at:
@@ -179,15 +222,17 @@ class SlidingWindowRateLimiter:
         self.limit = limit
         self.window_seconds = window_seconds
         self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
 
     def admit(self, identity: str) -> None:
-        now = time.monotonic()
-        queue = self._requests[identity]
-        while queue and queue[0] <= now - self.window_seconds:
-            queue.popleft()
-        if len(queue) >= self.limit:
-            raise SecurityBoundaryError("rate limit exceeded")
-        queue.append(now)
+        with self._lock:
+            now = time.monotonic()
+            queue = self._requests[identity]
+            while queue and queue[0] <= now - self.window_seconds:
+                queue.popleft()
+            if len(queue) >= self.limit:
+                raise SecurityBoundaryError("rate limit exceeded")
+            queue.append(now)
 
 
 def private_directory(path: Path) -> Path:

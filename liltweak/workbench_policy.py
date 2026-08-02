@@ -12,6 +12,7 @@ from .workbench_contract import (
     ToolRequest,
     WorkbenchMode,
     WorkbenchTask,
+    content_digest,
 )
 from .workbench_security import SecurityBoundaryError
 
@@ -30,6 +31,8 @@ _ALLOWED_EXECUTABLES = frozenset(
         "gcloud",
         "kubectl",
         "curl",
+        "cargo",
+        "go",
     }
 )
 _SHELLS = frozenset({"bash", "sh", "zsh", "fish", "cmd", "powershell", "pwsh"})
@@ -45,6 +48,8 @@ _DENIED_GCP_PHRASES = (
     "iam service-accounts delete",
     "projects delete",
     "projects set-iam-policy",
+    "projects add-iam-policy-binding",
+    "projects remove-iam-policy-binding",
     "billing accounts",
     "billing projects unlink",
     "billing budgets",
@@ -71,7 +76,9 @@ _DENIED_GCP_PHRASES = (
     "run services proxy",
 )
 _OWNER_EDITOR = re.compile(r"(?i)(roles/(?:owner|editor)|--role[=\s]+(?:owner|editor))")
-_SECRET_FLAGS = re.compile(r"(?i)(--key-file|--access-token-file|--credential-file-override)")
+_SECRET_FLAGS = re.compile(
+    r"(?i)(--key-file|--access-token-file|--credential-file-override|--flags-file)"
+)
 _SENSITIVE_ARGUMENTS = re.compile(
     r"(?i)(authorization:\s*bearer|x-goog-api-key|access[_-]?token[=:]|"
     r"api[_-]?key[=:]|client[_-]?secret[=:]|password[=:]|ya29\.)"
@@ -110,6 +117,15 @@ class GcpCommandGuard:
                 if identity_project != exam.authorized_project:
                     raise ToolPolicyError("GCP service account belongs to another project")
         if command.executable == "gcloud":
+            for flag in (
+                "--project",
+                "--impersonate-service-account",
+                "--billing-project",
+                "--region",
+                "--zone",
+            ):
+                if len(self._flag_values(args, flag)) > 1:
+                    raise ToolPolicyError(f"duplicate gcloud flag is prohibited: {flag}")
             project = self._flag(args, "--project")
             identity = self._flag(args, "--impersonate-service-account")
             if project != exam.authorized_project:
@@ -141,13 +157,19 @@ class GcpCommandGuard:
             raise ToolPolicyError("internet-wide administrative exposure is prohibited")
 
     @staticmethod
-    def _optional_flag(args: list[str], name: str) -> str | None:
+    def _flag_values(args: list[str], name: str) -> list[str]:
+        values: list[str] = []
         for index, value in enumerate(args):
             if value == name and index + 1 < len(args):
-                return args[index + 1]
-            if value.startswith(f"{name}="):
-                return value.split("=", 1)[1]
-        return None
+                values.append(args[index + 1])
+            elif value.startswith(f"{name}="):
+                values.append(value.split("=", 1)[1])
+        return values
+
+    @staticmethod
+    def _optional_flag(args: list[str], name: str) -> str | None:
+        values = GcpCommandGuard._flag_values(args, name)
+        return values[0] if values else None
 
     @classmethod
     def _flag(cls, args: list[str], name: str) -> str:
@@ -161,6 +183,17 @@ class ToolPolicyBroker:
     def __init__(self, *, allowed_executables: frozenset[str] = _ALLOWED_EXECUTABLES) -> None:
         self.allowed_executables = allowed_executables
         self.gcp = GcpCommandGuard()
+
+    @property
+    def policy_digest(self) -> str:
+        return content_digest(
+            {
+                "schema": "liltweak-workbench-tool-policy-v2",
+                "allowed_executables": sorted(self.allowed_executables),
+                "gcp_execution": "deferred_fail_closed",
+                "network_default": NetworkMode.DENIED.value,
+            }
+        )
 
     def authorize(self, task: WorkbenchTask, request: ToolRequest) -> PolicyDecision:
         if request.kind != ToolKind.COMMAND:
@@ -196,8 +229,17 @@ class ToolPolicyBroker:
         if task.imported.mode == WorkbenchMode.GCP_QUALIFICATION:
             if task.imported.examination is None:
                 raise ToolPolicyError("GCP examination binding is missing")
-            if executable in {"gcloud", "kubectl"} and command.network != NetworkMode.TASK_SCOPED:
+            if executable in {"curl", "kubectl"}:
+                raise ToolPolicyError(
+                    "GCP direct HTTP and kubectl clients are outside the project-bound gcloud "
+                    "policy surface; qualification remains deferred"
+                )
+            if executable == "gcloud" and command.network != NetworkMode.TASK_SCOPED:
                 raise ToolPolicyError("GCP clients require the task-scoped network namespace")
+            if command.network == NetworkMode.TASK_SCOPED and executable != "gcloud":
+                raise ToolPolicyError(
+                    "GCP network access is limited to the project-bound gcloud policy surface"
+                )
             self.gcp.validate(command, task.imported.examination)
         elif executable in {"gcloud", "kubectl"}:
             raise ToolPolicyError("cloud commands require GCP qualification mode")

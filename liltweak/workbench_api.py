@@ -21,7 +21,6 @@ from .workbench_agent import WorkbenchModelError
 from .workbench_contract import (
     ApprovalDecision,
     CandidateSubmission,
-    TaskImport,
     WorkbenchApproval,
     WorkbenchEvidence,
     WorkbenchHealth,
@@ -29,6 +28,10 @@ from .workbench_contract import (
 )
 from .workbench_executor import ExecutorUnavailableError, ToolExecutionError
 from .workbench_policy import ToolPolicyError
+from .workbench_repository import (
+    WorkbenchRepositoryError,
+    WorkbenchRepositoryInspection,
+)
 from .workbench_security import (
     SecurityBoundaryError,
     Session,
@@ -68,6 +71,19 @@ class ExecuteRequest(ApiSchema):
 class EmergencyResponse(ApiSchema):
     emergency_stopped: bool
     canceled_tasks: list[str]
+
+
+class EmergencyResetRequest(ApiSchema):
+    owner_key: str = Field(min_length=1, max_length=8_192)
+
+
+class RepositoryInspectionRequest(ApiSchema):
+    direction: str = Field(default="", max_length=32_000)
+
+
+class RepositoryTaskRequest(ApiSchema):
+    title: str = Field(min_length=1, max_length=256)
+    direction: str = Field(min_length=1, max_length=32_000)
 
 
 def mount_workbench(
@@ -167,12 +183,43 @@ def mount_workbench(
     ) -> WorkbenchHealth:
         return controller.health(task_id)
 
-    @router.post("/tasks", response_model=WorkbenchTask, status_code=202)
-    async def receive_task(
-        body: TaskImport,
+    @router.get("/repositories")
+    async def list_repositories(
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> dict[str, object]:
+        return {"repository_ids": controller.repository_ids}
+
+    @router.post(
+        "/repositories/{repository_id}/inspect",
+        response_model=WorkbenchRepositoryInspection,
+    )
+    async def inspect_repository(
+        repository_id: str,
+        body: RepositoryInspectionRequest,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> WorkbenchRepositoryInspection:
+        return await run_in_threadpool(
+            controller.inspect_repository,
+            repository_id,
+            direction=body.direction,
+        )
+
+    @router.post(
+        "/repositories/{repository_id}/tasks",
+        response_model=WorkbenchTask,
+        status_code=202,
+    )
+    async def receive_repository_task(
+        repository_id: str,
+        body: RepositoryTaskRequest,
         _session: Annotated[Session, Depends(require_mutation)],
     ) -> WorkbenchTask:
-        return controller.receive(body)
+        return await run_in_threadpool(
+            controller.receive_repository_task,
+            repository_id=repository_id,
+            title=body.title,
+            direction=body.direction,
+        )
 
     @router.get("/tasks", response_model=list[WorkbenchTask])
     async def list_tasks(
@@ -187,6 +234,19 @@ def mount_workbench(
         _session: Annotated[Session, Depends(require_session)],
     ) -> WorkbenchTask:
         return controller.store.get_task(task_id)
+
+    @router.get("/tasks/{task_id}/plan")
+    async def get_plan(
+        task_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> dict[str, object]:
+        task = controller.store.get_task(task_id)
+        if task.plan is None or task.plan_digest is None:
+            raise WorkbenchNotFound("exact plan was not produced")
+        return {
+            "plan": task.plan.model_dump(mode="json"),
+            "plan_digest": task.plan_digest,
+        }
 
     @router.post("/tasks/{task_id}/inspect", response_model=WorkbenchTask)
     async def inspect_task(
@@ -262,6 +322,20 @@ def mount_workbench(
         canceled = controller.emergency_stop()
         return EmergencyResponse(emergency_stopped=True, canceled_tasks=canceled)
 
+    @router.post("/emergency-stop/reset", response_model=EmergencyResponse)
+    async def reset_emergency_stop(
+        body: EmergencyResetRequest,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> EmergencyResponse:
+        if not settings.dev_api_key:
+            raise HTTPException(status_code=503, detail="owner authentication is not configured")
+        actual = hashlib.sha256(body.owner_key.encode()).digest()
+        expected = hashlib.sha256(settings.dev_api_key.encode()).digest()
+        if not secrets.compare_digest(actual, expected):
+            raise HTTPException(status_code=401, detail="owner reauthentication failed")
+        controller.reset_emergency_stop()
+        return EmergencyResponse(emergency_stopped=False, canceled_tasks=[])
+
     @router.get("/tasks/{task_id}/approvals/{approval_id}", response_model=WorkbenchApproval)
     async def get_approval(
         task_id: str,
@@ -272,6 +346,17 @@ def mount_workbench(
         if approval.task_id != task_id:
             raise WorkbenchNotFound("approval does not belong to this task")
         return approval
+
+    @router.post(
+        "/tasks/{task_id}/approvals/{approval_id}/reissue",
+        response_model=WorkbenchApproval,
+    )
+    async def reissue_expired_approval(
+        task_id: str,
+        approval_id: str,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> WorkbenchApproval:
+        return controller.reissue_expired_approval(task_id, approval_id)
 
     @router.get("/tasks/{task_id}/runs")
     async def list_runs(
@@ -336,6 +421,22 @@ def mount_workbench(
             headers={
                 "Content-Disposition": (
                     f'attachment; filename="{task_id.replace(":", "-")}-evidence.jsonl"'
+                )
+            },
+        )
+
+    @router.get("/tasks/{task_id}/patch/export")
+    async def export_patch(
+        task_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> PlainTextResponse:
+        patch = controller.export_patch(task_id)
+        return PlainTextResponse(
+            patch,
+            media_type="text/x-diff",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{task_id.replace(":", "-")}-changes.patch"'
                 )
             },
         )
@@ -410,6 +511,7 @@ def mount_workbench(
         ExecutorUnavailableError,
         ToolExecutionError,
         ToolPolicyError,
+        WorkbenchRepositoryError,
         SecurityBoundaryError,
     ):
         app.add_exception_handler(

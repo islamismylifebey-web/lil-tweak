@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
+import hmac
 import os
 import re
 import shutil
-import signal
+import subprocess
 import tempfile
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from .repository import secret_rule_ids
 from .workbench_contract import (
     NetworkMode,
     ToolKind,
@@ -49,6 +51,15 @@ class ProcessTransport(Protocol):
     @property
     def connected(self) -> bool: ...
 
+    @property
+    def provider_name(self) -> str: ...
+
+    @property
+    def qualification_status(self) -> str: ...
+
+    @property
+    def authorization_digest(self) -> str | None: ...
+
     async def run(
         self,
         *,
@@ -64,13 +75,21 @@ class ProcessTransport(Protocol):
 
 class DisconnectedProcessTransport:
     connected = False
+    provider_name = "none"
+    qualification_status = "unavailable"
+    authorization_digest = None
 
     async def run(self, **_: object) -> ProcessResult:
         raise ExecutorUnavailableError("qualified command runner is not connected")
 
 
 class QualifiedProcessTransport:
-    """Candidate transport. Construct only after independent runner qualification."""
+    """Dormant transport descriptor; it cannot authorize a runner connection.
+
+    A caller-supplied digest and assertion are not runner qualification. A future provider must
+    verify an independently signed qualification decision and enforce the bound sandbox and
+    network policy before it may implement ``ProcessTransport.connected`` as true.
+    """
 
     def __init__(
         self,
@@ -104,13 +123,17 @@ class QualifiedProcessTransport:
             raise ValueError("qualified transport prefix is invalid")
         if not network_namespace_enforced:
             raise ValueError("qualified transport requires enforced network namespaces")
-        self._prefix = sandbox_prefix
-        self._qualification_digest = qualification_digest
-        self._connected = True
+        self.sandbox_prefix = sandbox_prefix
+        self.qualification_digest = qualification_digest
+        self.network_namespace_enforced = network_namespace_enforced
+
+    provider_name = "dormant-qualified-descriptor"
+    qualification_status = "unqualified"
+    authorization_digest = None
 
     @property
     def connected(self) -> bool:
-        return self._connected
+        return False
 
     async def run(
         self,
@@ -123,106 +146,9 @@ class QualifiedProcessTransport:
         network: NetworkMode,
         cancel_event: asyncio.Event,
     ) -> ProcessResult:
-        environment = {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "LANG": "C.UTF-8",
-            "LC_ALL": "C.UTF-8",
-            "HOME": str(cwd / ".task-home"),
-            "TMPDIR": str(cwd / ".tmp"),
-            "LILTWEAK_RUNNER_QUALIFICATION_DIGEST": self._qualification_digest,
-            "LILTWEAK_NETWORK_MODE": network.value,
-        }
-        Path(environment["HOME"]).mkdir(mode=0o700, exist_ok=True)
-        Path(environment["TMPDIR"]).mkdir(mode=0o700, exist_ok=True)
-        process = await asyncio.create_subprocess_exec(
-            *self._prefix,
-            executable,
-            *args,
-            cwd=cwd,
-            env=environment,
-            stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,
+        raise ExecutorUnavailableError(
+            "no independently qualified Workbench runner provider is implemented"
         )
-        if process.stdout is None or process.stderr is None:
-            self._terminate_tree(process.pid)
-            raise ToolExecutionError("bounded output pipes were not created")
-        budget = {"remaining": output_byte_limit}
-        budget_lock = asyncio.Lock()
-        overflow = asyncio.Event()
-        stdout_capture = asyncio.create_task(
-            self._capture(process.stdout, budget, budget_lock, overflow)
-        )
-        stderr_capture = asyncio.create_task(
-            self._capture(process.stderr, budget, budget_lock, overflow)
-        )
-        process_wait = asyncio.create_task(process.wait())
-        cancel_wait = asyncio.create_task(cancel_event.wait())
-        overflow_wait = asyncio.create_task(overflow.wait())
-        timed_out = False
-        canceled = False
-        try:
-            done, _ = await asyncio.wait(
-                {process_wait, cancel_wait, overflow_wait},
-                timeout=timeout_seconds,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if process_wait not in done:
-                timed_out = not cancel_event.is_set() and not overflow.is_set()
-                canceled = cancel_event.is_set()
-                await self._terminate_and_wait(process)
-            stdout, stderr = await asyncio.gather(stdout_capture, stderr_capture)
-        finally:
-            cancel_wait.cancel()
-            overflow_wait.cancel()
-            if not process_wait.done():
-                process_wait.cancel()
-        if overflow.is_set():
-            stderr += b"\n[OUTPUT LIMIT REACHED]"
-            if process.returncode in {0, None}:
-                return ProcessResult(125, stdout, stderr, timed_out, canceled)
-        return ProcessResult(process.returncode, stdout, stderr, timed_out, canceled)
-
-    @staticmethod
-    async def _capture(
-        stream: asyncio.StreamReader,
-        budget: dict[str, int],
-        lock: asyncio.Lock,
-        overflow: asyncio.Event,
-    ) -> bytes:
-        captured = bytearray()
-        while True:
-            chunk = await stream.read(16_384)
-            if not chunk:
-                return bytes(captured)
-            async with lock:
-                remaining = budget["remaining"]
-                if remaining <= 0:
-                    overflow.set()
-                    continue
-                admitted = chunk[:remaining]
-                budget["remaining"] = remaining - len(admitted)
-                captured.extend(admitted)
-                if len(admitted) != len(chunk):
-                    overflow.set()
-
-    @classmethod
-    async def _terminate_and_wait(cls, process: asyncio.subprocess.Process) -> None:
-        cls._terminate_tree(process.pid)
-        try:
-            await asyncio.wait_for(process.wait(), timeout=2)
-        except TimeoutError:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            await process.wait()
-
-    @staticmethod
-    def _terminate_tree(process_id: int) -> None:
-        try:
-            os.killpg(process_id, signal.SIGTERM)
-        except ProcessLookupError:
-            return
 
 
 class TaskWorkspaceManager:
@@ -282,6 +208,199 @@ class TaskWorkspaceManager:
             raise SecurityBoundaryError("snapshot deletion target is invalid")
         shutil.rmtree(resolved)
 
+    def discard_task_workspace(self, task_id: str) -> None:
+        target = (self.root / task_id).resolve()
+        if target == self.root or not target.is_relative_to(self.root):
+            raise SecurityBoundaryError("task workspace deletion target is invalid")
+        if target.exists():
+            if target.is_symlink() or not target.is_dir():
+                raise SecurityBoundaryError("task workspace deletion target is unsafe")
+            shutil.rmtree(target)
+
+    def expected_artifacts(
+        self, task_id: str, paths: tuple[str, ...]
+    ) -> tuple[dict[str, object], ...]:
+        guard = self.guard(task_id)
+        verified: list[dict[str, object]] = []
+        for relative in paths:
+            target = guard.resolve(relative)
+            if not target.is_file():
+                raise ToolExecutionError(f"expected artifact is missing: {relative}")
+            if target.stat().st_size > 50_000_000:
+                raise ToolExecutionError(f"expected artifact exceeds the size limit: {relative}")
+            data = target.read_bytes()
+            verified.append(
+                {
+                    "path": relative,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                    "executable": bool(target.stat().st_mode & 0o111),
+                }
+            )
+        return tuple(verified)
+
+    def verify_artifacts(
+        self,
+        task_id: str,
+        manifests: object,
+    ) -> tuple[dict[str, object], ...]:
+        if not isinstance(manifests, list):
+            raise ToolExecutionError("authenticated artifact manifest is invalid")
+        paths: list[str] = []
+        expected: list[dict[str, object]] = []
+        for item in manifests:
+            if not isinstance(item, Mapping) or set(item) != {
+                "path",
+                "sha256",
+                "bytes",
+                "executable",
+            }:
+                raise ToolExecutionError("authenticated artifact manifest is invalid")
+            path = item["path"]
+            if not isinstance(path, str):
+                raise ToolExecutionError("authenticated artifact path is invalid")
+            paths.append(path)
+            expected.append(dict(item))
+        current = self.expected_artifacts(task_id, tuple(paths))
+        if list(current) != expected:
+            raise ToolExecutionError("verified artifact changed after completion")
+        return current
+
+    def discard_server_transients(self, task_id: str, snapshot: Path) -> tuple[str, ...]:
+        """Remove only newly-created, server-owned Python test caches.
+
+        Baseline paths are never removed, and the candidate cannot extend this allowlist.
+        """
+
+        source = self.task_root(task_id)
+        baseline = self._file_states(snapshot)
+        removed: list[str] = []
+        cache_directories = [
+            path
+            for path in source.rglob("*")
+            if path.is_dir() and path.name in {".pytest_cache", "__pycache__"}
+        ]
+        for directory in sorted(cache_directories, key=lambda item: len(item.parts), reverse=True):
+            relative = directory.relative_to(source).as_posix()
+            baseline_prefix = f"{relative}/"
+            baseline_paths = {
+                path for path in baseline if path == relative or path.startswith(baseline_prefix)
+            }
+            if not baseline_paths:
+                if directory.is_symlink():
+                    raise SecurityBoundaryError("symlink found while removing test transients")
+                shutil.rmtree(directory)
+                removed.append(relative)
+                continue
+            for descendant in sorted(
+                directory.rglob("*"), key=lambda item: len(item.parts), reverse=True
+            ):
+                descendant_relative = descendant.relative_to(source).as_posix()
+                if descendant.is_symlink():
+                    raise SecurityBoundaryError("symlink found while removing test transients")
+                if descendant.is_file() and descendant_relative not in baseline_paths:
+                    descendant.unlink()
+                    removed.append(descendant_relative)
+                elif descendant.is_dir() and not any(
+                    path.startswith(f"{descendant_relative}/") for path in baseline_paths
+                ):
+                    descendant.rmdir()
+        for path in sorted(source.rglob("*.py[co]")):
+            if path.is_symlink() or not path.is_file():
+                raise SecurityBoundaryError("unsafe Python cache file found in task workspace")
+            relative = path.relative_to(source).as_posix()
+            if relative not in baseline:
+                path.unlink()
+                removed.append(relative)
+        return tuple(sorted(removed))
+
+    def generate_patch(
+        self,
+        task_id: str,
+        attempt: int,
+        snapshot: Path,
+    ) -> tuple[str, str, tuple[str, ...]]:
+        """Generate a private, deterministic patch against the recovery snapshot."""
+
+        source = self.task_root(task_id)
+        recovery_root = (self.root / "_recovery").resolve()
+        resolved_snapshot = snapshot.resolve()
+        if not resolved_snapshot.is_relative_to(recovery_root):
+            raise SecurityBoundaryError("patch baseline is outside the recovery root")
+        before = self._file_states(resolved_snapshot)
+        after = self._file_states(source)
+        changed = tuple(
+            sorted(
+                path for path in before.keys() | after.keys() if before.get(path) != after.get(path)
+            )
+        )
+        for relative in changed:
+            state = after.get(relative)
+            if state is not None and secret_rule_ids(state[1]):
+                raise ToolExecutionError(
+                    f"changed file contains secret-shaped material: {relative}"
+                )
+        rendered = self._render_git_patch(resolved_snapshot, source, before, after)
+        if len(rendered) > 8_000_000:
+            raise ToolExecutionError("generated patch exceeds the private artifact limit")
+        if secret_rule_ids(rendered):
+            raise ToolExecutionError("generated patch contains secret-shaped material")
+        self._verify_patch_round_trip(resolved_snapshot, source, rendered)
+        patch_digest = hashlib.sha256(rendered).hexdigest()
+        artifact_root = private_directory(self.root / "_artifacts" / task_id)
+        destination = artifact_root / f"attempt-{attempt}-{patch_digest}.patch"
+        self._atomic_private_write(destination, rendered)
+        return destination.name, patch_digest, changed
+
+    def read_patch(self, task_id: str, artifact_name: str, expected_digest: str) -> str:
+        artifact_root = (self.root / "_artifacts" / task_id).resolve()
+        if re.fullmatch(r"attempt-[1-9][0-9]*-[0-9a-f]{64}\.patch", artifact_name) is None:
+            raise ToolExecutionError("private patch artifact name is invalid")
+        target = (artifact_root / artifact_name).resolve()
+        if not target.is_relative_to(artifact_root) or not target.is_file() or target.is_symlink():
+            raise ToolExecutionError("private patch artifact is unavailable")
+        if target.stat().st_size > 8_000_000:
+            raise ToolExecutionError("private patch artifact exceeds its size limit")
+        rendered = target.read_bytes()
+        if not hmac.compare_digest(hashlib.sha256(rendered).hexdigest(), expected_digest):
+            raise ToolExecutionError("private patch artifact failed authenticated digest check")
+        if secret_rule_ids(rendered):
+            raise ToolExecutionError("private patch artifact contains secret-shaped material")
+        try:
+            return rendered.decode("ascii")
+        except UnicodeDecodeError as exc:
+            raise ToolExecutionError("private patch artifact encoding is invalid") from exc
+
+    @staticmethod
+    def _file_states(root: Path) -> dict[str, tuple[int, bytes]]:
+        files: dict[str, tuple[int, bytes]] = {}
+        for path in sorted(root.rglob("*")):
+            relative = path.relative_to(root)
+            if any(part.casefold() == ".git" for part in relative.parts):
+                raise SecurityBoundaryError("Git control directory found while generating patch")
+            if path.is_symlink():
+                raise SecurityBoundaryError("symlink found while generating patch")
+            if path.is_file():
+                mode = 0o755 if path.stat().st_mode & 0o111 else 0o644
+                files[relative.as_posix()] = (mode, path.read_bytes())
+            elif not path.is_dir():
+                raise SecurityBoundaryError("special file found while generating patch")
+        return files
+
+    @staticmethod
+    def _atomic_private_write(destination: Path, content: bytes) -> None:
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".liltweak-", dir=destination.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary_name, 0o600)
+            os.replace(temporary_name, destination)
+        finally:
+            if os.path.exists(temporary_name):
+                os.unlink(temporary_name)
+
     @staticmethod
     def tree_digest(root: Path) -> str:
         digest = hashlib.sha256()
@@ -293,25 +412,174 @@ class TaskWorkspaceManager:
                 digest.update(b"file\0")
                 digest.update(relative.encode())
                 digest.update(b"\0")
-                digest.update(path.read_bytes())
-            elif path.is_dir():
-                digest.update(b"dir\0")
-                digest.update(relative.encode())
+                digest.update(b"755" if path.stat().st_mode & 0o111 else b"644")
                 digest.update(b"\0")
-            else:
+                digest.update(path.read_bytes())
+            elif not path.is_dir():
                 raise SecurityBoundaryError("special file found while hashing task workspace")
         return digest.hexdigest()
 
+    def _render_git_patch(
+        self,
+        snapshot: Path,
+        source: Path,
+        before: dict[str, tuple[int, bytes]],
+        after: dict[str, tuple[int, bytes]],
+    ) -> bytes:
+        temporary = Path(tempfile.mkdtemp(prefix=".patch-render-", dir=self.root))
+        try:
+            repository = temporary / "repository"
+            shutil.copytree(snapshot, repository, symlinks=False)
+            self._git(("init", "--quiet"), repository)
+            (repository / ".git" / "info" / "attributes").write_text(
+                "* -text -filter -ident !working-tree-encoding !diff\n",
+                encoding="ascii",
+            )
+            self._git(("add", "--all"), repository)
+            for child in repository.iterdir():
+                if child.name == ".git":
+                    continue
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            shutil.copytree(source, repository, dirs_exist_ok=True, symlinks=False)
+            new_paths = sorted(after.keys() - before.keys())
+            for offset in range(0, len(new_paths), 100):
+                self._git(
+                    ("add", "--intent-to-add", "--", *new_paths[offset : offset + 100]),
+                    repository,
+                )
+            return self._git(
+                (
+                    "diff",
+                    "--binary",
+                    "--full-index",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-renames",
+                    "--src-prefix=a/",
+                    "--dst-prefix=b/",
+                    "--",
+                    ".",
+                ),
+                repository,
+            )
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+
+    def _verify_patch_round_trip(self, snapshot: Path, source: Path, patch: bytes) -> None:
+        if not patch:
+            if self.tree_digest(snapshot) != self.tree_digest(source):
+                raise ToolExecutionError("empty patch does not reproduce the final source tree")
+            return
+        temporary = Path(tempfile.mkdtemp(prefix=".patch-verify-", dir=self.root))
+        try:
+            candidate = temporary / "candidate"
+            shutil.copytree(snapshot, candidate, symlinks=False)
+            self._git(("apply", "--check", "--binary", "-"), candidate, input_bytes=patch)
+            self._git(("apply", "--binary", "-"), candidate, input_bytes=patch)
+            if self.tree_digest(candidate) != self.tree_digest(source):
+                raise ToolExecutionError("generated patch failed exact round-trip verification")
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+
+    @staticmethod
+    def _git(
+        args: tuple[str, ...],
+        cwd: Path,
+        *,
+        input_bytes: bytes | None = None,
+    ) -> bytes:
+        binary = shutil.which("git", path="/usr/local/bin:/usr/bin:/bin")
+        if binary is None:
+            raise ToolExecutionError("Git is unavailable for deterministic patch generation")
+        environment = {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "LANG": "C",
+            "LC_ALL": "C",
+        }
+        hardened_configuration = (
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.attributesFile=/dev/null",
+            "-c",
+            "core.excludesFile=/dev/null",
+            "-c",
+            "protocol.allow=never",
+        )
+        try:
+            result = subprocess.run(
+                (str(Path(binary).resolve()), *hardened_configuration, *args),
+                cwd=cwd,
+                env=environment,
+                input=input_bytes,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ToolExecutionError("deterministic Git patch operation failed") from exc
+        if result.returncode != 0:
+            raise ToolExecutionError("deterministic Git patch operation failed")
+        if len(result.stdout) > 8_000_000 or len(result.stderr) > 1_000_000:
+            raise ToolExecutionError("deterministic Git patch operation exceeded output bounds")
+        return result.stdout
+
 
 class BoundedToolExecutor:
-    def __init__(self, workspaces: TaskWorkspaceManager, transport: ProcessTransport) -> None:
+    def __init__(
+        self,
+        workspaces: TaskWorkspaceManager,
+        transport: ProcessTransport,
+        *,
+        allow_test_transport: bool = False,
+    ) -> None:
+        if allow_test_transport and "PYTEST_CURRENT_TEST" not in os.environ:
+            raise ValueError("test transport override is available only inside pytest")
         self.workspaces = workspaces
         self.transport = transport
+        self._allow_test_transport = allow_test_transport
         self._cancel_events: dict[str, asyncio.Event] = {}
 
     @property
     def connected(self) -> bool:
-        return self.transport.connected
+        return bool(
+            self._allow_test_transport
+            and self.transport.connected
+            and self.qualification_status == "qualified"
+            and self.authorization_digest is not None
+        )
+
+    @property
+    def provider_name(self) -> str:
+        return str(getattr(self.transport, "provider_name", type(self.transport).__name__))
+
+    @property
+    def qualification_status(self) -> str:
+        if not self._allow_test_transport:
+            if isinstance(self.transport, DisconnectedProcessTransport):
+                return "unavailable"
+            return "unqualified"
+        value = str(getattr(self.transport, "qualification_status", "unqualified"))
+        return value if value in {"qualified", "unqualified", "unavailable"} else "unqualified"
+
+    @property
+    def authorization_digest(self) -> str | None:
+        if not self._allow_test_transport:
+            return None
+        value = getattr(self.transport, "authorization_digest", None)
+        return (
+            value
+            if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+            else None
+        )
 
     def cancel(self, task_id: str) -> None:
         self._cancel_events.setdefault(task_id, asyncio.Event()).set()
@@ -339,11 +607,11 @@ class BoundedToolExecutor:
         try:
             if canceled:
                 raise ToolExecutionError("task was canceled before tool execution")
+            if not self.connected:
+                raise ExecutorUnavailableError("qualified command runner is disconnected")
             if request.kind == ToolKind.COMMAND:
                 if request.command is None:
                     raise ToolExecutionError("command payload is missing")
-                if not self.transport.connected:
-                    raise ExecutorUnavailableError("qualified command runner is disconnected")
                 command = request.command
                 cwd = guard.resolve(command.working_directory)
                 if not cwd.is_dir():

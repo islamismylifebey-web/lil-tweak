@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS workbench_evidence (
     UNIQUE(task_id, sequence)
 );
 
+CREATE TABLE IF NOT EXISTS workbench_evidence_anchors (
+    task_id TEXT PRIMARY KEY REFERENCES workbench_tasks(id),
+    sequence INTEGER NOT NULL,
+    head_hash TEXT NOT NULL,
+    anchor_signature TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS workbench_submissions (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES workbench_tasks(id),

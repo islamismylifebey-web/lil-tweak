@@ -2,14 +2,23 @@
 
 ## Live Workbench 0.8.0 code-authored extension
 
-The additive private Workbench is served at /workbench when enabled. It reuses Creator
-compilation and routing, then adds immutable task import, a no-tools live planning adapter,
-exact one-time approval, typed workspace and command tools, GCP examination locks, authentic
-evidence, recovery snapshots, and candidate submission locking.
+The additive private Workbench is served at `/workbench` when enabled. It reuses Creator
+compilation and routing, then adds server-owned repository inspection, immutable Git-free task
+copies, a no-tools live planning adapter, exact one-time approval, typed workspace and command
+tools, authentic evidence, recovery snapshots, verified patch export, and candidate submission
+locking.
 
-The model and qualified command transport are disabled by default. The Workbench never treats
-its candidate evidence as Sol's independent GCP verification. See ARCHITECTURE.md,
-SECURITY_BOUNDARIES.md, GCP_EXAMINATION_MODE.md, and BUILDER_HANDOFF.md.
+The model is disabled by default. No independently qualified Workbench runner provider is
+implemented, so command and planned file execution remain disconnected and fail closed. The
+Workbench never treats candidate evidence as independent qualification. GCP is deferred and
+disabled. See `LOCAL_AGENT_ARCHITECTURE.md`, `LIL_TWEAK_LAUNCH_AND_OPERATIONS.md`,
+`LIL_TWEAK_CAPABILITY_DISCOVERY_REPORT.md`, and `LIL_TWEAK_REMAINING_BLOCKERS.md`.
+
+The current Sol High direct build is classified `PARTIALLY OPERATIONAL — BLOCKERS REMAIN`.
+Repository onboarding, private source capture, source-grounded planning context, approvals,
+evidence, recovery controls, and localhost operation are real. Live model planning and qualified
+command execution require the prerequisites documented in `LOCAL_AGENT_MODEL_ACTIVATION.md` and
+`LOCAL_AGENT_RUNNER_QUALIFICATION.md`.
 
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
@@ -199,7 +208,7 @@ under a server-owned workspace:
 
 ```env
 LILTWEAK_WORKSPACE_ROOT=./repositories
-LILTWEAK_REPOSITORIES_JSON={"local:coverall-cie":"coverall","github:owner/project":"snapshots/project"}
+LILTWEAK_REPOSITORIES_JSON={"local:coverall-cie":"coverall","github:owner.project":"snapshots/project"}
 ```
 
 Configure recovery separately:
@@ -316,6 +325,7 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_engineering_trial.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_creator_benchmark.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase6_offline.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase7_offline.py
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python -m scripts.lil_tweak_capability_discovery
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py creator-smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_gauntlet.py --live

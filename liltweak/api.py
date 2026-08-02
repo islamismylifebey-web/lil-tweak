@@ -103,6 +103,7 @@ from .workbench_executor import (
     TaskWorkspaceManager,
 )
 from .workbench_policy import ToolPolicyBroker
+from .workbench_repository import WorkbenchRepositoryRegistry
 from .workbench_store import WorkbenchStore
 
 
@@ -233,7 +234,18 @@ def create_app(
     )
     if settings.workbench_enabled:
         if workbench_controller is None:
-            workbench_store = WorkbenchStore(settings.database_path)
+            workbench_root_key = (
+                creator_key
+                or hashlib.sha256(
+                    settings.dev_api_key.encode("utf-8") + b"LilTweakWorkbenchRootV1"
+                ).digest()
+            )
+            workbench_store = WorkbenchStore(
+                settings.database_path,
+                signing_key=hashlib.sha256(
+                    workbench_root_key + b"LilTweakWorkbenchEvidenceV1"
+                ).digest(),
+            )
             workbench_workspaces = TaskWorkspaceManager(settings.workbench_workspace_root)
             workbench_model = (
                 OpenAIWorkbenchModelAdapter(
@@ -262,6 +274,14 @@ def create_app(
                 owner_id=settings.owner_id,
                 cost_ceiling_usd=settings.workbench_cost_ceiling_usd,
                 authorized_repositories=frozenset(settings.repository_mappings),
+                repository_registry=(
+                    WorkbenchRepositoryRegistry(
+                        settings.workspace_root,
+                        settings.repository_mappings,
+                    )
+                    if settings.repository_mappings
+                    else None
+                ),
             )
         session_key = creator_key
         if session_key is None and settings.dev_api_key:

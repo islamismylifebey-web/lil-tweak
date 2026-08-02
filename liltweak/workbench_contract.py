@@ -106,6 +106,13 @@ class SubmissionStatus(StrEnum):
     BLOCKED = "BLOCKED"
 
 
+class ApprovalPurpose(StrEnum):
+    EXECUTE = "execute"
+    ROLLBACK = "rollback"
+    APPLY_PATCH = "apply_patch"
+    LOCAL_COMMIT = "local_commit"
+
+
 class GcpExamConfig(WorkbenchSchema):
     examination_id: StrictStr = Field(pattern=SAFE_ID)
     examiner: Literal["Sol"] = "Sol"
@@ -135,7 +142,10 @@ class TaskImport(WorkbenchSchema):
     title: StrictStr = Field(min_length=1, max_length=256)
     direction: StrictStr = Field(min_length=1, max_length=32_000)
     repository_id: StrictStr | None = Field(default=None, max_length=512)
+    repository_fingerprint: StrictStr | None = Field(default=None, pattern=SHA256)
     source_snapshot_digest: StrictStr = Field(pattern=SHA256)
+    requires_changes: StrictBool = False
+    acceptance_commands: tuple[StrictStr, ...] = Field(default_factory=tuple, max_length=16)
     examination: GcpExamConfig | None = None
 
     @model_validator(mode="after")
@@ -144,6 +154,21 @@ class TaskImport(WorkbenchSchema):
             raise ValueError("GCP qualification tasks require an examination configuration")
         if self.mode != WorkbenchMode.GCP_QUALIFICATION and self.examination is not None:
             raise ValueError("examination configuration is limited to GCP qualification mode")
+        if self.repository_fingerprint is not None and self.repository_id is None:
+            raise ValueError("repository fingerprint requires a registered repository identity")
+        if self.repository_id is not None and (
+            not self.requires_changes or not self.acceptance_commands
+        ):
+            raise ValueError(
+                "repository tasks require a source change and server-owned acceptance commands"
+            )
+        if any(
+            not command
+            or len(command) > 512
+            or any(ord(character) < 32 or ord(character) == 127 for character in command)
+            for command in self.acceptance_commands
+        ):
+            raise ValueError("acceptance command binding is invalid")
         return self
 
     @property
@@ -220,10 +245,28 @@ class WorkbenchPlan(WorkbenchSchema):
         ids = [step.tool_id for step in self.steps]
         if len(ids) != len(set(ids)):
             raise ValueError("tool ids must be unique")
-        if not any(step.phase == StepPhase.TEST and step.required for step in self.steps):
-            raise ValueError("a plan requires at least one required test")
-        if not any(step.phase == StepPhase.VERIFICATION and step.required for step in self.steps):
-            raise ValueError("a plan requires at least one required verification")
+        phase_order = {
+            StepPhase.INSPECTION: 0,
+            StepPhase.MUTATION: 1,
+            StepPhase.TEST: 2,
+            StepPhase.VERIFICATION: 3,
+        }
+        observed = [phase_order[step.phase] for step in self.steps]
+        if observed != sorted(observed):
+            raise ValueError("plan phases must be ordered inspection, mutation, test, verification")
+        if any(
+            step.kind in {ToolKind.WRITE_FILE, ToolKind.APPLY_PATCH}
+            and step.phase != StepPhase.MUTATION
+            for step in self.steps
+        ):
+            raise ValueError("file mutation tools are limited to the mutation phase")
+        required_commands = {
+            step.phase for step in self.steps if step.required and step.kind == ToolKind.COMMAND
+        }
+        if StepPhase.TEST not in required_commands:
+            raise ValueError("a plan requires at least one required command test")
+        if StepPhase.VERIFICATION not in required_commands:
+            raise ValueError("a plan requires at least one required command verification")
         return self
 
     @property
@@ -276,13 +319,20 @@ class ApprovalDecision(WorkbenchSchema):
 class WorkbenchApproval(WorkbenchSchema):
     id: StrictStr = Field(pattern=SAFE_ID)
     task_id: StrictStr = Field(pattern=SAFE_ID)
-    purpose: Literal["execute", "rollback"] = "execute"
+    task_digest: StrictStr = Field(pattern=SHA256)
+    purpose: ApprovalPurpose = ApprovalPurpose.EXECUTE
     plan_digest: StrictStr = Field(pattern=SHA256)
     source_snapshot_digest: StrictStr = Field(pattern=SHA256)
+    repository_id: StrictStr | None = Field(default=None, max_length=512)
+    examination_digest: StrictStr | None = Field(default=None, pattern=SHA256)
     project: StrictStr | None = None
     candidate_identity: StrictStr | None = None
     execution_attempt: StrictInt = Field(ge=1, le=100)
     approved_tool_digests: tuple[StrictStr, ...] = Field(min_length=1, max_length=64)
+    policy_digest: StrictStr = Field(pattern=SHA256)
+    runner_grant_digest: StrictStr | None = Field(default=None, pattern=SHA256)
+    network_mode: NetworkMode = NetworkMode.DENIED
+    nonce: StrictStr = Field(pattern=SAFE_ID)
     approval_digest: StrictStr = Field(pattern=SHA256)
     status: Literal["pending", "approved", "rejected", "revision", "consumed", "expired"]
     approved_by: StrictStr | None = Field(default=None, max_length=128)
@@ -298,13 +348,20 @@ class WorkbenchApproval(WorkbenchSchema):
         expected = content_digest(
             {
                 "task_id": self.task_id,
-                "purpose": self.purpose,
+                "task_digest": self.task_digest,
+                "purpose": self.purpose.value,
                 "plan_digest": self.plan_digest,
                 "source_snapshot_digest": self.source_snapshot_digest,
+                "repository_id": self.repository_id,
+                "examination_digest": self.examination_digest,
                 "project": self.project,
                 "candidate_identity": self.candidate_identity,
                 "execution_attempt": self.execution_attempt,
                 "approved_tool_digests": self.approved_tool_digests,
+                "policy_digest": self.policy_digest,
+                "runner_grant_digest": self.runner_grant_digest,
+                "network_mode": self.network_mode.value,
+                "nonce": self.nonce,
             }
         )
         if self.approval_digest != expected:
@@ -424,6 +481,11 @@ class WorkbenchHealth(WorkbenchSchema):
     provider: StrictStr
     model: StrictStr
     reasoning_tier: StrictStr
+    model_connected: StrictBool
+    model_status: Literal["connected", "disabled", "failed"]
+    runner_provider: StrictStr
+    runner_qualification: Literal["qualified", "unqualified", "unavailable"]
+    runner_connection: Literal["connected", "disconnected"]
     runner_connected: StrictBool
     repository: StrictStr | None
     project: StrictStr | None
@@ -432,4 +494,5 @@ class WorkbenchHealth(WorkbenchSchema):
     execution_permission: StrictBool
     cost_ceiling_usd: float = Field(ge=0)
     emergency_stopped: StrictBool
+    evidence_integrity: Literal["durable_hmac", "ephemeral_hmac", "invalid"]
     missing_prerequisites: tuple[StrictStr, ...] = ()

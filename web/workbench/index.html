@@ -27,43 +27,38 @@
     </header>
     <section id="status-strip" class="status-strip" aria-label="System status"></section>
     <p id="loading-status" class="loading-status" role="status" aria-live="polite" hidden></p>
-    <nav class="tabs" aria-label="Workbench sections">
-      <button data-view="new-task">New Task</button><button data-view="active-task">Active Task</button><button data-view="gcp">GCP Qualification</button><button data-view="projects">Projects / Repositories</button><button data-view="approvals">Approvals</button><button data-view="runs">Runs</button><button data-view="evidence">Evidence / Artifacts</button><button data-view="recovery">Recovery</button><button data-view="audit">Audit</button><button data-view="settings">Settings</button>
+    <nav class="tabs" role="tablist" aria-label="Workbench sections">
+      <button id="tab-new-task" role="tab" aria-controls="new-task" aria-selected="true" data-view="new-task">New Task</button><button id="tab-active-task" role="tab" aria-controls="active-task" aria-selected="false" data-view="active-task">Active Task</button><button id="tab-projects" role="tab" aria-controls="projects" aria-selected="false" data-view="projects">Projects / Repositories</button><button id="tab-plan" role="tab" aria-controls="exact-plan" aria-selected="false" data-view="exact-plan">Exact Plan</button><button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected="false" data-view="approvals">Approvals</button><button id="tab-diff" role="tab" aria-controls="diff" aria-selected="false" data-view="diff">Diff</button><button id="tab-runs" role="tab" aria-controls="runs" aria-selected="false" data-view="runs">Runs / Tests</button><button id="tab-evidence" role="tab" aria-controls="evidence" aria-selected="false" data-view="evidence">Evidence / Artifacts</button><button id="tab-recovery" role="tab" aria-controls="recovery" aria-selected="false" data-view="recovery">Recovery</button><button id="tab-audit" role="tab" aria-controls="audit" aria-selected="false" data-view="audit">Audit</button><button id="tab-gcp" role="tab" aria-controls="gcp" aria-selected="false" data-view="gcp">GCP Qualification</button><button id="tab-settings" role="tab" aria-controls="settings" aria-selected="false" data-view="settings">Settings</button>
     </nav>
     <main id="main" tabindex="-1">
-      <section id="new-task" class="view card">
-        <h2>Import One Immutable Task</h2>
+      <section id="new-task" class="view card" role="tabpanel" aria-labelledby="tab-new-task">
+        <h2>Create One Repository-Bound Task</h2>
         <form id="task-form" class="form-grid">
-          <label>Mode<select id="task-mode"><option value="engineering">Engineering</option><option value="gcp_qualification">GCP Qualification</option></select></label>
+          <label>Mode<select id="task-mode" disabled><option value="engineering">Engineering</option><option value="gcp_qualification" disabled>GCP Qualification — deferred</option></select></label>
           <label>Title<input id="task-title" maxlength="256" required></label>
           <label class="wide">Direction<textarea id="task-direction" maxlength="32000" rows="8" required></textarea></label>
-          <label>Repository identity<input id="repository-id" maxlength="512" placeholder="github:owner/repository"></label>
-          <label>Source snapshot SHA-256<input id="source-digest" pattern="[0-9a-f]{64}" maxlength="64" required></label>
-          <fieldset id="exam-fields" class="wide" hidden><legend>GCP Examination Binding</legend><div class="form-grid">
-            <label>Examination ID<input id="exam-id"></label><label>Task number<input id="task-number" type="number" min="1" value="1"></label>
-            <label>Authorized project<input id="gcp-project"></label><label>Candidate service account<input id="gcp-identity" type="email"></label>
-            <label>Region<input id="gcp-region" placeholder="us-central1"></label><label>Zone<input id="gcp-zone" placeholder="us-central1-a"></label>
-            <label>Spending ceiling (USD)<input id="gcp-ceiling" type="number" min="0" step="0.01" value="0"></label>
-          </div></fieldset>
+          <label>Registered repository<select id="repository-id" required></select></label>
           <button type="submit">Submit Task</button>
         </form>
-        <p class="hint">The declared source digest must match the server-owned task workspace. A second active task is rejected.</p>
+        <p class="hint">The server inspects and hashes the selected repository, then creates a private Git-free task copy. A second active task is rejected.</p>
       </section>
-      <section id="active-task" class="view card" hidden>
+      <section id="active-task" class="view card" role="tabpanel" aria-labelledby="tab-active-task" hidden>
         <div class="section-head"><h2>Active Task</h2><span id="task-state" class="pill">None</span></div>
         <pre id="active-task-json" class="data-panel" tabindex="0"></pre>
         <div class="actions"><button id="inspect-button">Inspect</button><button id="analyze-button">Produce Exact Plan</button><button id="execute-button">Start Execution</button><button id="cancel-button" class="danger">Cancel</button><button id="retry-button" class="secondary">Retry Eligible Step</button><button id="submission-button">Generate Submission</button><button id="lock-submission-button">Lock Submission</button><button id="reopen-submission-button" class="secondary">Reopen Submission</button></div>
         <p id="active-prerequisite" class="hint" aria-live="polite"></p>
         <pre id="submission-output" class="data-panel" tabindex="0"></pre><div class="actions"><button id="copy-submission-button" class="secondary">Copy Submission</button><button id="export-submission-button" class="secondary">Export Submission</button></div>
       </section>
-      <section id="gcp" class="view card" hidden><h2>GCP Qualification</h2><div id="gcp-summary" class="grid-list"></div><p class="hint">No future task is exposed. Every cloud action must match the project, candidate identity, region, zone, task, and exact approval.</p></section>
-      <section id="projects" class="view card" hidden><h2>Projects / Repositories</h2><div id="project-list"></div></section>
-      <section id="approvals" class="view card" hidden><h2>Exact Approval</h2><pre id="approval-json" class="data-panel"></pre><div class="actions"><button id="approve-button">Approve Exact Plan</button><button id="reject-button" class="danger">Reject</button><button id="revision-button" class="secondary">Request Revision</button></div></section>
-      <section id="runs" class="view card" hidden><h2>Runs</h2><div id="run-list"></div></section>
-      <section id="evidence" class="view card" hidden><h2>Evidence / Artifacts</h2><div class="actions"><button id="export-evidence-button">Export Evidence</button><button id="copy-evidence-button" class="secondary">Copy Evidence</button></div><div id="evidence-list"></div></section>
-      <section id="recovery" class="view card" hidden><h2>Recovery</h2><p>Recovery snapshots are created before the first approved mutation. Their storage paths are never disclosed through the API.</p><div class="actions"><button id="request-rollback-button">Request Rollback Approval</button><button id="rollback-button">Run Approved Rollback</button></div><div id="recovery-list"></div></section>
-      <section id="audit" class="view card" hidden><h2>Audit</h2><div id="audit-list"></div></section>
-      <section id="settings" class="view card" hidden><h2>Settings and Boundaries</h2><ul><li>Authentication and policy authority are server-side.</li><li>Provider keys and cloud credentials never enter frontend assets.</li><li>Command execution stays disconnected until a qualified runner is injected.</li><li>GCP uses keyless service-account impersonation only.</li></ul></section>
+      <section id="projects" class="view card" role="tabpanel" aria-labelledby="tab-projects" hidden><h2>Projects / Repositories</h2><form id="repository-inspection-form" class="form-grid"><label>Registered repository<select id="inspection-repository" required></select></label><label class="wide">Inspection focus<textarea id="inspection-direction" maxlength="32000" rows="4"></textarea></label><button type="submit">Inspect Repository</button></form><pre id="repository-inspection-output" class="data-panel" tabindex="0">No inspection requested.</pre><h3>Task history</h3><div id="project-list"></div></section>
+      <section id="exact-plan" class="view card" role="tabpanel" aria-labelledby="tab-plan" hidden><h2>Exact Plan</h2><pre id="plan-json" class="data-panel" tabindex="0">No plan produced.</pre></section>
+      <section id="approvals" class="view card" role="tabpanel" aria-labelledby="tab-approvals" hidden><h2>Exact Approval</h2><pre id="approval-json" class="data-panel"></pre><div class="actions"><button id="approve-button">Approve Exact Plan</button><button id="reject-button" class="danger">Reject</button><button id="revision-button" class="secondary">Request Revision</button><button id="reissue-approval-button" class="secondary">Reissue Expired Approval</button></div></section>
+      <section id="diff" class="view card" role="tabpanel" aria-labelledby="tab-diff" hidden><h2>Verified Diff</h2><div class="actions"><button id="open-diff-button" disabled>Open Diff</button><button id="export-patch-button" class="secondary" disabled>Export Patch</button></div><pre id="diff-output" class="data-panel" tabindex="0">No verified patch.</pre></section>
+      <section id="runs" class="view card" role="tabpanel" aria-labelledby="tab-runs" hidden><h2>Runs / Tests</h2><div id="run-list"></div></section>
+      <section id="evidence" class="view card" role="tabpanel" aria-labelledby="tab-evidence" hidden><h2>Evidence / Artifacts</h2><div class="actions"><button id="export-evidence-button">Export Evidence</button><button id="copy-evidence-button" class="secondary">Copy Evidence</button></div><div id="evidence-list"></div></section>
+      <section id="recovery" class="view card" role="tabpanel" aria-labelledby="tab-recovery" hidden><h2>Recovery</h2><p>Recovery snapshots are created before the first approved mutation. Their storage paths are never disclosed through the API.</p><div class="actions"><button id="request-rollback-button">Request Rollback Approval</button><button id="rollback-button">Run Approved Rollback</button></div><div id="recovery-list"></div></section>
+      <section id="audit" class="view card" role="tabpanel" aria-labelledby="tab-audit" hidden><h2>Audit</h2><div id="audit-list"></div></section>
+      <section id="gcp" class="view card" role="tabpanel" aria-labelledby="tab-gcp" hidden><h2>GCP Qualification — Deferred</h2><div id="gcp-summary" class="grid-list"></div><p class="hint">Google Cloud access is disabled. No credentials, project calls, deployment, or network bypass is available from this Workbench.</p></section>
+      <section id="settings" class="view card" role="tabpanel" aria-labelledby="tab-settings" hidden><h2>Settings and Boundaries</h2><ul><li>Authentication and policy authority are server-side.</li><li>Provider keys and cloud credentials never enter frontend assets.</li><li>Command execution stays disconnected until a qualified runner is injected.</li><li>GCP access and public deployment are deferred and disabled.</li></ul><h3>Emergency recovery</h3><p>Reset is permitted only after every task is terminal and the runner is disconnected. Re-enter the owner key to authenticate this control action.</p><label for="emergency-reset-key">Owner access key</label><input id="emergency-reset-key" type="password" autocomplete="current-password"><button id="emergency-reset-button" class="secondary">Reset Emergency Stop</button></section>
     </main>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>

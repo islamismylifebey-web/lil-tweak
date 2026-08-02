@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from liltweak.workbench_contract import (
     CommandRequest,
+    FileRequest,
     GcpExamConfig,
     StepPhase,
     TaskImport,
@@ -61,6 +62,27 @@ def test_plan_requires_test_and_verification() -> None:
             reasoning="reason",
             source_snapshot_digest=DIGEST,
             steps=(command("test-1", StepPhase.TEST),),
+            rollback_steps=("restore snapshot",),
+        )
+
+
+def test_file_only_phases_cannot_claim_test_or_verification() -> None:
+    steps = tuple(
+        ToolRequest(
+            tool_id=f"file-{phase.value}",
+            kind=ToolKind.READ_FILE,
+            phase=phase,
+            purpose="not an executed check",
+            file=FileRequest(path="result.txt"),
+        )
+        for phase in (StepPhase.TEST, StepPhase.VERIFICATION)
+    )
+    with pytest.raises(ValidationError, match="required command test"):
+        WorkbenchPlan(
+            summary="file-only plan",
+            reasoning="File operations alone do not prove an executed test.",
+            source_snapshot_digest=DIGEST,
+            steps=steps,
             rollback_steps=("restore snapshot",),
         )
 

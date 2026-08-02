@@ -48,7 +48,7 @@ def test_secret_redaction() -> None:
     assert "ya29.token" not in redacted
 
 
-def test_session_expiry_signature_and_csrf() -> None:
+def test_session_expiry_signature_and_csrf(monkeypatch: pytest.MonkeyPatch) -> None:
     manager = SessionManager(b"s" * 32)
     session, cookie = manager.create("owner")
     csrf = manager.csrf_for_cookie(cookie)
@@ -58,3 +58,16 @@ def test_session_expiry_signature_and_csrf() -> None:
         manager.verify_csrf(cookie, "wrong")
     with pytest.raises(SecurityBoundaryError):
         manager.verify(cookie + "tampered")
+    monkeypatch.setattr("liltweak.workbench_security.time.time", lambda: session.expires_at)
+    with pytest.raises(SecurityBoundaryError, match="expired"):
+        manager.verify(cookie)
+
+
+def test_session_codec_is_unambiguous_for_binary_signatures_and_actor_punctuation() -> None:
+    manager = SessionManager(b"s" * 32)
+    for _ in range(256):
+        session, cookie = manager.create("owner.name:local")
+        verified = manager.verify(cookie)
+        assert verified.session_id == session.session_id
+        assert verified.actor_id == "owner.name:local"
+        assert cookie.count(".") == 1

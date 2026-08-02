@@ -120,3 +120,36 @@ def test_bodyless_workbench_actions_reach_csrf_and_controller(tmp_path: Path) ->
     )
     assert stopped.status_code == 200
     assert stopped.json() == {"emergency_stopped": True, "canceled_tasks": []}
+
+
+def test_emergency_reset_requires_fresh_owner_reauthentication(tmp_path: Path) -> None:
+    configured = replace(
+        settings(tmp_path),
+        workbench_enabled=True,
+        workspace_root=tmp_path / "repositories",
+        artifact_root=tmp_path / "artifacts",
+        execution_runtime_root=tmp_path / "runtime-root",
+        workbench_workspace_root=tmp_path / "workbench-tasks",
+    )
+    client = TestClient(create_app(settings=configured))
+    login = client.post("/v1/workbench/session", json={"owner_key": "owner-secret"})
+    csrf = login.json()["csrf_token"]
+    headers = {"X-CSRF-Token": csrf}
+    assert client.post("/v1/workbench/emergency-stop", headers=headers).status_code == 200
+
+    denied = client.post(
+        "/v1/workbench/emergency-stop/reset",
+        headers=headers,
+        json={"owner_key": "wrong"},
+    )
+    assert denied.status_code == 401
+    assert client.get("/v1/workbench/health").json()["emergency_stopped"] is True
+
+    reset = client.post(
+        "/v1/workbench/emergency-stop/reset",
+        headers=headers,
+        json={"owner_key": "owner-secret"},
+    )
+    assert reset.status_code == 200
+    assert reset.json() == {"emergency_stopped": False, "canceled_tasks": []}
+    assert client.get("/v1/workbench/health").json()["emergency_stopped"] is False

@@ -23,6 +23,8 @@ def test_frontend_has_required_screens_controls_and_no_embedded_secrets() -> Non
         "Lock Submission",
         "Reopen Submission",
         "Export Submission",
+        "Reissue Expired Approval",
+        "Reset Emergency Stop",
     ):
         assert label in html
     assert "OPENAI_API_KEY" not in html + script
@@ -34,3 +36,30 @@ def test_frontend_has_required_screens_controls_and_no_embedded_secrets() -> Non
     assert 'tabindex="-1"' in html
     assert "escapeHtml" in script
     assert "disabled = true" in script
+
+
+def test_disconnected_model_and_runner_disable_their_controls_with_exact_reasons() -> None:
+    script = (Path(__file__).parents[1] / "web" / "workbench" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert "!state.health.model_connected" in script
+    assert "!state.health.runner_connected" in script
+    assert "model adapter is disconnected" in script
+    assert "no independently qualified runner provider is connected" in script
+
+
+def test_terminal_tasks_allow_submission_and_emergency_stop_requires_confirmation() -> None:
+    script = (Path(__file__).parents[1] / "web" / "workbench" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert 'new Set(["COMPLETED", "BLOCKED", "FAILED"])' in script
+    assert "terminalSubmissionStates.has(state.task.state)" in script
+    assert '$("submission-button").disabled = false' in script
+    assert "window.confirm(" in script
+    assert "Emergency Stop blocks approvals and execution and cancels active tasks" in script
+    assert "if (!confirmed) return" in script
+    assert 'await action("/v1/workbench/emergency-stop")' in script
+    assert "state.approval = null" in script
+    assert 'item.event_type === "approval_reissued"' in script
+    assert 'state.approval.status !== "expired"' in script
+    assert 'action("/v1/workbench/emergency-stop/reset", { owner_key: ownerKey })' in script
