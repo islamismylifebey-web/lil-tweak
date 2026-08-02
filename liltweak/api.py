@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import secrets
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -12,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
-from .agent import OpenAIPlanner, PlanningProviderError
+from .agent import DeterministicPlanner, PlanningProviderError
 from .approvals import ApprovalError
 from .artifacts import ArtifactIntegrityError, EncryptedArtifactStore
 from .config import Settings
@@ -62,7 +64,6 @@ from .live_model import (
     LiveModelApprovalError,
     LiveModelDisabledError,
     LiveModelProviderError,
-    OpenAICreatorModelProvider,
 )
 from .models import (
     ApprovalDecisionRequest,
@@ -75,6 +76,8 @@ from .models import (
     RepositoryInspection,
     TaskCreate,
 )
+from .reasoning_policy import ReasoningProfileName
+from .reasoning_provider import OpenAIResponsesReasoningProvider
 from .recovery import RecoveryCapture, RecoveryError
 from .repository import RepositoryAccessError, RepositoryInspectionError, RepositoryInspector
 from .service import (
@@ -92,8 +95,8 @@ from .store import (
 )
 from .workbench import WorkbenchController
 from .workbench_agent import (
+    CanonicalWorkbenchModelAdapter,
     DisconnectedWorkbenchModelAdapter,
-    OpenAIWorkbenchModelAdapter,
     PersistentModelCallAdmission,
 )
 from .workbench_api import mount_workbench
@@ -129,6 +132,64 @@ def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, ob
     return result
 
 
+def _private_request_host_allowed(host_header: str, settings: Settings) -> bool:
+    """Accept only the configured loopback name (and testserver in test fixtures)."""
+    try:
+        parsed = urlsplit(f"//{host_header}", allow_fragments=False)
+        hostname = parsed.hostname
+        if (
+            not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+        ):
+            return False
+        if parsed.port is not None and not 1 <= parsed.port <= 65_535:
+            return False
+    except ValueError:
+        return False
+    configured = settings.server_host.casefold().strip("[]")
+    observed = hostname.casefold().strip("[]")
+    allowed = {configured}
+    try:
+        if ipaddress.ip_address(configured).is_loopback:
+            allowed.add("localhost")
+    except ValueError:
+        pass
+    if settings.environment == "test":
+        allowed.add("testserver")
+    return observed in allowed
+
+
+def _private_request_origin_allowed(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if origin is None:
+        return True
+    try:
+        parsed = urlsplit(origin)
+        request_host = urlsplit(f"//{request.headers.get('host', '')}", allow_fragments=False)
+        origin_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        request_port = request_host.port or (443 if request.url.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or not parsed.hostname
+    ):
+        return False
+    return (
+        parsed.scheme == request.url.scheme
+        and parsed.hostname.casefold() == (request_host.hostname or "").casefold()
+        and origin_port == request_port
+    )
+
+
 def _safe_match(actual: str, expected: str) -> bool:
     actual_hash = hashlib.sha256(actual.encode()).digest()
     expected_hash = hashlib.sha256(expected.encode()).digest()
@@ -154,7 +215,7 @@ def build_default_service(settings: Settings) -> LilTweakService:
         )
     return LilTweakService(
         store=store,
-        planner=OpenAIPlanner(settings.model),
+        planner=DeterministicPlanner(),
         cost_guard=CostGuard(
             monthly_limit_usd=settings.monthly_budget_usd,
             job_default_limit_usd=settings.job_hard_limit_usd,
@@ -174,6 +235,7 @@ def create_app(
     live_controller: LiveCreatorController | None = None,
     execution_controller: RepositoryExecutionController | None = None,
     workbench_controller: WorkbenchController | None = None,
+    workbench_reasoning_provider: OpenAIResponsesReasoningProvider | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -187,19 +249,6 @@ def create_app(
         signing_key=creator_key,
         durable_signatures=creator_key is not None,
     )
-    if live_controller is None and creator_key is not None:
-        live_controller = LiveCreatorController(
-            creator=creator_service,
-            store=service.store,
-            signing_key=creator_key,
-            provider=OpenAICreatorModelProvider(),
-            enabled=settings.live_model_enabled,
-            owner_id=settings.owner_id,
-            monthly_limit_usd=settings.live_monthly_limit_usd,
-            per_call_limit_usd=settings.live_call_limit_usd,
-            input_token_limit=settings.live_input_token_limit,
-            output_token_limit=settings.live_output_token_limit,
-        )
     bearer = HTTPBearer(auto_error=False)
 
     async def require_auth(
@@ -248,17 +297,16 @@ def create_app(
             )
             workbench_workspaces = TaskWorkspaceManager(settings.workbench_workspace_root)
             workbench_model = (
-                OpenAIWorkbenchModelAdapter(
-                    model=settings.workbench_model,
-                    reasoning_tier=settings.workbench_reasoning_tier,
+                CanonicalWorkbenchModelAdapter(
+                    provider=workbench_reasoning_provider,
+                    profile_name=ReasoningProfileName(settings.workbench_reasoning_profile),
                     admission=PersistentModelCallAdmission(
                         store=workbench_store,
                         reservation_usd=settings.workbench_cost_ceiling_usd,
                         monthly_limit_usd=settings.workbench_monthly_limit_usd,
                     ),
-                    enabled=True,
                 )
-                if settings.workbench_model_enabled
+                if settings.workbench_model_enabled and workbench_reasoning_provider is not None
                 else DisconnectedWorkbenchModelAdapter()
             )
             workbench_controller = WorkbenchController(
@@ -299,6 +347,27 @@ def create_app(
 
     @app.middleware("http")
     async def private_api_headers(request: Request, call_next):
+        is_workbench_surface = request.url.path == "/workbench" or request.url.path.startswith(
+            ("/workbench/", "/v1/workbench")
+        )
+        if is_workbench_surface and not _private_request_host_allowed(
+            request.headers.get("host", ""), settings
+        ):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Private Workbench Host header is not permitted."},
+                headers={"Cache-Control": "no-store"},
+            )
+        if (
+            is_workbench_surface
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and not _private_request_origin_allowed(request)
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Private Workbench Origin is not permitted."},
+                headers={"Cache-Control": "no-store"},
+            )
         if request.url.path.startswith(("/v1/creator/", "/v1/workbench/")) and request.method in {
             "POST",
             "PUT",

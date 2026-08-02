@@ -28,6 +28,12 @@ class SecurityBoundaryError(ValueError):
     pass
 
 
+class RateLimitError(SecurityBoundaryError):
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__("rate limit exceeded")
+        self.retry_after_seconds = max(1, retry_after_seconds)
+
+
 def redact(value: str, *, limit: int = 100_000) -> str:
     bounded = value[:limit]
     if secret_rule_ids(bounded.encode("utf-8", errors="replace")):
@@ -133,6 +139,8 @@ class SessionManager:
             raise ValueError("session signing key must contain exactly 32 bytes")
         self._key = signing_key
         self.ttl_seconds = ttl_seconds
+        self._revoked: dict[str, float] = {}
+        self._lock = Lock()
 
     def create(self, actor_id: str) -> tuple[Session, str]:
         if (
@@ -198,8 +206,20 @@ class SessionManager:
         expected = hmac.new(self._key, payload_raw, hashlib.sha256).digest()
         if not hmac.compare_digest(signature, expected) or time.time() >= expires_at:
             raise SecurityBoundaryError("owner session is invalid or expired")
+        with self._lock:
+            now = time.time()
+            self._revoked = {
+                revoked_id: expiry for revoked_id, expiry in self._revoked.items() if expiry > now
+            }
+            if session_id in self._revoked:
+                raise SecurityBoundaryError("owner session is revoked")
         csrf = hmac.new(self._key, f"csrf:{session_id}".encode(), hashlib.sha256).hexdigest()
         return Session(session_id, actor_id, csrf, expires_at)
+
+    def revoke(self, session: Session) -> None:
+        """Revoke a verified session for the remainder of its signed lifetime."""
+        with self._lock:
+            self._revoked[session.session_id] = session.expires_at
 
     def csrf_for_cookie(self, cookie: str) -> str:
         session = self.verify(cookie)
@@ -231,7 +251,8 @@ class SlidingWindowRateLimiter:
             while queue and queue[0] <= now - self.window_seconds:
                 queue.popleft()
             if len(queue) >= self.limit:
-                raise SecurityBoundaryError("rate limit exceeded")
+                retry_after = max(1, int(self.window_seconds - (now - queue[0])) + 1)
+                raise RateLimitError(retry_after)
             queue.append(now)
 
 

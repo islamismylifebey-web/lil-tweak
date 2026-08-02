@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from liltweak.canonical_lifecycle import TaskState
 from liltweak.workbench_contract import (
     ApprovalPurpose,
     CandidateSubmission,
@@ -26,13 +27,16 @@ from liltweak.workbench_contract import (
     utc_now,
 )
 from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
+from tests.canonical_helpers import enable_test_canonical_capabilities
 
 SOURCE_DIGEST = "a" * 64
 POLICY_DIGEST = "b" * 64
 
 
 def _store(tmp_path: Path, name: str) -> WorkbenchStore:
-    return WorkbenchStore(tmp_path / name, signing_key=b"s" * 32)
+    return enable_test_canonical_capabilities(
+        WorkbenchStore(tmp_path / name, signing_key=b"s" * 32)
+    )
 
 
 def _received_task() -> WorkbenchTask:
@@ -271,7 +275,9 @@ def test_signed_approval_without_authenticated_decision_evidence_cannot_consume(
         approval_digest=pending.approval_digest,
         actor_id="owner",
     )
-    approved_task = store.transition(current.id, WorkbenchState.APPROVED)
+    approved_task = store.get_task(current.id)
+    assert approved_task.state == WorkbenchState.APPROVED
+    assert store.canonical.get_task(current.id).state == TaskState.APPROVED
 
     with pytest.raises(WorkbenchConflict, match="authenticated owner approval decision"):
         _consume(store, pending.id, approved_task)
@@ -301,9 +307,12 @@ def test_authenticated_decision_consumes_once_and_replay_fails(tmp_path: Path) -
             "decided_at": decided.decided_at.isoformat() if decided.decided_at else None,
         },
     )
-    approved_task = store.transition(current.id, WorkbenchState.APPROVED)
+    approved_task = store.get_task(current.id)
+    assert approved_task.state == WorkbenchState.APPROVED
 
     consumed = _consume(store, pending.id, approved_task)
     assert consumed.status == "consumed"
+    assert store.get_task(current.id).state == WorkbenchState.EXECUTING
+    assert store.canonical.get_task(current.id).state == TaskState.EXECUTING
     with pytest.raises(WorkbenchConflict, match="not approved"):
         _consume(store, pending.id, approved_task)

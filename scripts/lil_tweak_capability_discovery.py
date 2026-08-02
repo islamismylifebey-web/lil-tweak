@@ -132,7 +132,7 @@ def _approval_and_evidence_trials(root: Path, cases: list[dict[str, object]]) ->
     )
     store.create_task(task)
     store.transition(task.id, WorkbenchState.INSPECTING)
-    store.transition(task.id, WorkbenchState.ANALYZED)
+    current = store.transition(task.id, WorkbenchState.ANALYZED)
     test = ToolRequest(
         tool_id="test",
         kind=ToolKind.COMMAND,
@@ -148,8 +148,8 @@ def _approval_and_evidence_trials(root: Path, cases: list[dict[str, object]]) ->
         steps=(test, verify),
         rollback_steps=("Restore the private recovery snapshot.",),
     )
-    current = store.transition(task.id, WorkbenchState.PLAN_READY, plan=plan)
-    current = store.transition(task.id, WorkbenchState.AWAITING_APPROVAL)
+    # The forged record is tested off-path. Entering PLAN_READY would require a real,
+    # qualified model capability, which this offline discovery must never synthesize.
     bindings = {
         "task_id": current.id,
         "task_digest": current.task_digest,
@@ -394,12 +394,26 @@ def discover() -> dict[str, object]:
         )
 
         blocked = (
-            ("live-model-planning", "No enabled model provider or API credential."),
-            ("python-defect-repair", "Qualified runner and live model are disconnected."),
-            ("javascript-interface-repair", "Qualified runner and live model are disconnected."),
+            (
+                "live-model-planning",
+                "The production Workbench provider remains disabled and disconnected; live "
+                "tool-free qualification is reported separately.",
+            ),
+            (
+                "python-defect-repair",
+                "The production Workbench provider and qualified runner are disconnected.",
+            ),
+            (
+                "javascript-interface-repair",
+                "The production Workbench provider and qualified runner are disconnected.",
+            ),
             ("test-lint-build", "Qualified runner is disconnected."),
             ("cancellation-process-tree", "No qualified process tree can be started."),
-            ("browser-preview", "No supported browser and no qualified preview runner."),
+            (
+                "browser-preview",
+                "This offline discovery process does not run the separate real-browser "
+                "acceptance harness.",
+            ),
             ("approved-patch-application", "No verified execution patch exists."),
             ("approved-local-commit", "No applied verified patch exists."),
             ("gcp-execution-deployment", "GCP and public deployment are explicitly deferred."),

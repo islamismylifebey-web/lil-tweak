@@ -22,6 +22,7 @@ from liltweak.agent import (  # noqa: E402
 )
 from liltweak.costs import CostGuard  # noqa: E402
 from liltweak.models import RepositoryRef, TaskCreate  # noqa: E402
+from liltweak.reasoning_policy import REASONING_POLICY  # noqa: E402
 from liltweak.repository import RepositoryInspector  # noqa: E402
 from liltweak.service import LilTweakService, RunnerUnavailableError  # noqa: E402
 from liltweak.store import SQLiteStore  # noqa: E402
@@ -226,7 +227,7 @@ async def run_case(
 ) -> dict[str, Any]:
     live = case["planner"] == "live"
     delegate = (
-        OpenAIPlanner(os.getenv("LILTWEAK_MODEL", "gpt-5.6-luna"))
+        OpenAIPlanner(os.getenv("LILTWEAK_MODEL", REASONING_POLICY.primary_model.value))
         if live
         else DeterministicPlanner()
     )

@@ -203,10 +203,28 @@ function renderPlan() {
 
 function renderHealth(health) {
   $("status-strip").innerHTML = Object.entries(health)
-    .filter(([key]) => key !== "missing_prerequisites")
+    .filter(([key]) => !["missing_prerequisites", "capabilities"].includes(key))
     .map(([key, value]) => '<div class="status-item"><strong>' +
       escapeHtml(key.replaceAll("_", " ")) + "</strong><span>" +
       escapeHtml(String(value == null ? "—" : value)) + "</span></div>").join("");
+  const capabilities = Array.isArray(health.capabilities) ? health.capabilities : [];
+  $("capability-status").innerHTML = capabilities.map((capability) =>
+    '<article class="status-item capability-item" data-state="' +
+      escapeHtml(capability.state) + '"><strong>' +
+      escapeHtml(capability.capability) + "</strong><span>" +
+      escapeHtml(capability.state.toUpperCase()) + '</span><small class="capability-facts">' +
+      ["configured", "connected", "authorized", "healthy", "qualified"]
+        .map((gate) => gate + ": " + (capability[gate] ? "yes" : "no"))
+        .map(escapeHtml).join(" · ") + "</small></article>"
+  ).join("");
+  const blockers = [
+    ...(Array.isArray(health.missing_prerequisites) ? health.missing_prerequisites : []),
+    ...capabilities.flatMap((capability) =>
+      Array.isArray(capability.blockers) ? capability.blockers : []),
+  ].filter((blocker, index, all) => all.indexOf(blocker) === index);
+  $("capability-blockers").innerHTML = blockers.length ? blockers.map((blocker) =>
+    "<li>" + escapeHtml(blocker) + "</li>").join("") :
+    "<li>No capability blocker is reported.</li>";
 }
 
 function renderTask() {

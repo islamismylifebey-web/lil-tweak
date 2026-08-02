@@ -22,6 +22,8 @@ from liltweak.live_contract import (
     LiveProposalStatus,
 )
 from liltweak.live_model import (
+    CREATOR_MODEL_PRICE,
+    CREATOR_REASONING_EFFORT,
     LiveCreatorController,
     LiveModelApprovalError,
     LiveModelDisabledError,
@@ -133,8 +135,10 @@ def test_live_proposal_is_least_cost_route_bound_and_non_authoritative() -> None
     record = controller.prepare(LiveProposalPrepareRequest(envelope=envelope, route=route))
     proposal = record.proposal
     assert route.selected_tier == ModelTier.STANDARD
-    assert proposal.model == "gpt-5.6-terra"
-    assert proposal.reasoning_effort == route.reasoning_effort
+    assert proposal.model == CREATOR_MODEL_PRICE.model == "gpt-5.6-sol"
+    assert proposal.reasoning_effort == CREATOR_REASONING_EFFORT
+    assert proposal.input_price_per_million_usd == (CREATOR_MODEL_PRICE.input_per_million_usd)
+    assert proposal.output_price_per_million_usd == (CREATOR_MODEL_PRICE.output_per_million_usd)
     assert proposal.cost_ceiling_usd <= 0.10
     assert proposal.max_turns == 1
     assert proposal.model_call_authorized is False
@@ -316,7 +320,7 @@ def test_live_monthly_admission_is_atomic_across_connections(tmp_path: Path) -> 
         build_live_controller(
             database,
             provider=shared_provider,
-            monthly_limit_usd=0.05,
+            monthly_limit_usd=0.15,
         )
         for _ in range(2)
     ]

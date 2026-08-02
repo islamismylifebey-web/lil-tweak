@@ -1,5 +1,9 @@
 # Lil Tweak Capability Discovery Report
 
+> Historical checkpoint — superseded by `MASTER_BUILDER_CAPABILITY_REPORT.md`. The classification
+> and capability facts below describe the earlier baseline only. Current controlling verdict:
+> **ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**.
+
 ## Verdict
 
 `PARTIALLY OPERATIONAL — BLOCKERS REMAIN`

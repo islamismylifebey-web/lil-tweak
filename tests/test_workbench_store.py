@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
 
+from liltweak.canonical_lifecycle import TaskState
 from liltweak.workbench_contract import (
     CandidateSubmission,
+    CommandRequest,
     EvidenceKind,
+    StepPhase,
     SubmissionStatus,
     TaskImport,
+    ToolKind,
+    ToolRequest,
+    WorkbenchPlan,
     WorkbenchState,
     WorkbenchTask,
     content_digest,
@@ -36,8 +43,10 @@ def make_task(identifier: str = "task:1") -> WorkbenchTask:
 def test_state_machine_and_evidence_chain(tmp_path: Path) -> None:
     store = WorkbenchStore(tmp_path / "workbench.db")
     task = store.create_task(make_task())
+    assert store.canonical.get_task(task.id).state == TaskState.RECEIVED
     assert store.transition(task.id, WorkbenchState.INSPECTING).state == WorkbenchState.INSPECTING
     assert store.transition(task.id, WorkbenchState.ANALYZED).state == WorkbenchState.ANALYZED
+    assert store.canonical.get_task(task.id).state == TaskState.INSPECTED
     first = store.append_evidence(
         task.id, kind=EvidenceKind.TASK, event_type="task_received", payload={"one": 1}
     )
@@ -92,6 +101,64 @@ def test_invalid_state_transition_fails_closed(tmp_path: Path) -> None:
     task = store.create_task(make_task())
     with pytest.raises(WorkbenchConflict, match="invalid state"):
         store.transition(task.id, WorkbenchState.COMPLETED)
+
+
+def test_canonical_capability_rejection_rolls_back_workbench_projection(
+    tmp_path: Path,
+) -> None:
+    store = WorkbenchStore(tmp_path / "workbench.db")
+    task = store.create_task(make_task())
+    store.transition(task.id, WorkbenchState.INSPECTING)
+    store.transition(task.id, WorkbenchState.ANALYZED)
+    test_step = ToolRequest(
+        tool_id="test-1",
+        kind=ToolKind.COMMAND,
+        phase=StepPhase.TEST,
+        purpose="test",
+        command=CommandRequest(executable="pytest", args=("-q",)),
+    )
+    plan = WorkbenchPlan(
+        summary="Run bounded checks.",
+        reasoning="Run a test and an independent verification command.",
+        source_snapshot_digest=DIGEST,
+        steps=(
+            test_step,
+            test_step.model_copy(update={"tool_id": "verify-1", "phase": StepPhase.VERIFICATION}),
+        ),
+        rollback_steps=("Restore the snapshot.",),
+    )
+
+    with pytest.raises(WorkbenchConflict, match="canonical lifecycle"):
+        store.transition(task.id, WorkbenchState.PLAN_READY, plan=plan)
+
+    assert store.get_task(task.id).state == WorkbenchState.ANALYZED
+    assert store.canonical.get_task(task.id).state == TaskState.INSPECTED
+
+
+def test_canonical_bridge_migration_and_ledgers_are_durable_and_immutable(
+    tmp_path: Path,
+) -> None:
+    store = WorkbenchStore(tmp_path / "workbench.db")
+    task = store.create_task(make_task())
+    assert (
+        store._connection.execute(
+            "SELECT COUNT(*) FROM canonical_schema_migrations "
+            "WHERE migration_id='0010_workbench_canonical_authority'"
+        ).fetchone()[0]
+        == 1
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="canonical evidence is immutable"):
+        store._connection.execute(
+            "UPDATE canonical_evidence SET event_type='forged' WHERE task_id=?",
+            (task.id,),
+        )
+    store._connection.rollback()
+    with pytest.raises(sqlite3.IntegrityError, match="task binding is immutable"):
+        store._connection.execute(
+            "DELETE FROM canonical_workbench_task_bindings WHERE workbench_task_id=?",
+            (task.id,),
+        )
+    store._connection.rollback()
 
 
 def test_task_digest_is_immutable_and_unique(tmp_path: Path) -> None:

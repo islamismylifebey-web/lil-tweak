@@ -33,6 +33,7 @@ from .workbench_repository import (
     WorkbenchRepositoryInspection,
 )
 from .workbench_security import (
+    RateLimitError,
     SecurityBoundaryError,
     Session,
     SessionManager,
@@ -159,8 +160,9 @@ def mount_workbench(
 
     @router.delete("/session", status_code=204)
     async def logout(
-        _session: Annotated[Session, Depends(require_mutation)],
+        session: Annotated[Session, Depends(require_mutation)],
     ) -> Response:
+        sessions.revoke(session)
         response = Response(status_code=204)
         response.delete_cookie(cookie_name, path="/", samesite="strict")
         return response
@@ -520,6 +522,17 @@ def mount_workbench(
                 status_code=409,
                 content={"detail": "Workbench operation failed closed."},
             ),
+        )
+
+    @app.exception_handler(RateLimitError)
+    async def workbench_rate_limit(
+        _request: Request,
+        exc: RateLimitError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Workbench rate limit exceeded."},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
         )
 
     static_root = Path(__file__).parents[1] / "web" / "workbench"

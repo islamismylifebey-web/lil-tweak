@@ -26,6 +26,12 @@
       <div class="top-actions"><button id="refresh-button" class="secondary">Refresh</button><button id="emergency-button" class="danger">Emergency Stop</button><button id="logout-button" class="ghost">Sign Out</button></div>
     </header>
     <section id="status-strip" class="status-strip" aria-label="System status"></section>
+    <section class="status-item capability-panel" aria-labelledby="capability-title">
+      <div class="section-head"><h2 id="capability-title">Capability Gates</h2><span class="pill">FAIL CLOSED</span></div>
+      <div id="capability-status" class="grid-list"></div>
+      <h3>Exact blockers</h3>
+      <ul id="capability-blockers" class="blocker-list" aria-live="polite"></ul>
+    </section>
     <p id="loading-status" class="loading-status" role="status" aria-live="polite" hidden></p>
     <nav class="tabs" role="tablist" aria-label="Workbench sections">
       <button id="tab-new-task" role="tab" aria-controls="new-task" aria-selected="true" data-view="new-task">New Task</button><button id="tab-active-task" role="tab" aria-controls="active-task" aria-selected="false" data-view="active-task">Active Task</button><button id="tab-projects" role="tab" aria-controls="projects" aria-selected="false" data-view="projects">Projects / Repositories</button><button id="tab-plan" role="tab" aria-controls="exact-plan" aria-selected="false" data-view="exact-plan">Exact Plan</button><button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected="false" data-view="approvals">Approvals</button><button id="tab-diff" role="tab" aria-controls="diff" aria-selected="false" data-view="diff">Diff</button><button id="tab-runs" role="tab" aria-controls="runs" aria-selected="false" data-view="runs">Runs / Tests</button><button id="tab-evidence" role="tab" aria-controls="evidence" aria-selected="false" data-view="evidence">Evidence / Artifacts</button><button id="tab-recovery" role="tab" aria-controls="recovery" aria-selected="false" data-view="recovery">Recovery</button><button id="tab-audit" role="tab" aria-controls="audit" aria-selected="false" data-view="audit">Audit</button><button id="tab-gcp" role="tab" aria-controls="gcp" aria-selected="false" data-view="gcp">GCP Qualification</button><button id="tab-settings" role="tab" aria-controls="settings" aria-selected="false" data-view="settings">Settings</button>

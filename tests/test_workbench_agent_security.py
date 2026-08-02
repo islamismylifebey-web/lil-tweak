@@ -31,6 +31,13 @@ class SpyAdmission:
         self.finishes.append(values)
 
 
+class FakeProviderTokenCounter:
+    async def count(self, **values: object) -> int:
+        provider_input = values["provider_input"]
+        assert isinstance(provider_input, str)
+        return 20_001 if len(provider_input) > 12_000 else 500
+
+
 def plan(*, summary: str = "Safe bounded plan") -> WorkbenchPlan:
     return WorkbenchPlan(
         summary=summary,
@@ -62,6 +69,7 @@ def adapter(admission: SpyAdmission) -> OpenAIWorkbenchModelAdapter:
         reasoning_tier="high",
         admission=admission,
         enabled=True,
+        token_counter=FakeProviderTokenCounter(),
     )
 
 

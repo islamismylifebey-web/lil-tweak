@@ -5,34 +5,39 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "FINAL_FILE_MANIFEST.json"
-PRESERVED_AUDITED_BASELINE_FILES = (
-    {
-        "relative_path": "docs/agent-interactions.png",
-        "sha256": "b629e2f4536cc723704f9e32efb0d8d460144dc1442000be590f1785c02f2112",
-        "bytes": 107725,
-    },
-    {
-        "relative_path": "docs/agent-sequence.png",
-        "sha256": "d4a83ac5bd703618570e87be91fcba888e61371e1b0fbb4b04dcd8ffb1de728e",
-        "bytes": 59921,
-    },
-)
+BASELINE_COMMIT = "373400cb2b459dbf8a37dacceb0d3d1186eef949"
+
+
+def _git_blob_sha1(content: bytes) -> str:
+    header = f"blob {len(content)}\0".encode("ascii")
+    return hashlib.sha1(header + content, usedforsecurity=False).hexdigest()
 
 
 def generate() -> dict[str, object]:
     result = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        ("git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"),
         cwd=ROOT,
         check=True,
         capture_output=True,
         timeout=10,
         shell=False,
+        env={
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+        },
     )
     paths = sorted(
         value.decode("utf-8")
@@ -42,40 +47,44 @@ def generate() -> dict[str, object]:
     files: list[dict[str, object]] = []
     for relative in paths:
         path = ROOT / relative
-        if path.is_symlink() or not path.is_file():
-            raise RuntimeError(f"manifest path is not a regular file: {relative}")
-        content = path.read_bytes()
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            # A tracked deletion is absent from the candidate tree by definition.
+            continue
+        if stat.S_ISREG(metadata.st_mode):
+            content = path.read_bytes()
+            entry_type = "regular_file"
+            git_mode = "100755" if metadata.st_mode & 0o111 else "100644"
+        elif stat.S_ISLNK(metadata.st_mode):
+            content = os.readlink(path).encode("utf-8")
+            entry_type = "symbolic_link"
+            git_mode = "120000"
+        else:
+            raise RuntimeError(f"manifest path has an unsupported file type: {relative}")
         files.append(
             {
                 "relative_path": relative,
+                "entry_type": entry_type,
+                "git_mode": git_mode,
                 "sha256": hashlib.sha256(content).hexdigest(),
+                "git_blob_sha1": _git_blob_sha1(content),
                 "bytes": len(content),
             }
         )
-    local_paths = {str(item["relative_path"]) for item in files}
-    files.extend(
-        dict(item)
-        for item in PRESERVED_AUDITED_BASELINE_FILES
-        if str(item["relative_path"]) not in local_paths
-    )
-    files.sort(key=lambda item: str(item["relative_path"]))
     return {
-        "schema_version": "1.0",
-        "package": "lil-tweak-sol-high-direct-build",
+        "schema_version": "liltweak-final-file-manifest-v2",
+        "package": "lil-tweak-master-builder-architecture",
         "built_at_utc": datetime.now(UTC).isoformat(),
         "repository": "islamismylifebey-web/lil-tweak",
         "branch": "codex/lil-tweak-live-workbench-build",
-        "audited_baseline": "c8227ce5c2a0718671d95c34529088ee38efe238",
-        "corrective_package_sha256": (
-            "e519a00ab0035690963772c16843a264f2a2ceefc0c8a8ecfc87a1e5dad5c60c"
-        ),
+        "audited_baseline_commit": BASELINE_COMMIT,
+        "candidate_commit": "recorded externally after immutable commit creation",
+        "candidate_tree": "verified externally after manifest generation",
         "scope": (
-            "final Git tree: local Git/untracked build files plus unchanged audited-baseline "
-            "binary assets preserved by the remote base tree"
+            "Every tracked or candidate-untracked path in the final Git tree, excluding only "
+            "this self-referential manifest from its own entry list."
         ),
-        "preserved_audited_baseline_files": [
-            str(item["relative_path"]) for item in PRESERVED_AUDITED_BASELINE_FILES
-        ],
         "self_excluded_from_hash_list": True,
         "file_count_excluding_manifest": len(files),
         "files": files,

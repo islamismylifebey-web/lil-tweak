@@ -97,7 +97,9 @@ def test_rate_limit_and_event_stream_are_real_backend_actions(tmp_path: Path) ->
     assert "event: task_received" in stream.text
     for _ in range(9):
         assert client.get("/v1/workbench/session").status_code == 200
-    assert client.get("/v1/workbench/session").status_code == 409
+    limited = client.get("/v1/workbench/session")
+    assert limited.status_code == 429
+    assert int(limited.headers["retry-after"]) >= 1
 
 
 def test_bodyless_workbench_actions_reach_csrf_and_controller(tmp_path: Path) -> None:
@@ -109,7 +111,7 @@ def test_bodyless_workbench_actions_reach_csrf_and_controller(tmp_path: Path) ->
         execution_runtime_root=tmp_path / "runtime-root",
         workbench_workspace_root=tmp_path / "workbench-tasks",
     )
-    client = TestClient(create_app(settings=configured))
+    client = TestClient(create_app(settings=configured), base_url="http://127.0.0.1")
     login = client.post("/v1/workbench/session", json={"owner_key": "owner-secret"})
     assert login.status_code == 200
 
@@ -131,7 +133,7 @@ def test_emergency_reset_requires_fresh_owner_reauthentication(tmp_path: Path) -
         execution_runtime_root=tmp_path / "runtime-root",
         workbench_workspace_root=tmp_path / "workbench-tasks",
     )
-    client = TestClient(create_app(settings=configured))
+    client = TestClient(create_app(settings=configured), base_url="http://127.0.0.1")
     login = client.post("/v1/workbench/session", json={"owner_key": "owner-secret"})
     csrf = login.json()["csrf_token"]
     headers = {"X-CSRF-Token": csrf}
@@ -153,3 +155,53 @@ def test_emergency_reset_requires_fresh_owner_reauthentication(tmp_path: Path) -
     assert reset.status_code == 200
     assert reset.json() == {"emergency_stopped": False, "canceled_tasks": []}
     assert client.get("/v1/workbench/health").json()["emergency_stopped"] is False
+
+
+def test_private_workbench_rejects_untrusted_host_and_cross_origin(tmp_path: Path) -> None:
+    configured = replace(
+        settings(tmp_path),
+        workbench_enabled=True,
+        workspace_root=tmp_path / "repositories",
+        artifact_root=tmp_path / "artifacts",
+        execution_runtime_root=tmp_path / "runtime-root",
+        workbench_workspace_root=tmp_path / "workbench-tasks",
+    )
+    app = create_app(settings=configured)
+    attacker = TestClient(app, base_url="http://attacker.example")
+    assert attacker.get("/workbench").status_code == 400
+
+    client = TestClient(app, base_url="http://127.0.0.1")
+    login = client.post("/v1/workbench/session", json={"owner_key": "owner-secret"})
+    assert login.status_code == 200
+    rejected = client.post(
+        "/v1/workbench/emergency-stop",
+        headers={
+            "Origin": "https://attacker.example",
+            "X-CSRF-Token": login.json()["csrf_token"],
+        },
+    )
+    assert rejected.status_code == 403
+    assert client.get("/v1/workbench/health").json()["emergency_stopped"] is False
+
+
+def test_logout_revokes_a_captured_session_cookie(tmp_path: Path) -> None:
+    app = FastAPI()
+    mount_workbench(
+        app,
+        controller=object(),
+        settings=settings(tmp_path),
+        session_signing_key=b"s" * 32,
+    )
+    client = TestClient(app)
+    login = client.post("/v1/workbench/session", json={"owner_key": "owner-secret"})
+    cookie = client.cookies.get("liltweak_owner_session")
+    assert cookie is not None
+    logout = client.delete(
+        "/v1/workbench/session",
+        headers={"X-CSRF-Token": login.json()["csrf_token"]},
+    )
+    assert logout.status_code == 204
+
+    replay = TestClient(app)
+    replay.cookies.set("liltweak_owner_session", cookie)
+    assert replay.get("/v1/workbench/session").status_code == 401

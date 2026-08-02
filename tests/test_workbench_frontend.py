@@ -25,6 +25,8 @@ def test_frontend_has_required_screens_controls_and_no_embedded_secrets() -> Non
         "Export Submission",
         "Reissue Expired Approval",
         "Reset Emergency Stop",
+        "Capability Gates",
+        "Exact blockers",
     ):
         assert label in html
     assert "OPENAI_API_KEY" not in html + script
@@ -46,6 +48,19 @@ def test_disconnected_model_and_runner_disable_their_controls_with_exact_reasons
     assert "!state.health.runner_connected" in script
     assert "model adapter is disconnected" in script
     assert "no independently qualified runner provider is connected" in script
+
+
+def test_capability_gates_and_exact_blockers_are_rendered_without_hiding_them() -> None:
+    root = Path(__file__).parents[1] / "web" / "workbench"
+    html = (root / "index.html").read_text(encoding="utf-8")
+    script = (root / "app.js").read_text(encoding="utf-8")
+    assert 'id="capability-status"' in html
+    assert 'id="capability-blockers"' in html
+    assert "Array.isArray(health.capabilities)" in script
+    assert "Array.isArray(health.missing_prerequisites)" in script
+    assert "Array.isArray(capability.blockers)" in script
+    for gate in ("configured", "connected", "authorized", "healthy", "qualified"):
+        assert f'"{gate}"' in script
 
 
 def test_terminal_tasks_allow_submission_and_emergency_stop_requires_confirmation() -> None:

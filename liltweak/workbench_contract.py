@@ -47,6 +47,63 @@ class WorkbenchSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class WorkbenchCapability(StrEnum):
+    MODEL = "model"
+    RUNNER = "runner"
+    CHECKPOINT = "checkpoint"
+    PUBLISHER = "publisher"
+    BROWSER = "browser"
+    GCP = "gcp"
+
+
+class CapabilityState(StrEnum):
+    BLOCKED = "blocked"
+    OPERATIONAL = "operational"
+
+
+class CapabilityStatus(WorkbenchSchema):
+    capability: WorkbenchCapability
+    state: CapabilityState = CapabilityState.BLOCKED
+    configured: StrictBool = False
+    connected: StrictBool = False
+    authorized: StrictBool = False
+    healthy: StrictBool = False
+    qualified: StrictBool = False
+    operational: StrictBool = False
+    blockers: tuple[StrictStr, ...] = ("Capability qualification has not been recorded.",)
+
+    @field_validator("blockers")
+    @classmethod
+    def blockers_are_exact_and_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not blocker.strip() for blocker in value):
+            raise ValueError("capability blockers must be non-empty")
+        if len(set(value)) != len(value):
+            raise ValueError("capability blockers must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def operational_state_requires_every_gate(self) -> CapabilityStatus:
+        every_gate = all(
+            (
+                self.configured,
+                self.connected,
+                self.authorized,
+                self.healthy,
+                self.qualified,
+            )
+        )
+        if self.operational:
+            if self.state != CapabilityState.OPERATIONAL or not every_gate or self.blockers:
+                raise ValueError("operational capability requires every gate and no blockers")
+        elif self.state != CapabilityState.BLOCKED or not self.blockers:
+            raise ValueError("non-operational capability must be blocked with exact blockers")
+        return self
+
+
+def default_workbench_capabilities() -> tuple[CapabilityStatus, ...]:
+    return tuple(CapabilityStatus(capability=capability) for capability in WorkbenchCapability)
+
+
 class WorkbenchMode(StrEnum):
     ENGINEERING = "engineering"
     GCP_QUALIFICATION = "gcp_qualification"
@@ -496,3 +553,17 @@ class WorkbenchHealth(WorkbenchSchema):
     emergency_stopped: StrictBool
     evidence_integrity: Literal["durable_hmac", "ephemeral_hmac", "invalid"]
     missing_prerequisites: tuple[StrictStr, ...] = ()
+    capabilities: tuple[CapabilityStatus, ...] = Field(
+        default_factory=default_workbench_capabilities
+    )
+
+    @field_validator("capabilities")
+    @classmethod
+    def every_capability_is_reported_once(
+        cls, value: tuple[CapabilityStatus, ...]
+    ) -> tuple[CapabilityStatus, ...]:
+        expected = tuple(WorkbenchCapability)
+        reported = tuple(status.capability for status in value)
+        if reported != expected:
+            raise ValueError("Workbench health must report every capability exactly once")
+        return value

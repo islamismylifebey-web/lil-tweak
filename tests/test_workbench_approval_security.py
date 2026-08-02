@@ -23,6 +23,7 @@ from liltweak.workbench_contract import (
     utc_now,
 )
 from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
+from tests.canonical_helpers import enable_test_canonical_capabilities
 
 DIGEST = "a" * 64
 POLICY_DIGEST = "b" * 64
@@ -113,22 +114,14 @@ def approval(
 
 
 def test_expired_approval_is_never_approved(tmp_path: Path) -> None:
-    store = WorkbenchStore(tmp_path / "workbench.db")
+    store = enable_test_canonical_capabilities(WorkbenchStore(tmp_path / "workbench.db"))
     current = awaiting(store)
-    store.publish_approval(approval(current, created_offset=-2, expires_offset=-1))
-    assert store.get_approval("approval:one").status == "expired"
-    with pytest.raises(WorkbenchConflict):
-        store.decide_approval(
-            "approval:one",
-            task_id="task:approval",
-            decision="approve",
-            approval_digest=store.get_approval("approval:one").approval_digest,
-            actor_id="owner",
-        )
+    with pytest.raises(WorkbenchConflict, match="expired"):
+        store.publish_approval(approval(current, created_offset=-2, expires_offset=-1))
 
 
 def test_changed_digest_and_reuse_are_rejected(tmp_path: Path) -> None:
-    store = WorkbenchStore(tmp_path / "workbench.db")
+    store = enable_test_canonical_capabilities(WorkbenchStore(tmp_path / "workbench.db"))
     original = awaiting(store)
     pending = approval(original)
     store.publish_approval(pending)
@@ -159,7 +152,7 @@ def test_changed_digest_and_reuse_are_rejected(tmp_path: Path) -> None:
 
 
 def test_consumption_rejects_changed_project_or_candidate_identity(tmp_path: Path) -> None:
-    store = WorkbenchStore(tmp_path / "workbench.db")
+    store = enable_test_canonical_capabilities(WorkbenchStore(tmp_path / "workbench.db"))
     imported = TaskImport(
         mode=WorkbenchMode.GCP_QUALIFICATION,
         title="GCP task",
@@ -190,7 +183,8 @@ def test_consumption_rejects_changed_project_or_candidate_identity(tmp_path: Pat
         approval_digest=changed.approval_digest,
         actor_id="owner",
     )
-    current = store.transition(current.id, WorkbenchState.APPROVED)
+    current = store.get_task(current.id)
+    assert current.state == WorkbenchState.APPROVED
 
     with pytest.raises(WorkbenchConflict, match="binding changed"):
         store.consume_approval(

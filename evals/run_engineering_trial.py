@@ -175,7 +175,7 @@ async def run_live(
 ) -> dict:
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is required for the live engineering trial")
-    model_id = os.getenv("LILTWEAK_MODEL", "gpt-5.6-luna")
+    model_id = os.getenv("LILTWEAK_MODEL", "gpt-5.6-sol")
     tweak = TweakEngineeringModel(model_id)
     case_results: list[dict] = []
     for packet, expectations in cases:

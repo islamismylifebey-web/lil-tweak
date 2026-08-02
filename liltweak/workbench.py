@@ -5,6 +5,7 @@ import json
 import uuid
 from datetime import timedelta
 
+from .context_manifest import ContextManifest, ContextPolicy, build_context_manifest
 from .creator import CreatorService
 from .creator_contract import (
     CreatorCompileRequest,
@@ -15,6 +16,7 @@ from .creator_contract import (
 )
 from .repository import secret_rule_ids
 from .workbench_agent import ModelPlanResult, WorkbenchModelAdapter
+from .workbench_capabilities import build_capability_statuses
 from .workbench_contract import (
     ApprovalDecision,
     ApprovalPurpose,
@@ -73,6 +75,19 @@ class WorkbenchController:
         self.cost_ceiling_usd = cost_ceiling_usd
         self.authorized_repositories = authorized_repositories
         self.repository_registry = repository_registry
+        input_ceiling = getattr(model, "input_token_ceiling", 12_000)
+        output_ceiling = getattr(model, "output_token_ceiling", 4_096)
+        if (
+            not isinstance(input_ceiling, int)
+            or isinstance(input_ceiling, bool)
+            or not isinstance(output_ceiling, int)
+            or isinstance(output_ceiling, bool)
+        ):
+            raise ValueError("Workbench model token ceilings are invalid")
+        self.context_policy = ContextPolicy(
+            input_token_ceiling=input_ceiling,
+            reserved_output_tokens=output_ceiling,
+        )
 
     def receive(self, imported: TaskImport, *, task_id: str | None = None) -> WorkbenchTask:
         if self.store.is_emergency_stopped():
@@ -284,6 +299,129 @@ class WorkbenchController:
             desired_output="One bounded, testable engineering plan",
         )
 
+    def _planning_context(
+        self,
+        task: WorkbenchTask,
+    ) -> tuple[str, ContextManifest, str, str | None, str]:
+        """Build a bounded manifest from the materialized source, never the owner path."""
+
+        workspace = self.workspaces.task_root(task.id)
+        before_digest = self.workspaces.tree_digest(workspace)
+        if before_digest != task.imported.source_snapshot_digest:
+            raise WorkbenchError("workspace source changed before context assembly")
+
+        git_facts: dict[str, object] | None = None
+        source_revision = task.imported.source_snapshot_digest
+        if task.imported.repository_id is not None:
+            inspection = self._inspect_bound_repository(task)
+            source_revision = inspection.git.head
+            git_facts = {
+                "branch": inspection.git.branch,
+                "head": inspection.git.head,
+                "dirty": inspection.git.dirty,
+                "staged_count": inspection.git.staged_count,
+                "modified_count": inspection.git.modified_count,
+                "untracked_count": inspection.git.untracked_count,
+                "status_digest": inspection.git.status_digest,
+            }
+
+        context_repository_id = task.imported.repository_id or (
+            f"workbench:{hashlib.sha256(task.id.encode()).hexdigest()[:32]}"
+        )
+        try:
+            manifest = build_context_manifest(
+                workspace,
+                repository_id=context_repository_id,
+                source_revision=source_revision,
+                objective=task.imported.direction,
+                policy=self.context_policy,
+            )
+        except ValueError as exc:
+            raise WorkbenchError("deterministic context assembly failed closed") from exc
+
+        after_digest = self.workspaces.tree_digest(workspace)
+        if after_digest != before_digest or after_digest != task.imported.source_snapshot_digest:
+            raise WorkbenchError("workspace source changed during context assembly")
+        if manifest.scan_truncated:
+            raise WorkbenchError("deterministic context assembly was truncated")
+        prohibited_reasons = {
+            "credential_shaped_content",
+            "hardlink",
+            "sensitive_path",
+        }
+        observed_prohibited = sorted(
+            {
+                reason
+                for item in manifest.files
+                for reason in item.policy_reasons
+                if reason in prohibited_reasons
+            }
+        )
+        if observed_prohibited:
+            raise WorkbenchError(
+                "deterministic context assembly rejected unsafe workspace content: "
+                + ",".join(observed_prohibited)
+            )
+
+        selected_paths = {item.path for item in manifest.excerpts}
+        exclusion_counts: dict[str, int] = {}
+        for item in manifest.files:
+            for reason in item.policy_reasons:
+                exclusion_counts[reason] = exclusion_counts.get(reason, 0) + 1
+        planning_payload = {
+            "schema_version": "workbench-planning-context-v2",
+            "source_binding": {
+                "workspace_tree_digest": before_digest,
+                "context_source_tree_digest": manifest.source_tree_digest,
+                "context_manifest_digest": manifest.manifest_digest,
+                "source_revision": manifest.source_revision,
+            },
+            "context_manifest": {
+                "schema_version": manifest.schema_version,
+                "objective_sha256": manifest.objective_sha256,
+                "policy": manifest.policy.model_dump(mode="json"),
+                "selected_files": [
+                    {
+                        "path": item.path,
+                        "category": item.category.value,
+                        "sha256": item.sha256,
+                        "byte_count": item.byte_count,
+                    }
+                    for item in manifest.files
+                    if item.path in selected_paths
+                ],
+                "excerpts": [item.model_dump(mode="json") for item in manifest.excerpts],
+                "instructions": [item.model_dump(mode="json") for item in manifest.instructions],
+                "project_signals": [
+                    item.model_dump(mode="json") for item in manifest.project_signals
+                ],
+                "diagnostics": [item.model_dump(mode="json") for item in manifest.diagnostics],
+                "exclusion_counts": dict(sorted(exclusion_counts.items())),
+                "scan_blockers": list(manifest.scan_blockers),
+                "source_tree_digest": manifest.source_tree_digest,
+                "token_budget": manifest.token_budget.model_dump(mode="json"),
+                "manifest_digest": manifest.manifest_digest,
+            },
+            "trusted_git_facts": git_facts,
+            "trusted_acceptance": {
+                "commands": list(task.imported.acceptance_commands),
+                "commands_digest": content_digest(task.imported.acceptance_commands),
+            },
+        }
+        summary = json.dumps(
+            planning_payload,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return (
+            summary,
+            manifest,
+            before_digest,
+            str(git_facts["status_digest"]) if git_facts is not None else None,
+            content_digest(task.imported.acceptance_commands),
+        )
+
     async def analyze(self, task_id: str) -> tuple[WorkbenchTask, WorkbenchApproval]:
         if self.store.is_emergency_stopped():
             raise WorkbenchError("emergency stop is active")
@@ -292,25 +430,37 @@ class WorkbenchController:
             raise WorkbenchError("task is not ready for planning")
         if not task.creator_brief_digest or not task.creator_route_digest:
             raise WorkbenchError("Creator control-plane bindings are missing")
-        source_evidence = self.store.list_evidence(task_id)
-        if task.imported.repository_id is not None:
-            inspection = self._inspect_bound_repository(task)
-            assert self.repository_registry is not None
-            summary = json.dumps(
-                self.repository_registry.planning_context(inspection),
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=True,
-            )
-        else:
-            summary = next(
-                (
-                    canonical_summary(record.payload)
-                    for record in reversed(source_evidence)
-                    if record.event_type == "source_inspected"
+        (
+            summary,
+            context_manifest,
+            workspace_tree_digest,
+            git_status_digest,
+            acceptance_commands_digest,
+        ) = self._planning_context(task)
+        planning_context_digest = hashlib.sha256(summary.encode()).hexdigest()
+        self.store.append_evidence(
+            task_id,
+            kind=EvidenceKind.SOURCE,
+            event_type="context_manifest_built",
+            payload={
+                "context_manifest_digest": context_manifest.manifest_digest,
+                "context_source_tree_digest": context_manifest.source_tree_digest,
+                "workspace_tree_digest": workspace_tree_digest,
+                "source_snapshot_digest": task.imported.source_snapshot_digest,
+                "source_revision": context_manifest.source_revision,
+                "context_policy_digest": content_digest(context_manifest.policy),
+                "planning_context_digest": planning_context_digest,
+                "selected_context_utf8_bytes": (
+                    context_manifest.token_budget.selected_context_utf8_bytes
                 ),
-                "No source inspection evidence is available.",
-            )
+                "context_token_upper_bound": (
+                    context_manifest.token_budget.conservative_context_token_upper_bound
+                ),
+                "git_status_digest": git_status_digest,
+                "acceptance_commands_digest": acceptance_commands_digest,
+                "read_only_observation": True,
+            },
+        )
         result = await self.model.plan(
             task=task.imported,
             creator_brief_digest=task.creator_brief_digest,
@@ -329,13 +479,22 @@ class WorkbenchController:
                 "provider": result.provider,
                 "model": result.model,
                 "reasoning_tier": result.reasoning_tier,
-                "response_id_hash": (
+                "reasoning_mode": result.reasoning_mode,
+                "reasoning_profile": result.reasoning_profile,
+                "response_id_hash": result.response_id_hash
+                or (
                     hashlib.sha256(result.response_id.encode()).hexdigest()
                     if result.response_id
                     else None
                 ),
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
+                "provider_input_digest": result.provider_input_digest,
+                "model_input_digest": result.input_digest,
+                "planning_context_digest": planning_context_digest,
+                "context_manifest_digest": context_manifest.manifest_digest,
+                "context_source_tree_digest": context_manifest.source_tree_digest,
+                "workspace_tree_digest": workspace_tree_digest,
                 "claim_only": True,
             },
         )
@@ -346,6 +505,9 @@ class WorkbenchController:
             payload={
                 "plan_digest": result.plan.plan_digest,
                 "source_snapshot_digest": result.plan.source_snapshot_digest,
+                "context_manifest_digest": context_manifest.manifest_digest,
+                "context_source_tree_digest": context_manifest.source_tree_digest,
+                "planning_context_digest": planning_context_digest,
                 "tool_digests": [step.request_digest for step in result.plan.steps],
             },
         )
@@ -390,10 +552,10 @@ class WorkbenchController:
             },
         )
         if decision.decision == "approve":
-            return self.store.transition(task_id, WorkbenchState.APPROVED)
+            return self.store.get_task(task_id)
         if decision.decision == "request_revision":
-            return self.store.transition(task_id, WorkbenchState.ANALYZED)
-        return self.store.transition(task_id, WorkbenchState.CANCELED)
+            raise WorkbenchError("canonical lifecycle requires a new task for a revised exact plan")
+        return self.store.get_task(task_id)
 
     def reissue_expired_approval(
         self,
@@ -477,7 +639,9 @@ class WorkbenchController:
                 "storage_path_disclosed": False,
             },
         )
-        task = self.store.transition(task_id, WorkbenchState.EXECUTING, increment_attempt=True)
+        task = self.store.get_task(task_id)
+        if task.state != WorkbenchState.EXECUTING or task.active_attempt != attempt:
+            raise WorkbenchError("canonical dispatch did not enter the exact execution attempt")
         try:
             entered_testing = False
             required_failures: list[str] = []
@@ -597,10 +761,11 @@ class WorkbenchController:
                 },
             )
             task = self.store.transition(task_id, WorkbenchState.VERIFIED)
+            independent_examiner_verification = False
             self.store.append_evidence(
                 task_id,
                 kind=EvidenceKind.VERIFIED,
-                event_type="verification_satisfied",
+                event_type="local_verification_satisfied",
                 payload={
                     "verified": True,
                     "test_tool_ids": sorted(test_ids),
@@ -609,9 +774,12 @@ class WorkbenchController:
                     "completion_evidence_id": completion.id,
                     "final_tree_digest": final_tree_digest,
                     "patch_digest": patch_digest,
-                    "independent_examiner_verification": False,
+                    "independent_examiner_verification": independent_examiner_verification,
+                    "completion_claim_allowed": independent_examiner_verification,
                 },
             )
+            if not independent_examiner_verification:
+                return task
             return self.store.transition(task_id, WorkbenchState.COMPLETED)
         except Exception as exc:
             current = self.store.get_task(task_id)
@@ -937,6 +1105,10 @@ class WorkbenchController:
             emergency_stopped=self.store.is_emergency_stopped(),
             evidence_integrity=evidence_integrity,
             missing_prerequisites=tuple(missing),
+            capabilities=build_capability_statuses(
+                model=self.model,
+                runner=self.executor,
+            ),
         )
 
     def _validate_plan(self, task: WorkbenchTask, result: ModelPlanResult) -> None:

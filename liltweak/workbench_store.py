@@ -8,6 +8,20 @@ import sqlite3
 from pathlib import Path
 from threading import RLock
 
+from .canonical_lifecycle import (
+    ApprovalPurpose as CanonicalApprovalPurpose,
+)
+from .canonical_lifecycle import (
+    CapabilityName,
+    TaskState,
+)
+from .canonical_lifecycle import (
+    content_digest as canonical_content_digest,
+)
+from .canonical_store import (
+    CanonicalStateStore,
+    CanonicalStoreError,
+)
 from .workbench_contract import (
     ApprovalPurpose,
     CandidateSubmission,
@@ -21,6 +35,10 @@ from .workbench_contract import (
     canonical_json,
     content_digest,
     utc_now,
+)
+
+CANONICAL_BRIDGE_MIGRATION_PATH = (
+    Path(__file__).resolve().parent.parent / "migrations" / "0010_workbench_canonical_authority.sql"
 )
 
 SCHEMA = """
@@ -204,7 +222,13 @@ class WorkbenchConflict(WorkbenchStoreError):
 
 
 class WorkbenchStore:
-    def __init__(self, database_path: Path | str, *, signing_key: bytes | None = None) -> None:
+    def __init__(
+        self,
+        database_path: Path | str,
+        *,
+        signing_key: bytes | None = None,
+        runtime_id: str | None = None,
+    ) -> None:
         self._signing_key = secrets.token_bytes(32) if signing_key is None else signing_key
         if not isinstance(self._signing_key, bytes) or len(self._signing_key) != 32:
             raise ValueError("Workbench evidence signing key must contain exactly 32 bytes")
@@ -220,8 +244,37 @@ class WorkbenchStore:
             self._connection.executescript(SCHEMA)
             self._ensure_record_signature_columns()
             self._ensure_control_integrity()
+        self._canonical = CanonicalStateStore(
+            database_path,
+            runtime_id=runtime_id,
+            connection=self._connection,
+            lock=self._lock,
+        )
+        if not CANONICAL_BRIDGE_MIGRATION_PATH.is_file():
+            raise WorkbenchStoreError("canonical Workbench bridge migration is missing")
+        with self._lock:
+            self._connection.executescript(
+                CANONICAL_BRIDGE_MIGRATION_PATH.read_text(encoding="utf-8")
+            )
+        self._active_dispatch: dict[str, tuple[str, str]] = {}
+        with self._lock:
+            control_row = self._connection.execute(
+                "SELECT value FROM workbench_control WHERE name='emergency_stop'"
+            ).fetchone()
+            workbench_stopped = control_row is not None and control_row["value"] == "true"
+            canonical_stopped = self._canonical.control().emergency_stopped
+        if workbench_stopped != canonical_stopped:
+            # Divergence can only be reconciled toward the safer stopped state.
+            self.emergency_stop(True, actor_id=self._canonical.runtime_id)
+
+    @property
+    def canonical(self) -> CanonicalStateStore:
+        """The authoritative lifecycle store sharing this exact SQLite transaction boundary."""
+
+        return self._canonical
 
     def close(self) -> None:
+        self._canonical.close()
         self._connection.close()
 
     def create_task(self, task: WorkbenchTask) -> WorkbenchTask:
@@ -231,6 +284,23 @@ class WorkbenchStore:
         signature = self._sign_record("task", task.id, record)
         try:
             with self._lock, self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
+                required_capabilities = [
+                    CapabilityName.MODEL,
+                    CapabilityName.RUNNER,
+                    CapabilityName.EXTERNAL_CHECKPOINT,
+                ]
+                if task.imported.requires_changes:
+                    required_capabilities.extend(
+                        (CapabilityName.OWNER_TREE_APPLY, CapabilityName.LOCAL_COMMIT)
+                    )
+                self._canonical.create_task(
+                    task_id=task.id,
+                    task_digest=task.task_digest,
+                    source_snapshot_digest=task.imported.source_snapshot_digest,
+                    requires_change=task.imported.requires_changes,
+                    required_capabilities=tuple(required_capabilities),
+                )
                 self._connection.execute(
                     """
                     INSERT INTO workbench_tasks(
@@ -249,7 +319,15 @@ class WorkbenchStore:
                         task.updated_at.isoformat(),
                     ),
                 )
-        except sqlite3.IntegrityError as exc:
+                self._connection.execute(
+                    """
+                    INSERT INTO canonical_workbench_task_bindings(
+                        workbench_task_id, canonical_task_id, created_at
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (task.id, task.id, task.created_at.isoformat()),
+                )
+        except (sqlite3.IntegrityError, CanonicalStoreError) as exc:
             raise WorkbenchConflict("duplicate task or another active Workbench task") from exc
         return task
 
@@ -278,32 +356,252 @@ class WorkbenchStore:
         blocked_reason: str | None = None,
         increment_attempt: bool = False,
     ) -> WorkbenchTask:
-        with self._lock, self._connection:
-            self._connection.execute("BEGIN IMMEDIATE")
-            task = self._get_task_locked(task_id)
-            if target not in _ALLOWED_TRANSITIONS[task.state]:
-                raise WorkbenchConflict(
-                    f"invalid state transition: {task.state.value} -> {target.value}"
+        dispatch_completed = False
+        try:
+            with self._lock, self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
+                task = self._get_task_locked(task_id)
+                if target not in _ALLOWED_TRANSITIONS[task.state]:
+                    raise WorkbenchConflict(
+                        f"invalid state transition: {task.state.value} -> {target.value}"
+                    )
+                update: dict[str, object] = {
+                    "state": target,
+                    "updated_at": utc_now(),
+                    "blocked_reason": blocked_reason,
+                }
+                if plan is not None:
+                    if plan.source_snapshot_digest != task.imported.source_snapshot_digest:
+                        raise WorkbenchConflict("plan is bound to a different source snapshot")
+                    update["plan"] = plan
+                    update["plan_digest"] = plan.plan_digest
+                if increment_attempt:
+                    update["active_attempt"] = task.active_attempt + 1
+                changed = task.model_copy(update=update)
+                changed = WorkbenchTask.model_validate(changed.model_dump(mode="python"))
+                self._advance_canonical_projection_locked(
+                    task,
+                    target=target,
+                    plan=plan,
+                    blocked_reason=blocked_reason,
                 )
-            update: dict[str, object] = {
-                "state": target,
-                "updated_at": utc_now(),
-                "blocked_reason": blocked_reason,
-            }
-            if plan is not None:
-                if plan.source_snapshot_digest != task.imported.source_snapshot_digest:
-                    raise WorkbenchConflict("plan is bound to a different source snapshot")
-                update["plan"] = plan
-                update["plan_digest"] = plan.plan_digest
-            if increment_attempt:
-                update["active_attempt"] = task.active_attempt + 1
-            changed = task.model_copy(update=update)
-            changed = WorkbenchTask.model_validate(changed.model_dump(mode="python"))
-            try:
                 self._save_task_locked(changed)
-            except sqlite3.IntegrityError as exc:
-                raise WorkbenchConflict("another Workbench task is active") from exc
-            return changed
+                dispatch_completed = target == WorkbenchState.TESTING
+        except sqlite3.IntegrityError as exc:
+            raise WorkbenchConflict("another Workbench task is active") from exc
+        except CanonicalStoreError as exc:
+            raise WorkbenchConflict(
+                "authoritative canonical lifecycle rejected the Workbench transition"
+            ) from exc
+        if dispatch_completed:
+            self._active_dispatch.pop(task_id, None)
+        return changed
+
+    def _advance_canonical_projection_locked(
+        self,
+        task: WorkbenchTask,
+        *,
+        target: WorkbenchState,
+        plan: WorkbenchPlan | None,
+        blocked_reason: str | None,
+    ) -> None:
+        canonical = self._canonical.get_task(task.id)
+        projection_payload = {
+            "workbench_from_state": task.state.value,
+            "workbench_to_state": target.value,
+        }
+        if target == WorkbenchState.INSPECTING:
+            self._canonical.record_event_atomic(
+                task.id,
+                expected_version=canonical.version,
+                event_type="workbench.inspection.started",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.ANALYZED:
+            if canonical.state == TaskState.RECEIVED:
+                self._canonical.transition_with_evidence(
+                    task.id,
+                    expected_version=canonical.version,
+                    target=TaskState.INSPECTED,
+                    event_type="workbench.inspection.completed",
+                    payload=projection_payload,
+                )
+                return
+            if canonical.state == TaskState.FAILED:
+                self._canonical.record_event_atomic(
+                    task.id,
+                    expected_version=canonical.version,
+                    event_type="workbench.rollback.prepared",
+                    payload=projection_payload,
+                )
+                return
+            raise WorkbenchConflict("canonical task is not ready for analyzed projection")
+        if target == WorkbenchState.PLAN_READY:
+            if plan is None:
+                raise WorkbenchConflict("plan-ready transition requires an exact plan")
+            if canonical.state == TaskState.INSPECTED:
+                canonical = self._canonical.transition_with_evidence(
+                    task.id,
+                    expected_version=canonical.version,
+                    target=TaskState.PLANNING,
+                    event_type="workbench.planning.started",
+                    payload=projection_payload,
+                )
+                self._canonical.propose_plan_atomic(
+                    task.id,
+                    expected_version=canonical.version,
+                    plan_digest=plan.plan_digest,
+                )
+                return
+            if canonical.state == TaskState.FAILED and task.plan_digest == plan.plan_digest:
+                self._canonical.record_event_atomic(
+                    task.id,
+                    expected_version=canonical.version,
+                    event_type="workbench.rollback.plan.reused",
+                    payload={**projection_payload, "plan_digest": plan.plan_digest},
+                )
+                return
+            raise WorkbenchConflict("canonical task cannot accept this plan projection")
+        if target == WorkbenchState.AWAITING_APPROVAL:
+            if canonical.state not in {
+                TaskState.PLAN_PROPOSED,
+                TaskState.FAILED,
+                TaskState.APPROVED,
+            }:
+                raise WorkbenchConflict("canonical task is not ready to await approval")
+            self._canonical.record_event_atomic(
+                task.id,
+                expected_version=canonical.version,
+                event_type="workbench.approval.awaited",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.APPROVED:
+            if canonical.state not in {TaskState.APPROVED, TaskState.ROLLBACK_PENDING}:
+                raise WorkbenchConflict("canonical approval decision is missing")
+            self._canonical.record_event_atomic(
+                task.id,
+                expected_version=canonical.version,
+                event_type="workbench.approval.projected",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.EXECUTING:
+            if canonical.state != TaskState.EXECUTING:
+                raise WorkbenchConflict("canonical dispatch lease was not claimed")
+            self._canonical.record_event_atomic(
+                task.id,
+                expected_version=canonical.version,
+                event_type="workbench.execution.projected",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.TESTING:
+            dispatch = self._active_dispatch.get(task.id)
+            if canonical.state != TaskState.EXECUTING or dispatch is None:
+                raise WorkbenchConflict("canonical active dispatch authority is missing")
+            lease_id, lease_token = dispatch
+            rows = self._connection.execute(
+                "SELECT record_json FROM workbench_runs WHERE task_id=? ORDER BY created_at, id",
+                (task.id,),
+            ).fetchall()
+            result_digest = canonical_content_digest(
+                {
+                    "schema_version": "workbench-dispatch-result-v1",
+                    "task_id": task.id,
+                    "runs": [json.loads(str(row["record_json"])) for row in rows],
+                }
+            )
+            completed = self._canonical.complete_dispatch_atomic(
+                task.id,
+                lease_id,
+                expected_version=canonical.version,
+                lease_token=lease_token,
+                result_digest=result_digest,
+            )
+            if completed.state != TaskState.TESTING:
+                raise WorkbenchConflict("canonical dispatch did not enter testing")
+            return
+        if target == WorkbenchState.VERIFIED:
+            if canonical.state != TaskState.TESTING:
+                raise WorkbenchConflict("canonical task is not ready for verification")
+            self._canonical.transition_with_evidence(
+                task.id,
+                expected_version=canonical.version,
+                target=TaskState.VERIFYING,
+                event_type="workbench.verification.started",
+                payload=projection_payload,
+            )
+            return
+        if target == WorkbenchState.COMPLETED:
+            if canonical.state != TaskState.LOCALLY_COMMITTED:
+                raise WorkbenchConflict(
+                    "canonical completion requires sealed evidence, applied patch, and local commit"
+                )
+            self._canonical.complete_atomic(task.id, expected_version=canonical.version)
+            return
+        if target in {WorkbenchState.FAILED, WorkbenchState.CANCELED}:
+            canonical_target = (
+                TaskState.FAILED if target == WorkbenchState.FAILED else TaskState.CANCELED
+            )
+            if (
+                canonical_target == TaskState.CANCELED
+                and canonical.state == TaskState.EMERGENCY_STOPPED
+            ):
+                return
+            self._canonical.terminate_task_atomic(
+                task.id,
+                expected_version=canonical.version,
+                target=canonical_target,
+                event_type=f"workbench.task.{target.value.casefold()}",
+                payload=projection_payload,
+                failure_reason=blocked_reason if canonical_target == TaskState.FAILED else None,
+            )
+            return
+        if target == WorkbenchState.BLOCKED:
+            if canonical.state in {TaskState.RECEIVED, TaskState.INSPECTED}:
+                self._canonical.record_event_atomic(
+                    task.id,
+                    expected_version=canonical.version,
+                    event_type="workbench.task.blocked",
+                    payload={**projection_payload, "reason": blocked_reason},
+                )
+                return
+            self._canonical.terminate_task_atomic(
+                task.id,
+                expected_version=canonical.version,
+                target=TaskState.FAILED,
+                event_type="workbench.task.blocked",
+                payload=projection_payload,
+                failure_reason=blocked_reason or "Workbench task blocked",
+            )
+            return
+        if target == WorkbenchState.ROLLED_BACK:
+            if canonical.state != TaskState.ROLLBACK_PENDING:
+                raise WorkbenchConflict("canonical rollback approval is not pending")
+            canonical_approval_id = self._canonical_approval_id_locked(
+                self._latest_workbench_approval_id_locked(task.id, ApprovalPurpose.ROLLBACK)
+            )
+            approval = self._canonical.get_approval(canonical_approval_id)
+            result_digest = canonical_content_digest(
+                {
+                    "schema_version": "workbench-rollback-result-v1",
+                    "task_id": task.id,
+                    "source_snapshot_digest": task.imported.source_snapshot_digest,
+                }
+            )
+            self._canonical.consume_delivery_approval_atomic(
+                task.id,
+                canonical_approval_id,
+                expected_version=canonical.version,
+                purpose=CanonicalApprovalPurpose.ROLLBACK,
+                operation_digest=approval.operation_digest,
+                policy_digest=approval.policy_digest,
+                result_digest=result_digest,
+            )
+            return
+        raise WorkbenchConflict("Workbench projection has no canonical lifecycle transition")
 
     def set_creator_bindings(
         self, task_id: str, *, brief_digest: str, route_digest: str
@@ -327,9 +625,55 @@ class WorkbenchStore:
             raise WorkbenchConflict("only pending owner approvals may be published")
         try:
             with self._lock, self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
                 task = self._get_task_locked(approval.task_id)
                 if task.state != WorkbenchState.AWAITING_APPROVAL:
                     raise WorkbenchConflict("approval task is not awaiting approval")
+                canonical_purpose = self._canonical_approval_purpose(approval.purpose)
+                operation_digest = self._canonical_operation_digest(approval)
+                remaining_seconds = int((approval.expires_at - utc_now()).total_seconds())
+                if remaining_seconds < 1:
+                    raise WorkbenchConflict("approval expired before canonical publication")
+                canonical_task = self._canonical.get_task(task.id)
+                replacement_states = {
+                    TaskState.APPROVAL_PENDING,
+                    TaskState.ROLLBACK_PENDING,
+                    TaskState.APPROVED,
+                }
+                if canonical_task.state in replacement_states:
+                    previous_workbench_id = self._latest_workbench_approval_id_locked(
+                        task.id,
+                        approval.purpose,
+                    )
+                    previous_canonical_id = self._canonical_approval_id_locked(
+                        previous_workbench_id
+                    )
+                    canonical_approval = self._canonical.build_replacement_approval(
+                        task.id,
+                        previous_canonical_id,
+                        operation_digest=operation_digest,
+                        policy_digest=approval.policy_digest,
+                        ttl_seconds=min(remaining_seconds, 900),
+                    )
+                    self._canonical.replace_expired_approval_atomic(
+                        task.id,
+                        previous_canonical_id,
+                        expected_version=canonical_task.version,
+                        approval=canonical_approval,
+                    )
+                else:
+                    canonical_approval = self._canonical.build_approval(
+                        task.id,
+                        purpose=canonical_purpose,
+                        operation_digest=operation_digest,
+                        policy_digest=approval.policy_digest,
+                        ttl_seconds=min(remaining_seconds, 900),
+                    )
+                    self._canonical.publish_approval_atomic(
+                        task.id,
+                        expected_version=canonical_task.version,
+                        approval=canonical_approval,
+                    )
                 self._connection.execute(
                     """
                     INSERT INTO workbench_approvals(
@@ -347,8 +691,24 @@ class WorkbenchStore:
                         approval.created_at.isoformat(),
                     ),
                 )
+                self._connection.execute(
+                    """
+                    INSERT INTO canonical_workbench_approval_bindings(
+                        workbench_approval_id, canonical_approval_id, created_at
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (
+                        approval.id,
+                        canonical_approval.id,
+                        approval.created_at.isoformat(),
+                    ),
+                )
         except sqlite3.IntegrityError as exc:
             raise WorkbenchConflict("approval already exists") from exc
+        except CanonicalStoreError as exc:
+            raise WorkbenchConflict(
+                "authoritative canonical lifecycle rejected approval publication"
+            ) from exc
 
     def get_approval(self, approval_id: str) -> WorkbenchApproval:
         row = self._connection.execute(
@@ -371,30 +731,83 @@ class WorkbenchStore:
         actor_id: str,
     ) -> WorkbenchApproval:
         statuses = {"approve": "approved", "reject": "rejected", "request_revision": "revision"}
-        with self._lock, self._connection:
-            self._connection.execute("BEGIN IMMEDIATE")
-            approval = self._get_approval_locked(approval_id)
-            if approval.task_id != task_id:
-                raise WorkbenchConflict("approval task binding does not match")
-            if approval.status != "pending":
-                raise WorkbenchConflict("approval is not pending")
-            if utc_now() >= approval.expires_at:
-                self._save_approval_locked(approval.model_copy(update={"status": "expired"}))
-                raise WorkbenchConflict("approval expired")
-            submitted = hashlib.sha256(approval_digest.encode()).digest()
-            expected = hashlib.sha256(approval.approval_digest.encode()).digest()
-            if not secrets.compare_digest(submitted, expected):
-                raise WorkbenchConflict("approval digest mismatch")
-            changed = approval.model_copy(
-                update={
-                    "status": statuses[decision],
-                    "approved_by": actor_id if decision == "approve" else None,
-                    "decided_at": utc_now(),
-                }
+        if decision == "request_revision":
+            raise WorkbenchConflict(
+                "canonical lifecycle requires a new task for a revised exact plan"
             )
-            changed = WorkbenchApproval.model_validate(changed.model_dump(mode="python"))
-            self._save_approval_locked(changed)
-            return changed
+        try:
+            with self._lock, self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
+                approval = self._get_approval_locked(approval_id)
+                if approval.task_id != task_id:
+                    raise WorkbenchConflict("approval task binding does not match")
+                if approval.status != "pending":
+                    raise WorkbenchConflict("approval is not pending")
+                workbench_task = self._get_task_locked(task_id)
+                if workbench_task.state != WorkbenchState.AWAITING_APPROVAL:
+                    raise WorkbenchConflict("approval task is not awaiting a decision")
+                if utc_now() >= approval.expires_at:
+                    self._save_approval_locked(approval.model_copy(update={"status": "expired"}))
+                    raise WorkbenchConflict("approval expired")
+                submitted = hashlib.sha256(approval_digest.encode()).digest()
+                expected = hashlib.sha256(approval.approval_digest.encode()).digest()
+                if not secrets.compare_digest(submitted, expected):
+                    raise WorkbenchConflict("approval digest mismatch")
+                changed = approval.model_copy(
+                    update={
+                        "status": statuses[decision],
+                        "approved_by": actor_id if decision == "approve" else None,
+                        "decided_at": utc_now(),
+                    }
+                )
+                changed = WorkbenchApproval.model_validate(changed.model_dump(mode="python"))
+                canonical_task = self._canonical.get_task(task_id)
+                canonical_approval_id = self._canonical_approval_id_locked(approval.id)
+                if decision == "approve":
+                    decision_proof_digest = canonical_content_digest(
+                        {
+                            "schema_version": "workbench-owner-decision-v1",
+                            "workbench_approval_id": approval.id,
+                            "workbench_approval_digest": approval.approval_digest,
+                            "decision": decision,
+                            "actor_id": actor_id,
+                            "decided_at": changed.decided_at,
+                        }
+                    )
+                    self._canonical.approve_atomic(
+                        task_id,
+                        canonical_approval_id,
+                        expected_version=canonical_task.version,
+                        owner_id=actor_id,
+                        decision_proof_digest=decision_proof_digest,
+                    )
+                else:
+                    self._canonical.reject_approval_atomic(
+                        task_id,
+                        canonical_approval_id,
+                        expected_version=canonical_task.version,
+                        actor_id=actor_id,
+                        reason_code="owner_rejected",
+                    )
+                self._save_approval_locked(changed)
+                projected_state = (
+                    WorkbenchState.APPROVED if decision == "approve" else WorkbenchState.CANCELED
+                )
+                projected = WorkbenchTask.model_validate(
+                    workbench_task.model_copy(
+                        update={
+                            "state": projected_state,
+                            "updated_at": utc_now(),
+                            "blocked_reason": None,
+                        }
+                    ).model_dump(mode="python")
+                )
+                self._save_task_locked(projected)
+                return changed
+        except CanonicalStoreError as exc:
+            raise WorkbenchConflict(
+                "authoritative canonical lifecycle rejected the approval decision"
+            ) from exc
 
     def consume_approval(
         self,
@@ -408,66 +821,114 @@ class WorkbenchStore:
         policy_digest: str,
         runner_grant_digest: str | None,
     ) -> WorkbenchApproval:
-        with self._lock, self._connection:
-            self._connection.execute("BEGIN IMMEDIATE")
-            current = self._get_task_locked(task.id)
-            approval = self._get_approval_locked(approval_id)
-            if approval.status != "approved":
-                raise WorkbenchConflict("approval is not approved")
-            if approval.approved_by != expected_owner_id:
-                raise WorkbenchConflict("approval was not granted by the configured owner")
-            if utc_now() >= approval.expires_at:
-                self._save_approval_locked(approval.model_copy(update={"status": "expired"}))
-                raise WorkbenchConflict("approval expired")
-            if (
-                current != task
-                or current.state != WorkbenchState.APPROVED
-                or approval.task_id != current.id
-                or approval.task_digest != current.task_digest
-                or approval.purpose != expected_purpose
-                or approval.plan_digest != current.plan_digest
-                or approval.source_snapshot_digest != current.imported.source_snapshot_digest
-                or approval.repository_id != current.imported.repository_id
-                or approval.examination_digest
-                != (
-                    current.imported.examination.config_digest
-                    if current.imported.examination is not None
-                    else None
+        dispatch: tuple[str, str] | None = None
+        try:
+            with self._lock, self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
+                current = self._get_task_locked(task.id)
+                approval = self._get_approval_locked(approval_id)
+                if approval.status != "approved":
+                    raise WorkbenchConflict("approval is not approved")
+                if approval.approved_by != expected_owner_id:
+                    raise WorkbenchConflict("approval was not granted by the configured owner")
+                if utc_now() >= approval.expires_at:
+                    self._save_approval_locked(approval.model_copy(update={"status": "expired"}))
+                    raise WorkbenchConflict("approval expired")
+                if (
+                    current != task
+                    or current.state != WorkbenchState.APPROVED
+                    or approval.task_id != current.id
+                    or approval.task_digest != current.task_digest
+                    or approval.purpose != expected_purpose
+                    or approval.plan_digest != current.plan_digest
+                    or approval.source_snapshot_digest != current.imported.source_snapshot_digest
+                    or approval.repository_id != current.imported.repository_id
+                    or approval.examination_digest
+                    != (
+                        current.imported.examination.config_digest
+                        if current.imported.examination is not None
+                        else None
+                    )
+                    or approval.project
+                    != (
+                        current.imported.examination.authorized_project
+                        if current.imported.examination is not None
+                        else None
+                    )
+                    or approval.candidate_identity
+                    != (
+                        current.imported.examination.candidate_service_account
+                        if current.imported.examination is not None
+                        else None
+                    )
+                    or approval.execution_attempt != expected_attempt
+                    or approval.approved_tool_digests != tool_digests
+                    or approval.policy_digest != policy_digest
+                    or approval.runner_grant_digest != runner_grant_digest
+                ):
+                    raise WorkbenchConflict("approval binding changed")
+                matching_decision = any(
+                    record.event_type == "approval_decided"
+                    and record.payload.get("approval_id") == approval.id
+                    and record.payload.get("approval_digest") == approval.approval_digest
+                    and record.payload.get("decision") == "approve"
+                    and record.payload.get("actor_id") == expected_owner_id
+                    and record.payload.get("decided_at")
+                    == (approval.decided_at.isoformat() if approval.decided_at else None)
+                    for record in self._verify_evidence_locked(task.id)
                 )
-                or approval.project
-                != (
-                    current.imported.examination.authorized_project
-                    if current.imported.examination is not None
-                    else None
+                if not matching_decision:
+                    raise WorkbenchConflict("authenticated owner approval decision is missing")
+                canonical_task = self._canonical.get_task(task.id)
+                canonical_approval_id = self._canonical_approval_id_locked(approval.id)
+                canonical_approval = self._canonical.get_approval(canonical_approval_id)
+                if expected_purpose == ApprovalPurpose.EXECUTE:
+                    if canonical_task.state != TaskState.APPROVED:
+                        raise WorkbenchConflict("canonical task is not approved for dispatch")
+                    canonical_task = self._canonical.transition_with_evidence(
+                        task.id,
+                        expected_version=canonical_task.version,
+                        target=TaskState.RUNNER_PREFLIGHT,
+                        event_type="workbench.runner.preflight",
+                        payload={
+                            "runner_grant_digest": runner_grant_digest,
+                            "workbench_approval_id": approval.id,
+                        },
+                    )
+                    _, lease, lease_token = self._canonical.claim_dispatch_atomic(
+                        task.id,
+                        canonical_approval_id,
+                        expected_version=canonical_task.version,
+                        request_digest=canonical_approval.operation_digest,
+                        policy_digest=policy_digest,
+                    )
+                    dispatch = (lease.id, lease_token)
+                elif canonical_task.state != TaskState.ROLLBACK_PENDING:
+                    raise WorkbenchConflict("canonical rollback approval is not pending")
+                changed = approval.model_copy(
+                    update={"status": "consumed", "consumed_at": utc_now()}
                 )
-                or approval.candidate_identity
-                != (
-                    current.imported.examination.candidate_service_account
-                    if current.imported.examination is not None
-                    else None
-                )
-                or approval.execution_attempt != expected_attempt
-                or approval.approved_tool_digests != tool_digests
-                or approval.policy_digest != policy_digest
-                or approval.runner_grant_digest != runner_grant_digest
-            ):
-                raise WorkbenchConflict("approval binding changed")
-            matching_decision = any(
-                record.event_type == "approval_decided"
-                and record.payload.get("approval_id") == approval.id
-                and record.payload.get("approval_digest") == approval.approval_digest
-                and record.payload.get("decision") == "approve"
-                and record.payload.get("actor_id") == expected_owner_id
-                and record.payload.get("decided_at")
-                == (approval.decided_at.isoformat() if approval.decided_at else None)
-                for record in self._verify_evidence_locked(task.id)
-            )
-            if not matching_decision:
-                raise WorkbenchConflict("authenticated owner approval decision is missing")
-            changed = approval.model_copy(update={"status": "consumed", "consumed_at": utc_now()})
-            changed = WorkbenchApproval.model_validate(changed.model_dump(mode="python"))
-            self._save_approval_locked(changed)
-            return changed
+                changed = WorkbenchApproval.model_validate(changed.model_dump(mode="python"))
+                self._save_approval_locked(changed)
+                if expected_purpose == ApprovalPurpose.EXECUTE:
+                    projected = WorkbenchTask.model_validate(
+                        current.model_copy(
+                            update={
+                                "state": WorkbenchState.EXECUTING,
+                                "active_attempt": expected_attempt,
+                                "updated_at": utc_now(),
+                                "blocked_reason": None,
+                            }
+                        ).model_dump(mode="python")
+                    )
+                    self._save_task_locked(projected)
+        except CanonicalStoreError as exc:
+            raise WorkbenchConflict(
+                "authoritative canonical lifecycle rejected approval consumption"
+            ) from exc
+        if dispatch is not None:
+            self._active_dispatch[task.id] = dispatch
+        return changed
 
     def save_run(self, run: ToolRunRecord) -> None:
         try:
@@ -877,6 +1338,16 @@ class WorkbenchStore:
             }
             record = canonical_json(payload)
             record_hash = content_digest(payload)
+            if enabled:
+                self._canonical.engage_emergency_stop(
+                    actor_id=actor_id,
+                    reason_code="workbench_owner_stop",
+                )
+            else:
+                self._canonical.clear_emergency_stop(
+                    actor_id=actor_id,
+                    reason_code="workbench_owner_reset",
+                )
             self._connection.execute(
                 """
                 INSERT INTO workbench_control_events(
@@ -923,7 +1394,14 @@ class WorkbenchStore:
         with self._lock:
             row = self._verified_control_locked()
             self._verify_control_events_locked(row)
-            return row["value"] == "true"
+            workbench_stopped = row["value"] == "true"
+            try:
+                canonical_stopped = self._canonical.control().emergency_stopped
+            except CanonicalStoreError as exc:
+                raise WorkbenchConflict("authoritative emergency control is unavailable") from exc
+            if canonical_stopped != workbench_stopped:
+                raise WorkbenchConflict("Workbench and canonical emergency controls diverged")
+            return canonical_stopped
 
     def _get_task_locked(self, task_id: str) -> WorkbenchTask:
         row = self._connection.execute(
@@ -956,6 +1434,58 @@ class WorkbenchStore:
         if row is None:
             raise WorkbenchNotFound("workbench approval was not found")
         return self._approval_from_row(row)
+
+    def _canonical_approval_id_locked(self, workbench_approval_id: str) -> str:
+        row = self._connection.execute(
+            """
+            SELECT canonical_approval_id FROM canonical_workbench_approval_bindings
+            WHERE workbench_approval_id=?
+            """,
+            (workbench_approval_id,),
+        ).fetchone()
+        if row is None:
+            raise WorkbenchConflict("authoritative canonical approval binding is missing")
+        return str(row["canonical_approval_id"])
+
+    def _latest_workbench_approval_id_locked(
+        self,
+        task_id: str,
+        purpose: ApprovalPurpose,
+    ) -> str:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM workbench_approvals
+            WHERE task_id=? ORDER BY created_at DESC, id DESC
+            """,
+            (task_id,),
+        ).fetchall()
+        for row in rows:
+            approval = self._approval_from_row(row)
+            if approval.purpose == purpose:
+                return approval.id
+        raise WorkbenchConflict("Workbench approval for canonical operation is missing")
+
+    @staticmethod
+    def _canonical_approval_purpose(purpose: ApprovalPurpose) -> CanonicalApprovalPurpose:
+        mapping = {
+            ApprovalPurpose.EXECUTE: CanonicalApprovalPurpose.EXECUTION,
+            ApprovalPurpose.ROLLBACK: CanonicalApprovalPurpose.ROLLBACK,
+            ApprovalPurpose.APPLY_PATCH: CanonicalApprovalPurpose.APPLY_PATCH,
+            ApprovalPurpose.LOCAL_COMMIT: CanonicalApprovalPurpose.LOCAL_COMMIT,
+        }
+        return mapping[purpose]
+
+    @staticmethod
+    def _canonical_operation_digest(approval: WorkbenchApproval) -> str:
+        if approval.purpose == ApprovalPurpose.ROLLBACK:
+            if len(approval.approved_tool_digests) != 1:
+                raise WorkbenchConflict("rollback approval requires one recovery snapshot digest")
+            return approval.approved_tool_digests[0]
+        if approval.purpose == ApprovalPurpose.APPLY_PATCH:
+            if len(approval.approved_tool_digests) != 1:
+                raise WorkbenchConflict("patch approval requires one patch manifest digest")
+            return approval.approved_tool_digests[0]
+        return approval.approval_digest
 
     def _save_approval_locked(self, approval: WorkbenchApproval) -> None:
         record = approval.model_dump_json()
@@ -1139,7 +1669,66 @@ class WorkbenchStore:
             or row["updated_at"] != task.updated_at.isoformat()
         ):
             raise WorkbenchConflict("authenticated Workbench task columns do not match")
+        binding = self._connection.execute(
+            """
+            SELECT canonical_task_id FROM canonical_workbench_task_bindings
+            WHERE workbench_task_id=?
+            """,
+            (task.id,),
+        ).fetchone()
+        if binding is None or binding["canonical_task_id"] != task.id:
+            raise WorkbenchConflict("authoritative canonical task binding is missing")
+        try:
+            canonical_task = self._canonical.get_task(task.id)
+        except CanonicalStoreError as exc:
+            raise WorkbenchConflict("authoritative canonical task is unavailable") from exc
+        if (
+            canonical_task.task_digest != task.task_digest
+            or canonical_task.source_snapshot_digest != task.imported.source_snapshot_digest
+            or canonical_task.state not in self._canonical_states_for_projection(task.state)
+        ):
+            raise WorkbenchConflict("Workbench projection contradicts authoritative lifecycle")
         return task
+
+    @staticmethod
+    def _canonical_states_for_projection(state: WorkbenchState) -> frozenset[TaskState]:
+        mapping = {
+            WorkbenchState.RECEIVED: frozenset({TaskState.RECEIVED}),
+            WorkbenchState.INSPECTING: frozenset({TaskState.RECEIVED}),
+            WorkbenchState.ANALYZED: frozenset({TaskState.INSPECTED, TaskState.FAILED}),
+            WorkbenchState.PLAN_READY: frozenset({TaskState.PLAN_PROPOSED, TaskState.FAILED}),
+            WorkbenchState.AWAITING_APPROVAL: frozenset(
+                {
+                    TaskState.PLAN_PROPOSED,
+                    TaskState.APPROVAL_PENDING,
+                    TaskState.APPROVED,
+                    TaskState.FAILED,
+                    TaskState.ROLLBACK_PENDING,
+                }
+            ),
+            WorkbenchState.APPROVED: frozenset({TaskState.APPROVED, TaskState.ROLLBACK_PENDING}),
+            WorkbenchState.EXECUTING: frozenset({TaskState.EXECUTING}),
+            WorkbenchState.TESTING: frozenset({TaskState.TESTING}),
+            WorkbenchState.VERIFIED: frozenset(
+                {
+                    TaskState.VERIFYING,
+                    TaskState.EVIDENCE_SEALED,
+                    TaskState.PATCH_READY,
+                    TaskState.APPLY_APPROVAL_PENDING,
+                    TaskState.APPLIED,
+                    TaskState.COMMIT_APPROVAL_PENDING,
+                    TaskState.LOCALLY_COMMITTED,
+                }
+            ),
+            WorkbenchState.COMPLETED: frozenset({TaskState.COMPLETED}),
+            WorkbenchState.BLOCKED: frozenset(
+                {TaskState.RECEIVED, TaskState.INSPECTED, TaskState.FAILED}
+            ),
+            WorkbenchState.FAILED: frozenset({TaskState.FAILED}),
+            WorkbenchState.ROLLED_BACK: frozenset({TaskState.ROLLED_BACK}),
+            WorkbenchState.CANCELED: frozenset({TaskState.CANCELED, TaskState.EMERGENCY_STOPPED}),
+        }
+        return mapping[state] | frozenset({TaskState.EMERGENCY_STOPPED})
 
     def _approval_from_row(self, row: sqlite3.Row) -> WorkbenchApproval:
         record = self._verify_record(

@@ -1,0 +1,472 @@
+{
+  "baseline_commit": "373400cb2b459dbf8a37dacceb0d3d1186eef949",
+  "branch": "codex/lil-tweak-live-workbench-build",
+  "candidate_commit": "recorded_externally_after_freeze",
+  "operational_release_gate": "BLOCKED",
+  "package_count": 60,
+  "packages": [
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "annotated-doc",
+      "status": "OBSERVED",
+      "version": "0.0.4"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "annotated-types",
+      "status": "OBSERVED",
+      "version": "0.8.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "anyio",
+      "status": "OBSERVED",
+      "version": "4.14.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "attrs",
+      "status": "OBSERVED",
+      "version": "26.1.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+      ],
+      "license_expression": "MPL-2.0",
+      "package": "certifi",
+      "status": "OBSERVED",
+      "version": "2026.7.22"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT-0",
+      "package": "cffi",
+      "status": "OBSERVED",
+      "version": "2.1.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "charset-normalizer",
+      "status": "OBSERVED",
+      "version": "3.4.9"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "click",
+      "status": "OBSERVED",
+      "version": "8.4.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": null,
+      "package": "colorama",
+      "status": "NOT_INSTALLED_FOR_METADATA_REVIEW",
+      "version": "0.4.6"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "Apache-2.0 OR BSD-3-Clause",
+      "package": "cryptography",
+      "status": "OBSERVED",
+      "version": "46.0.7"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ],
+      "license_expression": "Apache License, Version 2.0",
+      "package": "distro",
+      "status": "OBSERVED",
+      "version": "1.9.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "fastapi",
+      "status": "OBSERVED",
+      "version": "0.140.7"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "ISC",
+      "package": "griffelib",
+      "status": "OBSERVED",
+      "version": "2.1.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "h11",
+      "status": "OBSERVED",
+      "version": "0.16.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: BSD License"
+      ],
+      "license_expression": "BSD-3-Clause",
+      "package": "httpcore",
+      "status": "OBSERVED",
+      "version": "1.0.9"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "httptools",
+      "status": "OBSERVED",
+      "version": "0.8.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: BSD License"
+      ],
+      "license_expression": "BSD-3-Clause",
+      "package": "httpx",
+      "status": "OBSERVED",
+      "version": "0.28.1"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "httpx-sse",
+      "status": "OBSERVED",
+      "version": "0.4.3"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "idna",
+      "status": "OBSERVED",
+      "version": "3.18"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "iniconfig",
+      "status": "OBSERVED",
+      "version": "2.3.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "jiter",
+      "status": "OBSERVED",
+      "version": "0.16.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "jsonschema",
+      "status": "OBSERVED",
+      "version": "4.26.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "jsonschema-specifications",
+      "status": "OBSERVED",
+      "version": "2025.9.1"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": null,
+      "package": "lil-tweak-engine",
+      "status": "UNKNOWN_REVIEW_REQUIRED",
+      "version": "0.7.1"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "mcp",
+      "status": "OBSERVED",
+      "version": "1.28.1"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ],
+      "license_expression": "Apache-2.0",
+      "package": "openai",
+      "status": "OBSERVED",
+      "version": "2.48.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "openai-agents",
+      "status": "OBSERVED",
+      "version": "0.18.3"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "Apache-2.0 OR BSD-2-Clause",
+      "package": "packaging",
+      "status": "OBSERVED",
+      "version": "26.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT-CMU",
+      "package": "pillow",
+      "status": "OBSERVED",
+      "version": "12.3.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "pluggy",
+      "status": "OBSERVED",
+      "version": "1.6.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "pycparser",
+      "status": "OBSERVED",
+      "version": "3.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "pydantic",
+      "status": "OBSERVED",
+      "version": "2.13.4"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "pydantic-core",
+      "status": "OBSERVED",
+      "version": "2.46.4"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "pydantic-settings",
+      "status": "OBSERVED",
+      "version": "2.14.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-2-Clause",
+      "package": "pygments",
+      "status": "OBSERVED",
+      "version": "2.20.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "pyjwt",
+      "status": "OBSERVED",
+      "version": "2.13.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "pytest",
+      "status": "OBSERVED",
+      "version": "8.4.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "Apache-2.0",
+      "package": "pytest-asyncio",
+      "status": "OBSERVED",
+      "version": "1.4.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "python-dotenv",
+      "status": "OBSERVED",
+      "version": "1.2.2"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ],
+      "license_expression": "Apache-2.0",
+      "package": "python-multipart",
+      "status": "OBSERVED",
+      "version": "0.0.32"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": null,
+      "package": "pywin32",
+      "status": "NOT_INSTALLED_FOR_METADATA_REVIEW",
+      "version": "312"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "pyyaml",
+      "status": "OBSERVED",
+      "version": "6.0.3"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "referencing",
+      "status": "OBSERVED",
+      "version": "0.37.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ],
+      "license_expression": "Apache-2.0",
+      "package": "requests",
+      "status": "OBSERVED",
+      "version": "2.34.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "rpds-py",
+      "status": "OBSERVED",
+      "version": "2026.6.3"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "ruff",
+      "status": "OBSERVED",
+      "version": "0.16.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "setuptools",
+      "status": "OBSERVED",
+      "version": "82.0.1"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License",
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT OR Apache-2.0",
+      "package": "sniffio",
+      "status": "OBSERVED",
+      "version": "1.3.1"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "UNKNOWN",
+      "package": "socksio",
+      "status": "OBSERVED",
+      "version": "1.0.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "sse-starlette",
+      "status": "OBSERVED",
+      "version": "3.4.6"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "starlette",
+      "status": "OBSERVED",
+      "version": "1.3.1"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MPL-2.0 AND MIT",
+      "package": "tqdm",
+      "status": "OBSERVED",
+      "version": "4.70.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "PSF-2.0",
+      "package": "typing-extensions",
+      "status": "OBSERVED",
+      "version": "4.16.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "typing-inspection",
+      "status": "OBSERVED",
+      "version": "0.4.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "urllib3",
+      "status": "OBSERVED",
+      "version": "2.7.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "uvicorn",
+      "status": "OBSERVED",
+      "version": "0.51.0"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Apache Software License",
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT License",
+      "package": "uvloop",
+      "status": "OBSERVED",
+      "version": "0.22.1"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "license_expression": "MIT",
+      "package": "watchfiles",
+      "status": "OBSERVED",
+      "version": "1.2.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "BSD-3-Clause",
+      "package": "websockets",
+      "status": "OBSERVED",
+      "version": "16.1.1"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "wheel",
+      "status": "OBSERVED",
+      "version": "0.47.0"
+    }
+  ],
+  "repository": "github:islamismylifebey-web/lil-tweak",
+  "review_required_count": 3,
+  "schema_version": "license-inventory-v1"
+}

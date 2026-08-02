@@ -14,12 +14,34 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
 ]
 
+[build-system]
+requires = ["setuptools==82.0.1", "wheel==0.47.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["docs*", "liltweak*", "migrations*", "web*"]
+exclude = ["evals*", "scripts*", "tests*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+docs = [
+  "creator-live-prompt.md",
+  "engineering-prompt.md",
+  "prompt.md",
+  "workbench-agent-prompt.md",
+]
+migrations = ["*.sql"]
+"web.workbench" = ["*.css", "*.html", "*.js"]
+
 [dependency-groups]
 dev = [
   "pillow>=11,<13",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
+  "setuptools==82.0.1",
+  "wheel==0.47.0",
 ]
 
 [tool.pytest.ini_options]

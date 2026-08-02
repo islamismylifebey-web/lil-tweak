@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
+import liltweak.canonical_store as canonical_store_module
+import liltweak.workbench as workbench_module
+import liltweak.workbench_store as workbench_store_module
+from liltweak.canonical_lifecycle import TaskState
 from liltweak.creator import CreatorService
 from liltweak.store import SQLiteStore
 from liltweak.workbench import WorkbenchController, WorkbenchError
@@ -29,6 +34,7 @@ from liltweak.workbench_executor import (
 )
 from liltweak.workbench_policy import ToolPolicyBroker
 from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
+from tests.canonical_helpers import enable_test_canonical_capabilities
 
 
 class FakeModel:
@@ -83,7 +89,7 @@ def controller(tmp_path: Path) -> WorkbenchController:
     )
     return WorkbenchController(
         creator=creator,
-        store=WorkbenchStore(tmp_path / "creator.db"),
+        store=enable_test_canonical_capabilities(WorkbenchStore(tmp_path / "creator.db")),
         model=FakeModel(),
         executor=BoundedToolExecutor(
             workspaces,
@@ -97,7 +103,7 @@ def controller(tmp_path: Path) -> WorkbenchController:
 
 
 @pytest.mark.asyncio
-async def test_complete_loop_requires_exact_approval_and_test_evidence(tmp_path: Path) -> None:
+async def test_execution_stops_at_verified_without_independent_examiner(tmp_path: Path) -> None:
     control = controller(tmp_path)
     empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
     imported = TaskImport(
@@ -117,11 +123,20 @@ async def test_complete_loop_requires_exact_approval_and_test_evidence(tmp_path:
         ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
     )
     assert approved.state == WorkbenchState.APPROVED
-    completed = await control.execute(task.id, approval.id)
-    assert completed.state == WorkbenchState.COMPLETED
-    submission = control.generate_submission(task.id)
-    assert submission.status.value == "COMPLETE"
-    assert control.lock_submission(task.id).locked is True
+    verified = await control.execute(task.id, approval.id)
+    assert control.store.canonical.get_task(task.id).state == TaskState.VERIFYING
+    with pytest.raises(WorkbenchConflict, match="canonical completion"):
+        control.store.transition(task.id, WorkbenchState.COMPLETED)
+    assert verified.state == WorkbenchState.VERIFIED
+    verification = next(
+        item
+        for item in control.store.list_evidence(task.id)
+        if item.event_type == "local_verification_satisfied"
+    )
+    assert verification.payload["independent_examiner_verification"] is False
+    assert verification.payload["completion_claim_allowed"] is False
+    with pytest.raises(WorkbenchError, match="terminal execution result"):
+        control.generate_submission(task.id)
 
 
 @pytest.mark.asyncio
@@ -156,7 +171,9 @@ async def test_change_required_task_cannot_complete_with_an_empty_patch(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_patch_tampering_blocks_export_submission_and_lock(tmp_path: Path) -> None:
+async def test_patch_tampering_blocks_export_before_independent_verification(
+    tmp_path: Path,
+) -> None:
     control = controller(tmp_path)
     empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
     task = control.receive(
@@ -188,7 +205,7 @@ async def test_patch_tampering_blocks_export_submission_and_lock(tmp_path: Path)
 
     with pytest.raises(ToolExecutionError, match="authenticated digest"):
         control.export_patch(task.id)
-    with pytest.raises(ToolExecutionError, match="authenticated digest"):
+    with pytest.raises(WorkbenchError, match="terminal execution result"):
         control.generate_submission(task.id)
 
 
@@ -197,6 +214,7 @@ async def test_patch_tampering_blocks_export_submission_and_lock(tmp_path: Path)
 async def test_expired_approval_can_be_reissued_without_a_dead_end(
     tmp_path: Path,
     approved_before_expiry: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     control = controller(tmp_path)
     empty_digest = control.workspaces.tree_digest(control.workspaces.task_root("placeholder"))
@@ -217,7 +235,11 @@ async def test_expired_approval_can_be_reissued_without_a_dead_end(
             approval.id,
             ApprovalDecision(decision="approve", approval_digest=approval.approval_digest),
         )
-    control.store._set_approval_status(approval, "expired")
+    future = approval.expires_at + timedelta(seconds=1)
+    monkeypatch.setattr(canonical_store_module, "utc_now", lambda: future)
+    monkeypatch.setattr(workbench_store_module, "utc_now", lambda: future)
+    monkeypatch.setattr(workbench_module, "utc_now", lambda: future)
+    assert control.store.get_approval(approval.id).status == "expired"
 
     replacement = control.reissue_expired_approval(task.id, approval.id)
 

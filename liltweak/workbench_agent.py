@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 import uuid
 from dataclasses import dataclass
@@ -9,20 +10,79 @@ from pathlib import Path
 from typing import Protocol
 
 from agents import Agent, ModelRetrySettings, ModelSettings, RunConfig, Runner
+from openai import AsyncOpenAI
+from openai.lib._parsing._responses import type_to_text_format_param
 
+from .model_catalog import MODEL_CATALOG
+from .reasoning_contract import ProviderQualificationState, ReasoningRole
+from .reasoning_policy import (
+    PROFILE_REGISTRY,
+    FoundationModel,
+    ReasoningProfileName,
+    ReasoningProfileUnavailable,
+    require_production_profile,
+)
+from .reasoning_prompts import PromptName, render_prompt
+from .reasoning_provider import (
+    OpenAIResponsesReasoningProvider,
+    ProviderCallEvidence,
+    ReasoningProviderError,
+)
 from .repository import secret_rule_ids
 from .workbench_contract import TaskImport, WorkbenchPlan
 from .workbench_store import WorkbenchStore
 
 _MODEL_PRICES_USD_PER_MILLION = {
-    "gpt-5.6-luna": (1.0, 6.0),
-    "gpt-5.6-terra": (2.5, 15.0),
-    "gpt-5.6-sol": (5.0, 30.0),
+    model.value: (
+        float(MODEL_CATALOG.price_band(model, input_tokens=0).input_per_million_usd),
+        float(MODEL_CATALOG.price_band(model, input_tokens=0).output_per_million_usd),
+    )
+    for model in FoundationModel
 }
 
 
 class WorkbenchModelError(RuntimeError):
     pass
+
+
+class InputTokenCounter(Protocol):
+    async def count(
+        self,
+        *,
+        model: str,
+        instructions: str,
+        provider_input: str,
+        reasoning: dict[str, str],
+    ) -> int: ...
+
+
+class OpenAIInputTokenCounter:
+    def __init__(self, client: AsyncOpenAI | None = None) -> None:
+        self._client = client or AsyncOpenAI(max_retries=0)
+
+    async def count(
+        self,
+        *,
+        model: str,
+        instructions: str,
+        provider_input: str,
+        reasoning: dict[str, str],
+    ) -> int:
+        try:
+            result = await self._client.responses.input_tokens.count(
+                model=model,
+                instructions=instructions,
+                input=provider_input,
+                reasoning=reasoning,
+                text={"format": type_to_text_format_param(WorkbenchPlan)},
+                tools=[],
+                parallel_tool_calls=False,
+            )
+        except Exception as exc:
+            raise WorkbenchModelError("Lil Tweak provider token counting failed closed") from exc
+        if result.input_tokens < 0:
+            raise WorkbenchModelError("Lil Tweak provider token accounting is invalid")
+        return result.input_tokens
 
 
 @dataclass(frozen=True)
@@ -34,6 +94,11 @@ class ModelPlanResult:
     response_id: str | None
     input_tokens: int
     output_tokens: int
+    reasoning_mode: str = "standard"
+    reasoning_profile: str = "ordinary"
+    response_id_hash: str | None = None
+    input_digest: str | None = None
+    provider_input_digest: str | None = None
 
 
 class WorkbenchModelAdapter(Protocol):
@@ -154,12 +219,295 @@ class DisconnectedWorkbenchModelAdapter:
     provider_name = "disconnected"
     model_name = "none"
     reasoning_tier = "none"
+    reasoning_mode = "none"
+    reasoning_profile = "none"
+    input_token_ceiling = 12_000
+    output_token_ceiling = 4_096
 
     async def plan(self, **_: object) -> ModelPlanResult:
         raise WorkbenchModelError("live Lil Tweak model adapter is disconnected")
 
 
+class CanonicalWorkbenchModelAdapter:
+    """Bridge Workbench planning through the qualified canonical Responses boundary."""
+
+    provider_name = "openai-responses"
+
+    def __init__(
+        self,
+        *,
+        provider: OpenAIResponsesReasoningProvider,
+        admission: ModelCallAdmission,
+        profile_name: ReasoningProfileName = ReasoningProfileName.ORDINARY,
+        timeout_seconds: int = 120,
+        input_token_ceiling: int = 12_000,
+        output_token_ceiling: int = 4_096,
+        maximum_input_bytes: int = 1_000_000,
+    ) -> None:
+        if timeout_seconds < 1 or timeout_seconds > 600:
+            raise ValueError("Workbench model timeout must be between 1 and 600 seconds")
+        if input_token_ceiling < 1 or output_token_ceiling < 1:
+            raise ValueError("Workbench model token ceilings must be positive")
+        if maximum_input_bytes < 1 or maximum_input_bytes > 16_000_000:
+            raise ValueError("Workbench model input byte ceiling is invalid")
+        self._provider = provider
+        self._admission = admission
+        self._timeout_seconds = timeout_seconds
+        self._input_token_ceiling = input_token_ceiling
+        self._output_token_ceiling = output_token_ceiling
+        self._maximum_input_bytes = maximum_input_bytes
+        self._profile = PROFILE_REGISTRY[profile_name]
+        self._qualification = provider.qualification_for_profile(profile_name)
+        self._policy_blocker: str | None = None
+        if self._qualification is not None:
+            try:
+                qualified_profile = OpenAIResponsesReasoningProvider.validate_live_qualification(
+                    self._qualification
+                )
+                if qualified_profile != profile_name:
+                    raise ValueError("qualification is bound to a different profile")
+                require_production_profile(
+                    profile_name,
+                    ProviderQualificationState.LIVE_QUALIFIED,
+                    mutation_capable_task=True,
+                )
+            except (ReasoningProfileUnavailable, ValueError) as exc:
+                self._policy_blocker = str(exc)
+        else:
+            self._policy_blocker = (
+                f"reasoning profile {profile_name.value} has no injected complete live "
+                "qualification record"
+            )
+        if ReasoningRole.PLANNER not in self._profile.allowed_roles:
+            self._policy_blocker = "selected reasoning profile cannot serve the planner role"
+        if not self._profile.authoritative or not self._profile.candidate_generation_allowed:
+            self._policy_blocker = (
+                "selected reasoning profile cannot produce an authoritative Workbench plan"
+            )
+
+    @property
+    def model_name(self) -> str:
+        return self._profile.model.value
+
+    @property
+    def reasoning_tier(self) -> str:
+        return self._profile.variant.effort.value
+
+    @property
+    def reasoning_mode(self) -> str:
+        return self._profile.variant.request_mode.value
+
+    @property
+    def reasoning_profile(self) -> str:
+        return self._profile.name.value
+
+    @property
+    def input_token_ceiling(self) -> int:
+        return self._input_token_ceiling
+
+    @property
+    def output_token_ceiling(self) -> int:
+        return self._output_token_ceiling
+
+    @property
+    def connected(self) -> bool:
+        return self._policy_blocker is None
+
+    @property
+    def status(self) -> str:
+        return "connected" if self.connected else "blocked"
+
+    @property
+    def authorization_verified(self) -> bool:
+        return bool(
+            self.connected
+            and self._qualification is not None
+            and self._qualification.configured
+            and self._qualification.connected
+            and self._qualification.effective_model == self.model_name
+        )
+
+    @property
+    def health_verified(self) -> bool:
+        return bool(
+            self.connected
+            and self._qualification is not None
+            and self._qualification.health_state.value == "HEALTHY"
+        )
+
+    @property
+    def qualification_verified(self) -> bool:
+        return bool(
+            self.connected
+            and self._qualification is not None
+            and self._qualification.qualification_state == ProviderQualificationState.LIVE_QUALIFIED
+        )
+
+    def _validate_evidence(self, evidence: ProviderCallEvidence, rendered) -> None:
+        if (
+            evidence.provider != self.provider_name
+            or evidence.role != ReasoningRole.PLANNER
+            or evidence.profile_name != self._profile.name
+            or evidence.profile_version != self._profile.profile_version
+            or evidence.requested_model != self.model_name
+            or evidence.effective_model != self.model_name
+            or evidence.request_mode != self.reasoning_mode
+            or evidence.reasoning_effort != self.reasoning_tier
+            or evidence.prompt_digest != rendered.instructions_digest
+            or evidence.input_digest != rendered.input_digest
+            or evidence.provider_input_digest != rendered.input_digest
+            or evidence.provider_counted_input_tokens > self._input_token_ceiling
+            or evidence.input_tokens > self._input_token_ceiling
+            or evidence.output_tokens > self._output_token_ceiling
+            or not evidence.store_disabled
+            or not evidence.sensitive_tracing_disabled
+            or evidence.tools_supplied
+            or evidence.continuation_items_preserved
+            or evidence.status != "completed"
+        ):
+            raise WorkbenchModelError(
+                "canonical reasoning evidence does not match the selected Workbench profile"
+            )
+
+    async def plan(
+        self,
+        *,
+        task: TaskImport,
+        creator_brief_digest: str,
+        creator_route_digest: str,
+        inspection_summary: str,
+    ) -> ModelPlanResult:
+        if not self.connected:
+            raise WorkbenchModelError(
+                self._policy_blocker or "canonical Workbench reasoning is not qualified"
+            )
+        input_payload = json.dumps(
+            {
+                "creator_brief_digest": creator_brief_digest,
+                "creator_route_digest": creator_route_digest,
+                "inspection_evidence": inspection_summary,
+                "task": task.model_dump(mode="json"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        try:
+            rendered = render_prompt(PromptName.WORKBENCH_PLAN, input_payload)
+        except ValueError as exc:
+            raise WorkbenchModelError("canonical Workbench prompt was rejected") from exc
+        if secret_rule_ids(f"{rendered.instructions}\n{rendered.input_payload}".encode()):
+            raise WorkbenchModelError("Lil Tweak planning input was rejected")
+        input_bytes = len(f"{rendered.instructions}\n{rendered.input_payload}".encode())
+        if input_bytes > self._maximum_input_bytes:
+            raise WorkbenchModelError("Lil Tweak planning input exceeds its byte ceiling")
+
+        admission_id = await self._admission.claim(
+            task_digest=task.task_digest,
+            model=self.model_name,
+            input_token_ceiling=self._input_token_ceiling,
+            output_token_ceiling=self._output_token_ceiling,
+        )
+        observed_input_tokens = 0
+        observed_output_tokens = 0
+        observed_response_id_hash: str | None = None
+        try:
+            result = await self._provider.call(
+                call_id=f"workbench-plan:{uuid.uuid4().hex}",
+                role=ReasoningRole.PLANNER,
+                profile_name=self._profile.name,
+                instructions=rendered.instructions,
+                input_text=rendered.input_payload,
+                output_type=WorkbenchPlan,
+                input_token_ceiling=self._input_token_ceiling,
+                output_token_ceiling=self._output_token_ceiling,
+                timeout_seconds=self._timeout_seconds,
+            )
+            evidence = result.evidence
+            observed_input_tokens = evidence.input_tokens
+            observed_output_tokens = evidence.output_tokens
+            observed_response_id_hash = evidence.response_id_digest
+            self._validate_evidence(evidence, rendered)
+            if not isinstance(result.output, WorkbenchPlan):
+                raise WorkbenchModelError("canonical provider returned the wrong plan contract")
+            plan = result.output
+            parsed_output_digest = hashlib.sha256(
+                json.dumps(
+                    plan.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            if evidence.parsed_output_digest != parsed_output_digest:
+                raise WorkbenchModelError(
+                    "canonical provider evidence is not bound to the returned plan"
+                )
+            if plan.source_snapshot_digest != task.source_snapshot_digest:
+                raise WorkbenchModelError("canonical plan is bound to another source snapshot")
+            if secret_rule_ids(plan.model_dump_json().encode()):
+                raise WorkbenchModelError("Lil Tweak model plan contains secret-shaped material")
+        except asyncio.CancelledError as exc:
+            await asyncio.shield(
+                self._admission.finish(
+                    admission_id=admission_id,
+                    succeeded=False,
+                    input_tokens=observed_input_tokens,
+                    output_tokens=observed_output_tokens,
+                    response_id_hash=observed_response_id_hash,
+                )
+            )
+            raise WorkbenchModelError("canonical Workbench planning request was canceled") from exc
+        except ReasoningProviderError as exc:
+            observed_input_tokens = exc.input_tokens
+            observed_output_tokens = exc.output_tokens
+            observed_response_id_hash = exc.response_id_digest
+            await asyncio.shield(
+                self._admission.finish(
+                    admission_id=admission_id,
+                    succeeded=False,
+                    input_tokens=observed_input_tokens,
+                    output_tokens=observed_output_tokens,
+                    response_id_hash=observed_response_id_hash,
+                )
+            )
+            raise WorkbenchModelError("canonical Workbench planning request failed closed") from exc
+        except Exception as exc:
+            await self._admission.finish(
+                admission_id=admission_id,
+                succeeded=False,
+                input_tokens=observed_input_tokens,
+                output_tokens=observed_output_tokens,
+                response_id_hash=observed_response_id_hash,
+            )
+            raise WorkbenchModelError("canonical Workbench planning request failed closed") from exc
+
+        await self._admission.finish(
+            admission_id=admission_id,
+            succeeded=True,
+            input_tokens=observed_input_tokens,
+            output_tokens=observed_output_tokens,
+            response_id_hash=observed_response_id_hash,
+        )
+        return ModelPlanResult(
+            plan=plan,
+            provider=evidence.provider,
+            model=evidence.effective_model,
+            reasoning_tier=evidence.reasoning_effort,
+            reasoning_mode=evidence.request_mode,
+            reasoning_profile=evidence.profile_name.value,
+            response_id=None,
+            response_id_hash=evidence.response_id_digest,
+            input_digest=evidence.input_digest,
+            provider_input_digest=evidence.provider_input_digest,
+            input_tokens=evidence.input_tokens,
+            output_tokens=evidence.output_tokens,
+        )
+
+
 class OpenAIWorkbenchModelAdapter:
+    """Legacy compatibility adapter; the application factory never constructs this path."""
+
     provider_name = "openai"
 
     def __init__(
@@ -173,6 +521,9 @@ class OpenAIWorkbenchModelAdapter:
         timeout_seconds: int = 120,
         input_token_ceiling: int = 12_000,
         output_token_ceiling: int = 4_096,
+        reasoning_mode: str = "standard",
+        reasoning_profile: str = "ordinary",
+        token_counter: InputTokenCounter | None = None,
     ) -> None:
         if timeout_seconds < 1 or timeout_seconds > 600:
             raise ValueError("Workbench model timeout must be between 1 and 600 seconds")
@@ -180,11 +531,24 @@ class OpenAIWorkbenchModelAdapter:
             raise ValueError("Workbench model token ceilings must be positive")
         self.model_name = model
         self.reasoning_tier = reasoning_tier
+        self.reasoning_mode = reasoning_mode
+        self.reasoning_profile = reasoning_profile
         self._enabled = enabled
         self._timeout_seconds = timeout_seconds
         self._input_token_ceiling = input_token_ceiling
         self._output_token_ceiling = output_token_ceiling
         self._admission = admission
+        self._token_counter = token_counter
+        try:
+            profile = PROFILE_REGISTRY[ReasoningProfileName(reasoning_profile)]
+        except (KeyError, ValueError) as exc:
+            raise ValueError("Workbench reasoning profile is not registered") from exc
+        if (
+            profile.model.value != model
+            or profile.variant.effort.value != reasoning_tier
+            or profile.variant.request_mode.value != reasoning_mode
+        ):
+            raise ValueError("Workbench model settings do not match the named reasoning profile")
         prompt_path = (
             prompt_path or Path(__file__).parents[1] / "docs" / "workbench-agent-prompt.md"
         )
@@ -193,6 +557,14 @@ class OpenAIWorkbenchModelAdapter:
     @property
     def connected(self) -> bool:
         return self._enabled
+
+    @property
+    def input_token_ceiling(self) -> int:
+        return self._input_token_ceiling
+
+    @property
+    def output_token_ceiling(self) -> int:
+        return self._output_token_ceiling
 
     @property
     def status(self) -> str:
@@ -223,7 +595,19 @@ class OpenAIWorkbenchModelAdapter:
         provider_payload = f"{self._instructions}\n{provider_input}".encode()
         if secret_rule_ids(provider_payload):
             raise WorkbenchModelError("Lil Tweak planning input was rejected")
-        if len(provider_payload) > self._input_token_ceiling:
+        reasoning = {
+            "effort": self.reasoning_tier,
+            "mode": self.reasoning_mode,
+            "context": "current_turn",
+        }
+        token_counter = self._token_counter or OpenAIInputTokenCounter()
+        counted_input_tokens = await token_counter.count(
+            model=self.model_name,
+            instructions=self._instructions,
+            provider_input=provider_input,
+            reasoning=reasoning,
+        )
+        if counted_input_tokens > self._input_token_ceiling:
             raise WorkbenchModelError("Lil Tweak planning input exceeds its safe token bound")
         admission_id = await self._admission.claim(
             task_digest=task.task_digest,
@@ -237,7 +621,7 @@ class OpenAIWorkbenchModelAdapter:
             model=self.model_name,
             model_settings=ModelSettings(
                 max_tokens=self._output_token_ceiling,
-                reasoning={"effort": self.reasoning_tier},
+                reasoning=reasoning,
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,
@@ -306,6 +690,8 @@ class OpenAIWorkbenchModelAdapter:
             provider=self.provider_name,
             model=self.model_name,
             reasoning_tier=self.reasoning_tier,
+            reasoning_mode=self.reasoning_mode,
+            reasoning_profile=self.reasoning_profile,
             response_id=result.last_response_id,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,

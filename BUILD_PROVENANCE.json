@@ -1,0 +1,67 @@
+{
+  "baseline_commit": "373400cb2b459dbf8a37dacceb0d3d1186eef949",
+  "branch": "codex/lil-tweak-live-workbench-build",
+  "build_system": {
+    "build_backend": "setuptools.build_meta",
+    "requires": [
+      "setuptools==82.0.1",
+      "wheel==0.47.0"
+    ]
+  },
+  "builder": "Lil Tweak Master Builder local private workspace",
+  "candidate_commit": "recorded_externally_after_freeze",
+  "candidate_commit_recorded_externally": false,
+  "environment": {
+    "SOURCE_DATE_EPOCH": "1735689600",
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "uv": "uv 0.11.33 (x86_64-unknown-linux-gnu)"
+  },
+  "evidence_artifacts": [
+    {
+      "byte_count": 2261,
+      "path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
+      "sha256": "61658065d6747d2b3e664e05ec88161a07ef133dc3a502d31cb827b800d76ddc"
+    },
+    {
+      "byte_count": 11839,
+      "path": "LICENSE_INVENTORY.json",
+      "sha256": "0f2599a12b9d87c4c52aa61d02b12d7789c782d64fc15720cdb329f6b986e44d"
+    },
+    {
+      "byte_count": 133518,
+      "path": "SUPPLY_CHAIN_SBOM.json",
+      "sha256": "c48f24838b8e66a6aa905e084f29a12b5d88505faf57e3f4680cb9394d82bd0e"
+    }
+  ],
+  "gcp_access_performed": false,
+  "generated_at": "2025-01-01T00:00:00+00:00",
+  "materials": [
+    {
+      "path": "uv.lock",
+      "sha256": "2ad058b7806d07d0bad2f75707b02fb36fd5f92292caed222e544892da5bcda3"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "6cabebf0842f93983fa9911ef849d5ac4d334c739a8f9ba4633b3caea85ef9dd"
+    }
+  ],
+  "public_deployment_performed": false,
+  "repository": "github:islamismylifebey-web/lil-tweak",
+  "runner_image_built": false,
+  "schema_version": "build-provenance-v1",
+  "subjects": [
+    {
+      "artifact_type": "wheel",
+      "byte_count": 303055,
+      "path": "lil_tweak_engine-0.7.1-py3-none-any.whl",
+      "sha256": "03c56e46176fc9bbe02bdb325213113e4013bab3c57adf5c9a3240783580e4b2"
+    },
+    {
+      "artifact_type": "sdist",
+      "byte_count": 402730,
+      "path": "lil_tweak_engine-0.7.1.tar.gz",
+      "sha256": "6e46181e70e3f062b645e3adc03bc6c6b513d44c07d1c381e676a3a9aafa07f6"
+    }
+  ]
+}

@@ -7,6 +7,10 @@ from typing import Any, Protocol
 from agents import Agent, ModelSettings, RunConfig, Runner
 
 from .models import PlanResult, TaskCreate
+from .reasoning_contract import ReasoningRole
+from .reasoning_policy import profile_for_role, require_primary_engineering_model
+
+_PLANNING_PROFILE = profile_for_role(ReasoningRole.PLANNER)
 
 
 class PlanningProviderError(RuntimeError):
@@ -91,17 +95,26 @@ class OpenAIPlanner:
     paid_provider = True
 
     def __init__(self, model: str, prompt_path: Path | None = None) -> None:
+        self.model_id = require_primary_engineering_model(model).value
         prompt_path = prompt_path or Path(__file__).parents[1] / "docs" / "prompt.md"
         instructions = prompt_path.read_text(encoding="utf-8")
         self._agent: Agent = Agent(
             name="Lil Tweak",
             instructions=instructions,
-            model=model,
+            model=self.model_id,
             model_settings=ModelSettings(
                 max_tokens=4_000,
+                reasoning={
+                    "mode": _PLANNING_PROFILE.variant.request_mode.value,
+                    "effort": _PLANNING_PROFILE.variant.effort.value,
+                    "context": "all_turns",
+                    "summary": "auto",
+                },
                 include_usage=True,
                 store=False,
             ),
+            tools=[],
+            handoffs=[],
             output_type=PlanResult,
         )
 

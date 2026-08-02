@@ -27,6 +27,7 @@ from liltweak.workbench_contract import (
 )
 from liltweak.workbench_policy import ToolPolicyBroker, ToolPolicyError
 from liltweak.workbench_store import WorkbenchConflict, WorkbenchStore
+from tests.canonical_helpers import enable_test_canonical_capabilities
 
 DIGEST = "a" * 64
 PROJECT = "valid-project-1"
@@ -81,6 +82,7 @@ def _received_task(identifier: str = "task:security-regression") -> WorkbenchTas
 
 
 def _awaiting_task(store: WorkbenchStore) -> WorkbenchTask:
+    enable_test_canonical_capabilities(store)
     task = store.create_task(_received_task())
     store.transition(task.id, WorkbenchState.INSPECTING)
     store.transition(task.id, WorkbenchState.ANALYZED)

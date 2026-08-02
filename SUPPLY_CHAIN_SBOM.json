@@ -1,0 +1,4172 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/annotated-doc@0.0.4",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4"
+        }
+      ],
+      "name": "annotated-doc",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/annotated-doc@0.0.4",
+      "type": "library",
+      "version": "0.0.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+        }
+      ],
+      "name": "annotated-types",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "type": "library",
+      "version": "0.8.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/anyio@4.14.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f"
+        }
+      ],
+      "name": "anyio",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/anyio@4.14.2",
+      "type": "library",
+      "version": "4.14.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/attrs@26.1.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32"
+        }
+      ],
+      "name": "attrs",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/attrs@26.1.0",
+      "type": "library",
+      "version": "26.1.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/certifi@2026.7.22",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55"
+        }
+      ],
+      "name": "certifi",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/certifi@2026.7.22",
+      "type": "library",
+      "version": "2026.7.22"
+    },
+    {
+      "bom-ref": "pkg:pypi/cffi@2.1.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0520e1f4c35f44e209cbbb421b67eec42e6a157f59444dfb6058874ff3610e5d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0582a58f3051372229ca8e7f5f589f9e5632678208d8636fea3676711fdf7fe5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0611e7ebf90573a535ebdc33ae9da222d037853983e13359f580fab781ca017f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0a42c688d19fca6e095a53c6a6e2295a5b050a8b289f109adab02a9e61a25de6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "10537b1df4967ca26d21e5072d7d54188354483b91dc75058968d3f0cf13fbda"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "15faec4adfff450819f3aee0e2e02c812de6edb88203aa58807955db2003472a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1854b724d00f6654c742097d5387569021be12d3a0f770eae1df8f8acfcc6acd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1b96bfe2c4bd825681b7d311ad6d9b7280a091f43e8f63da5729638083cd3bfb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1e9f50d192a3e525b15a75ab5114e442d83d657b7ec29182a991bc9a88fd3a66"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1ff3456eab0d889592d1936d6125bbfbc7ae4d3354a700f8bd80450a66445d4d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2282cd5e38aa8accd03e99d1256af8411c84cdbee6a89d841b563fdbd1f3e50f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "276f20fffd7b396e12516ba8edf9509210ac248cbbc5acbc39cd512f9f59ebe6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2b71d409cccee78310ab5dec549aed052aaea483346e282c7b02362596e01bb0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2e9dabb9abcb7ad15938c7196ad5c1718a4e6d33cc79b4c0209bdb64c4a54a5c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "33eb1ad83ebe8f313e0df035c406227d55a79456704a863fad9842136af5ad7d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3681e031db29958a7502f5c0c9d6bbc4c36cb20f7b104086fa642d1799631ff8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "379de10ce1ba048b1448599d1b37b24caee16309d1ac98d3982fc997f768700b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "37f525a7e7e50c017fdebe58b787be310ad59357ae43a053943a6e1a6c526001"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3b926723c13eba9f81d2ef3820d63aeceec3b2d4639906047bf675cb8a7a500d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "46b1c8db8f6122420f32d02fffb924c2fe9bc772d228c7c711748fff56aabb2b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "47ff3a8bfd8cb9da1af7524b965127095055654c177fcfc7578debcb015eecd0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "510aeeeac94811b138077451da1fb18b308a5feab47dd2b603af55804155e1c8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5972433ad71a9e46516584ef60a0fda12d9dc459938d1539c3ddecf9bdc1368d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5ecbd0499275d57506d397eebe1981cee87b47fcd9ef5c22cab7ed7644a39a94"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6274dcb2d15cef48daa73ed1be5a40d501d74dccd0cd6db364776d12cb6ba022"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "63960549e4f8dc41e31accb97b975abaecfc44c03e396c093a6436763c2ea7db"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6af371f3767faeffc6ac1ef57cdfd25844403e9d3f476c5537caee499de96376"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6ca4919c6e4f89aa99c42510b42cf54596892c00b3f9077f6bdd1505e24b9c8d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6d194185eabd279f1c05ebe3504265ddfc5ad2b58d0714f7db9f01da592e9eb6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "702c436735fbe99d59ada02a1f65cfc0d31c0ee8b7290912f8fbc5cd1e4b16c3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "716ff8ec22f20b4d988b12884086bcef0fc99737043e503f7a3935a6be99b1ea"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "762f99479dcb369f60ab9017ad4ab97a36a1dd7c1ee5a3b15db0f4b8659120cd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "78474632761faa0fb96f30b1c928c84ebcf68713cbb80d15bab09dfe61640fde"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "799416bae98336e400981ff6e532d67d5c709cfb30afb79865a1315f94b0e224"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7d034dcffa09e9a46c93fa3a3be402096cb5354ac6e41ab8e5cc9cd8b642ad76"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7d28dff1db6764108bc30788d85d61c876beff416d9a49cb9dd7c5a9f34f5804"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7d3538f9c0e50670f4deb93dbb696576e60590369cae2faf7de681e597a8a1f1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7d5980a3433d4b71a5e120f9dd551403d7824e31e2e67124fe2769c404c06913"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7ea6b3e2c4250ff1de21c630fe72d0f63eb95c2c32ffbf64a358cf4a8836d714"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "86cf8755a791f72c85dc287128cc62d4f24d392e3f1e15837245623f4a33cccc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8d35c139744adb3e727cd51b1a18324bbe44b8bd41bf8322bca4d41289f48eda"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8e74a6135550c4748af665b1b1118b6aab33b1fc6a16f9aff630af107c3b4512"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8f9ec95b8a043d3dfbc74d9abc6f7baf524dd27a8dc160b0a32ff9cdab650c28"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "90bec57cf82089383bd06a605b3eb8daebf7e5a668520beaf6e327a83a947699"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "95f2954c2c9473d892eca6e0409f3568b37ab62a8eedb122461f73cc273476e3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "961be50688f7fba2fa65f63712d3b9b341a22311f5253460ce933f52f0de1c8c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "98fff996e983a36d3aa2eca83af40c5821202e7e6f32d13ae94e3d2286f10cfe"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9b8f0f26ca4e7513c534d351eca551947d053fac438f2a04ac96d882909b0d3a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a95b05f9baf29b91171b3a8bd2020b028835243e7b0ff6bb23e2a3c228518b1b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ac0f1a2d0cfa7eea3f2aaf006ab6e70e8feeb16b75d65b7e5939982ca2f11056"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "af5e2915d41fe6c961694d7bfdc8562942638200f3ce2765dfb8b745cf997629"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b6422532152adf4e59b110cb2808cee7a033800952f5c036b4af047ee43199e7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ba00f661f8ba35d075c937174e27c2c421cec3942fd2e0ea3e66996757c0fdd9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bccbbb5ee76a61f9d99b5bf3846a51d7fca4b6a732fe46f89295610edaf41853"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bf01d8c84cbea96b944c73b22182e6c7c432b3475632b8111dbfdc95ddad6e13"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bf5c6cf48238b0eb4c086978c492ad1cbc22373fc5b2d7353b3a598ce6db887a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c16914df9fb7f500e440e6875fa23ff5e0b31db01fa9c06af98d59a91f0dc2e4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c351efb95e832a853a29361675f33a7ce53de1a109cd73fd47af0712213aa4ce"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c4165821e131d6d4ca444347c2b694e2311bcfa3fe5a861cc72968f28867beac"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c97f080ea627e2863524c5af3836e2270b5f5dfff1f104392b959f8df0c5d384"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cb96698e3c7413d906ce83f8ffd245ec1bd94707541f299d0ce4d6b0193e982b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cbb7640ce37159548d2147b5b8c241f962143d4c71231431820783f4dc78f210"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cdf2448aab5f661c9315308ec8b93f4e8a1a67a3c733f8631067a2b67d5913dc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d2117334c3af3bdcb9a88522b844a2bdb5efdc4f71c6c822df55486ae1c3347a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d53d10f7da99ae46f7373b9150393e9c5eab9b224909982b43832668de4779f5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d9fafc5aa2e2a39aaf7f8cc0c1f044a9b07fca12e558dca53a3cc5c654ad67a7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "db3eb7d46527159a878ec3460e9d40615bc25ba337d477db681aea6e4f05c5d2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dbf7c7a88e2bac086f06d14577332760bdeecc42bdec8ac4077f6260557d9326"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "df2b82571a1b30f58a87bf4e5a9e78d2b1eff6c6ce8fd3aa3757221f93f0863f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "df92f2aba50eb4d96718b68ef76f2e57a57b54f2fa62333496d16c6d585a85ca"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "eb4e8997a49aa2c08a3e43c9045d224448b8941d88e7ac163c7d383e560cbf98"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "efc1cdd798b1aaf39b4610bba7aad28c9bea9b910f25c784ccf9ec1fa719d1f9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f146d154428a2523f9cc7936c02353c2459b8f6cf07d3cd1ee1c0a611109c5d5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f9912624a0c0b834b7520d7769b3644453aabc0a7e1c839da7359f050750e9bc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ff067a8d8d880e7809e4ac88eb009bb848870115317b306666502ccad30b147f"
+        }
+      ],
+      "name": "cffi",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/cffi@2.1.0",
+      "type": "library",
+      "version": "2.1.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/charset-normalizer@3.4.9",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0327fcd59a935777d83410750c50600ee9571af2846f71ce40f25b13da1ef380"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "03d07803992c6c7bbc976327f34b18b6160327fc81cb82c9d504720ac0be3b62"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0d861473f743244d349b50f850d10eb87aeb22bbdcc8e64f79273c94af5a8226"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "16b65ea0f2465b6fb52aa22de5eca612aa964ddfec00a912e26f4656cbef890b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "19ac87f93086ce37b86e098888555c4b4bc48102279bae3350098c0ed664b501"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "21e764fd1e70b6a3e205a0e46f3051701f98a8cb3fad66eeb80e48bb502f8698"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "32286a2c8d167e897177b673176c1e3e00d4057caf5d2b64eef9a3666b03018e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "33bdcc2a32c0a0e861f60841a512c8acc658c87c2ac59d89e3a46dacf7d866e4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "40a126142a56b2dfc0aacbad1de8310cbf60da7656db0e6b16eebd48e3e93519"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "416c229f77e5ea25b3dfd4b582f8d73d7e43c22320302b9ab128a2d3a0b38efe"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "440eede837960000d74978f0eba527be106b5b9aee0daf779d395276ed0b0614"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "45b0cc4e3556cd875e09102988d1ab8356c998b596c9fced84547c8138b487a0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4b3dac63058cc36820b0dd072f89898604e2d39686fe05321729d00d8ac185a0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4d1c96a7a18b9690a4d46df09e3e3382406ae3213727cd1019ebade1c4a81917"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "51307f5c71007673a2bf8232ad973483d281e74cb99c8c5a990af1eefa6277d9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "51447e9aa2684679af07ca5021c3db526e0284347ebf4ffcec1154c3350cfe32"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5b10cd92fc5c498b35a8635df6d5a100207f88b63a4dc1de7ef9a548e1e2cd63"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5e226f6218febc71f6c1fc2fafb91c226f75bdc1d8fb12d66823716e891608fd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "609b3ba8fcc0fb5ab7af00719d0fb6ad0cb518e48e7712d12fd68f1327951198"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "60f44ade2cf573dad7a277e6f8ca9a51a21dda572b13bd7d8539bb3cd5dbedde"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "611057cc5d5c0afc743ba8be6bd828c17e0aaa8643f9d0a9b9bb7dea80eb8012"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "673611bbd43f0810bec0b0f028ddeaaa501190339cac411f347ac76917c3ae7b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "68e5f26a1ad57ded6d1cfb85331d1c1a195314756471d97758c48498bb4dcdf5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "69b157c5d3292bcd443faca052f3096f637f1e074b98212a933c074ae23dc3b8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "75286256590a6320cf106a0d28970d3560aad9ee09aa7b34fb40524792436d35"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "78841cccf1af7b40f6f716338d50c0902dbe88d9f800b3c973b7a9a0a693a642"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "78fa18e436a1a0e58dbd7e02fc4473f3f32cceb12df9dfca542d075961c307d2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7b86a2b16095d250c6f58b3d9b2eee6f4147754344f3dab0922f7c9bf7d226c9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "83aed2c10721ddd90f68140685391b50811a880af20654c59af6b6c66c40513c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "84fd18bcc17526fc2b3c1af7d2b9217d32c9c04448c16ec693b9b4f1985c3d33"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "898f0e9068ca27d37f8e83a5b962821df851532e6c4a7d615c1c033f9da6eedf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8a79d9f4d8001473a30c163556b3c3bfebec837495a412dde78b51672f6134f9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "90c44bc373b7687f6948b693cceaea1348ae0975d7474746559494468e3c1d84"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9104ed0bd76a429d46f9ec0dbc9b08ad1d2dcdf2b00a5a0daa1c145329b35b44"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9b2aff1c7b3884512b9512c3eaadd9bab39fb45042ffaaa1dd08ff2b9f8109d9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9b8e0f3107e2200b76f6054de99016eac3ee6762713587b36baaa7e4bd2ae177"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9cdef90ae47919cae358d8ab15797a800ed41da7aba5d72419fb510729e2ed4b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a1786910334ed46ab1dd73222f2cd1e05c2c3bb39f6dddb4f8b36fc382058a39"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a4cfde78a9f2880208d16a93b795726a3017d5977e08d1e162a7a31322479c41"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a4fbdde9dd4a9ce5fd52c2b3a347bb50cc89483ef783f1cb00d408c13f7a96c0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bd47ba7fc3ca94896759ea0109775132d3e7ab921fbf54038e1bab2e46c313c9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c1c948747b03be832dceed96ca815cef7360de9aa19d37c730f8e3f6101aca48"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c25fe15c70c59eb7c5ce8c06a1f3fa1da0ecc5ea1e7a5922c40fd2fa9b0d5046"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cc1b0fff8ead343dae06305f954eb8468ba0ec1a97881f42489d198e4ce3c632"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cd6c3d4b783c556fa00bf540854e42f135e2f256abd29669fcd0da0f2dec79c2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d4d6fcde76f94f5cb9e43e9e9a61f16dacefd228cbbf6f1a09bd9b219a92f1a1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "df115d4d83168fdf2cae48ef1ff6d1cb4c466364e30861b37121de0f3bf1b990"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e4fd89cc178bced6ad29cb3e6dd4aa63fa5017c3524dbd0b25998fb64a87cc8b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ee2f2a527e3c1a6e6411eb4209642e138b544a2d72fe5d0d76daf77b24063534"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f7fb7d750cfa0a070d2c24e831fd3481019a60dd317ea2b39acbcebc08b6ed81"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f840ed6d8ecba8255df8c42b87fadeda98ddfc6eeec05e2dc66e26d46dd6f58a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f86c6358749bd4fda175388691e3ba8c46e24c5347d0afd20f9b7edfc9faf07d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fa36ec09ef71d158186bc79e359ff5fdd6e7996fe8ab638f00d6b93139ba4fcf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fe2c7201c642b7c308f1675355ad7ff7b66acfe3541625efe5a3ad38f29d6115"
+        }
+      ],
+      "name": "charset-normalizer",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/charset-normalizer@3.4.9",
+      "type": "library",
+      "version": "3.4.9"
+    },
+    {
+      "bom-ref": "pkg:pypi/click@8.4.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76"
+        }
+      ],
+      "name": "click",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/click@8.4.2",
+      "type": "library",
+      "version": "8.4.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/colorama@0.4.6",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+        }
+      ],
+      "name": "colorama",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/colorama@0.4.6",
+      "type": "library",
+      "version": "0.4.6"
+    },
+    {
+      "bom-ref": "pkg:pypi/cryptography@46.0.7",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "128c5edfe5e5938b86b03941e94fac9ee793a94452ad1365c9fc3f4f62216832"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1d25aee46d0c6f1a501adcddb2d2fee4b979381346a78558ed13e50aa8a59067"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "24402210aa54baae71d99441d15bb5a1919c195398a87b563df84468160a65de"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "35719dc79d4730d30f1c2b6474bd6acda36ae2dfae1e3c16f2051f215df33ce0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "397655da831414d165029da9bc483bed2fe0e75dde6a1523ec2fe63f3c46046b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "420b1e4109cc95f0e5700eed79908cef9268265c773d3a66f7af1eef53d409ef"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "42a1e5f98abb6391717978baf9f90dc28a743b7d9be7f0751a6f56a75d14065b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "462ad5cb1c148a22b2e3bcc5ad52504dff325d17daf5df8d88c17dda1f75f2a4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "506c4ff91eff4f82bdac7633318a526b1d1309fc07ca76a3ad182cb5b686d6d3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5ad9ef796328c5e3c4ceed237a183f5d41d21150f972455a9d926593a1dcb308"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5d1c02a14ceb9148cc7816249f64f623fbfee39e8c03b3650d842ad3f34d637e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5e51be372b26ef4ba3de3c167cd3d1022934bc838ae9eaad7e644986d2a3d163"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "60627cf07e0d9274338521205899337c5d18249db56865f943cbe753aa96f40f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "65814c60f8cc400c63131584e3e1fad01235edba2614b61fbfbfa954082db0ee"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "73510b83623e080a2c35c62c15298096e2a5dc8d51c3b4e1740211839d0dea77"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7bbc6ccf49d05ac8f7d7b5e2e2c33830d4fe2061def88210a126d130d7f71a85"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "80406c3065e2c55d7f49a9550fe0c49b3f12e5bfff5dedb727e319e1afb9bf99"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "84d4cced91f0f159a7ddacad249cc077e63195c36aac40b4150e7a57e84fffe7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8a469028a86f12eb7d2fe97162d0634026d92a21f3ae0ac87ed1c4a447886c83"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "91bbcb08347344f810cbe49065914fe048949648f6bd5c2519f34619142bbe85"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "935ce7e3cfdb53e3536119a542b839bb94ec1ad081013e9ab9b7cfd478b05006"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9694078c5d44c157ef3162e3bf3946510b857df5a3955458381d1c7cfc143ddb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a1529d614f44b863a7b480c6d000fe93b59acee9c82ffa027cfadc77521a9f5e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "abad9dac36cbf55de6eb49badd4016806b3165d396f64925bf2999bcb67837ba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b36a4695e29fe69215d75960b22577197aca3f7a25b9cf9d165dcfe9d80bc325"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b7b412817be92117ec5ed95f880defe9cf18a832e8cafacf0a22337dc1981b4d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c5b1ccd1239f48b7151a65bc6dd54bcfcc15e028c8ac126d3fada09db0e07ef1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cbd5fb06b62bd0721e1170273d3f4d5a277044c47ca27ee257025146c34cbdd1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cdf1a610ef82abb396451862739e3fc93b071c844399e15b90726ef7470eeaf2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cdfbe22376065ffcf8be74dc9a909f032df19bc58a699456a21712d6e5eabfd0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d151173275e1728cf7839aaa80c34fe550c04ddb27b34f48c232193df8db5842"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d23c8ca48e44ee015cd0a54aeccdf9f09004eba9fc96f38c911011d9ff1bd457"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d5f7520159cd9c2154eb61eb67548ca05c5774d39e9c2c4339fd793fe7d097b2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "db0f493b9181c7820c8134437eb8b0b4792085d37dbb24da050476ccb664e59c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e06acf3c99be55aa3b516397fe42f5855597f430add9c17fa46bf2e0fb34c9bb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e4cfd68c5f3e0bfdad0d38e023239b96a2fe84146481852dffbcca442c245aa5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ea42cbe97209df307fdc3b155f1b6fa2577c0defa8f1f7d3be7d31d189108ad4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ebd6daf519b9f189f85c479427bbd6e9c9037862cf8fe89ee35503bd209ed902"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f247c8c1a1fb45e12586afbb436ef21ff1e80670b2861a90353d9b025583d246"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fbfd0e5f273877695cb93baf14b185f4878128b250cc9f8e617ea0c025dfb022"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fcd8eac50d9138c1d7fc53a653ba60a2bee81a505f9f8850b6b2888555a45d0e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fdd1736fed309b4300346f88f74cd120c27c56852c3838cab416e7a166f67298"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ffca7aa1d00cf7d6469b988c581598f2259e46215e0140af408966a24cf086ce"
+        }
+      ],
+      "name": "cryptography",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/cryptography@46.0.7",
+      "type": "library",
+      "version": "46.0.7"
+    },
+    {
+      "bom-ref": "pkg:pypi/distro@1.9.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2"
+        }
+      ],
+      "name": "distro",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/distro@1.9.0",
+      "type": "library",
+      "version": "1.9.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/fastapi@0.140.7",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "09a640af2d29006345e1f28e4f031fa60f89b1a75d29f26070f3afa677d66cce"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "960bb9696d8fd19dff488aa4f67f276364542cfcce9f7e68a82fe49dce126626"
+        }
+      ],
+      "name": "fastapi",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/fastapi@0.140.7",
+      "type": "library",
+      "version": "0.140.7"
+    },
+    {
+      "bom-ref": "pkg:pypi/griffelib@2.1.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "762a186d2c6fd6794d4ea20d428d597ffb857cb56b66421651cbba15bdd5e813"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cc7b3d2d2865ad0b909fcc38086e3f554b5ea7acbaa7bbb7ecaa3f5dfb7d9f00"
+        }
+      ],
+      "name": "griffelib",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/griffelib@2.1.0",
+      "type": "library",
+      "version": "2.1.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/h11@0.16.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+        }
+      ],
+      "name": "h11",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/h11@0.16.0",
+      "type": "library",
+      "version": "0.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/httpcore@1.0.9",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8"
+        }
+      ],
+      "name": "httpcore",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "type": "library",
+      "version": "1.0.9"
+    },
+    {
+      "bom-ref": "pkg:pypi/httptools@0.8.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0770728beb05094c809b98e814edff5fef69d26ad7d21185f2f6d5884a0ba683"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "159e9ab5f701ccd42e555a12f1ad8ff69702910fc1c996cf2bb66e5fcb7a231b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "19d1ee275bb59ba2643ba9a3a1e51cc0c788caf2b8df506368e03f56fdd08527"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2a021c3a8e65cc125390d72f59b968afca3bdcaff25bd67965e0a055a14946ca"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2c032fa028f46871ec7e1fc59fc15e8023eab3e6bbe6ece786a1611719a5d081"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2d689918c15a013c65ef52d9fd495d766893ab831a2c8d89f2ac5940a5df847c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "384c17174464c8e873398b7af24f0b1f44d992c820328413951a625323155d77"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "425f83884fd6343828d8c565f046cb72b6d19063f6924093e11bcd8e1548cd09"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "48774d39cbb70e2b1f71f88852a3087ae1d3a1eb80482bb48c13067ab080c14f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5931891fb7b441b8a3853cf1b85c82c903defce084dd5f6771ca46e31bf862c5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "614ceea8ea606848bece2338ac03b3ce5324bcb4be8dc7d377ed708012fa4db8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6a43c9dd399758ccc0531acb0a3c4a6c299ee893ee9400e9c893b7bdcfae0681"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6b2a32f18d97e16e90827d7a819ffa8dbd8cc245fc4e1fa9d1095b54ef4bd999"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7685df791fad561384bfb139e77fde27a1ffd93134e016f95a0db424ffbf77b1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "880490234c10f70a9830743097e8958d6e4b9f5a0ffc24515023afeef984054d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "88bdd940f2b5d487b4d032c6afa5489a7dc4694410d43de3c38c4fb3af0dc45d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "88eead8ec8680a9f146c655bc88445a325bd7921cfd8194c7337e9467282427d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a1afd7c9fbff0d9f5d489c4ce2768bd09c84a46ddefc7161e6aa82ae35c85745"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a3b7387147361c3fd47a0bde763c5c91b5b4cd4dc9989b8ece84ff436c99843b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b15fc622b0f869d19207c4089a501d9bcc63ca5e071ffdd2f03f922df882dcb2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c4a9f1707e4823d54dfec6c33fa3697d302aed536ed352a7ebb5a061ddb869d0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cd96f29b4bab1d42fa6e3d008711c75e0f79e94e06827330160e3a304227f150"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d76ad7b951387e3632c8716a9bb03ac5b45c5f16119aa409db0459520887944e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "de1ed58a974e75d56560acc7e7fed01a454994429456f65209789992e41f2568"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "de242a49b5d18e0a8776e654e9f6bf6d89f3875a5c35b425a0e7ce940feb3fd6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e93c227b595c6926c1acee96891dd9da4be338cfbe82e5cd3bb9d8dd7dc4ac0b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "eb3028cca2fc0a6d720e52ef61d8ebb62fcbfeb1de56874546d858d3f25a26b7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ef7c3c97f4311c7be57e2986629df89d49cb434dbff78eafcd48c2bff986b15a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f256d6ce930c52ca1cb2a960b7da03548c454e7d28b06059ad41bfe789036ce0"
+        }
+      ],
+      "name": "httptools",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/httptools@0.8.0",
+      "type": "library",
+      "version": "0.8.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+        }
+      ],
+      "name": "httpx",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "type": "library",
+      "version": "0.28.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/httpx-sse@0.4.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d"
+        }
+      ],
+      "name": "httpx-sse",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/httpx-sse@0.4.3",
+      "type": "library",
+      "version": "0.4.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/idna@3.18",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848"
+        }
+      ],
+      "name": "idna",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/idna@3.18",
+      "type": "library",
+      "version": "3.18"
+    },
+    {
+      "bom-ref": "pkg:pypi/iniconfig@2.3.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12"
+        }
+      ],
+      "name": "iniconfig",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/iniconfig@2.3.0",
+      "type": "library",
+      "version": "2.3.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/jiter@0.16.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0542a7189c26920778658fc8fcf2af8bae05bae9924577f71804acef37996536"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0df91907609837f33341b8e6fe73b95991fdaa57caf1a0fbd343dffe826f386f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0e2e9efbe042210df657bade597f66d6d75723e3d8f45a12ea6d8167ff8bbce3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0fa25b09b13075c46f5bc174f2690525a925a4fc2f7c82969a2bbabff22386ce"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1878349266f8ee36ecb1375cc5ba2f115f35fd9f0a1a4119e725e379126647f7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2577196f4474ef3fc4779a088a23b0897bbf86f9ea3679c372d45b8383b43207"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "26798522707abb47d767db536e4148ceac1b14446bf028ee85e579a2e043cfe5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2ed5738ae4af18271a51a528b8811b0cbfa4a1858de9d83359e4169855d6a331"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "31aaee5b80f672c1dc21272bcfb9cbdcfc1ea04ff50f00ed5af500b80c44fa93"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3a23f0e4f957e1be65752d2dfac9a5a06b1917af8dc85deb639c3b9d02e31290"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3c1fd2dbe1b0af19e987f03fe66c5f5bd105a2229c1aff4ab14890b24f41d21a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3f4d9e473a5ce7d27fef8b848df4dc16e283893d3f53b4a585e72c9595f3c284"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "41977aa5654023948c2dae2a81cbf9c43343954bef1cd59a154dd15a4d84c195"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "44d019fa8cdaf89bf29c71b39e3712143fdd0ac76725c6ef954f9957a5ea8730"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "46add52f4ad47a08bfb1219f3e673da972191489a33016edefdb5ea55bfa8c48"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "49060fd70737fad59d33ba9dcc0d83247dc9e77187de26053a19c16c9f32bd69"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "51d7b836acb0108d7c77df1742332cac2a1fa04a74d6dacec46e7091f0e91274"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "561926e0573ffe4a32498420a76d64b16c513e1ab413b9d28158a8764ac701e5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "57b37fc887a32d44798e4d8ebfa7c9683ff3da1d5bf38f08d1bb3573ccb39106"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5ab4f50ff971b611d656554ea10b75f80097392c827bc32923c6eeb6386c8b00"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5af7780e4a26bd7d0d989592bf9ef12ebf806b74ab709223ecca37c749872ea9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "616e89e008a93c01104161c75b4988e58716b01d62307ebfe161e52a56d2a818"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "63efadc657488f45db1c676d81e704cac2abf3fdb892def1faea61db053127e2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "63ffdbdae7d4499f4cda14eadc12ddcabef0fc0c081191bdc2247489cb698077"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "64d613743df53199b1aa256a7d328340da6d7078aac7705a7db9d7a791e9cfd2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "659039cc50b5addcc35fcc87ae2c1833b7c0a8e5326ef631a75e4478447bcf84"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6722bcef4ffc86c835574b1b2fac6b33b9fb4a889c781e67950e891591f3c55a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "67c3bc1760f8c99d805dcab4e644027142a53b1d5d861f18780ebdbd5d40b72a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6edb63a46e65a82c26800a868e49b2cac30dd5a4218b88d74bc2c848c8ad60bb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "710cc51d4ebdcd3c1f70b232c1db1ea1344a075770422bbd4bede5708335acbe"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7b24c3492c5f4f84a37946ad9cf504910cf6a782d6a4e0689b6673c5894b4a1c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8d031aabecc4f1b6276adfb42e3aabb77c89d468bf616600e8d3a11328929053"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8d30a4a1c87713060c8d1cc59a7b6c8fb6b8ef0a6900368014c76c87922a2929"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8fb8de1e23a0cb2a7f53c335049c7b72b6db41aa6227cdcc0972a1de5cb39450"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "96e38eea538c8ddf853a35727c7be0741c76c13f04148ac5c116222f50ece3b3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9c8a956fd72c2cf1e730d01ea080341f13aa0a97a4a33b51abebe725b7ae9ca9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a111256a7193bea0759267b10385e5870949c239ed7b6ddbaaf57573edb38734"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a32d2027a9fa67f109ff245a3252ece3ccc32cc56703e1deab6cc846a59e0585"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "adbb8edeadd431bc4477879d5d371ece7cb1334486584e0f252656dd7ffada29"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b2c61484666ad42726029af0c00ef4541f0f3b5cdc550221f56c2343208018ee"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b72d0b2990ca754a9102779ac98d8597b7cb31678958562214a007f909eab78e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b8a3f9a6008048fe9def7bf465180564a6e458047d2ce499149cfbe73c3ae9db"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "baad945ed47f163ad833314f8e3288c396118934f94e7bbb9e243ce4b341a4fd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bae96332410f866e5900d809298b1ed82735932986c672495f9701daacd80620"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bc837c1b9631be10abfe0191537fe8009838204cec7e44827401ace390ddb567"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bf3ea07d9bc8e7d03a9fbc051295462e6dbc295b894fd72457c3136e3e43d898"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c22a488f7b9218e245a0025a9ba6b100e2e54700831cf4cf16833a27fba3ad01"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c682bea068a90b764577bdb78a60a4c1d1606daf9cd4c893832a37c7cc9d9026"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c9c53be232c2e206ef9cdbad81a48bfa74c3d3f08bcf8124630a8a748aad993e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cbd18dd5e2df96b580487b5745adf57ef64ad89ba2d9662fc3c19386acce7db8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cf0d73f50e7b6935677854f6e8e31d499ca7064dd24734f703e060f5b237d883"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d284fb8d94d5855d60c44fefcab4bf966f1da6fada73992b01f6f0c9bc0c6702"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d28bb3c26762358dadf3e5bf0bccd29ae987d65e6988d2e6f49829c76b003c09"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d5bf78d0e05e45cfdd66558893938d59afe3d1b1a824a202039b20e607d25a72"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d5f91b1c27fc22a57993d5a5cb8a627cb8ed4b10502716fac1ffbfe1d19d84e8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "da3d7ec75dc83bb18bca888b5edfae0656a26849056c59e05a7728badd17e7af"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "de5ba8763e56b793561f43bed197c9ea55776daa5e9a6b91eed68a909bc9cdbf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "eab2cd170150e70153de16896a1774e3a1dca80154c56b54d7a812c479a7165e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ee6162b77d49a9939229df666dfa8af3e656b6701b54c4c84966d740e189264e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f17d61a28b4b3e0e3e2ba98490c70501403b4d196f78732439160e7fd3678127"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f4444a83f946605990c98f625cdd3d2725bfb818158760c5748c653170a20e0e"
+        }
+      ],
+      "name": "jiter",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/jiter@0.16.0",
+      "type": "library",
+      "version": "0.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/jsonschema@4.26.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce"
+        }
+      ],
+      "name": "jsonschema",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/jsonschema@4.26.0",
+      "type": "library",
+      "version": "4.26.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d"
+        }
+      ],
+      "name": "jsonschema-specifications",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "type": "library",
+      "version": "2025.9.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/lil-tweak-engine@0.7.1",
+      "name": "lil-tweak-engine",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"editable\": \".\"}"
+        }
+      ],
+      "purl": "pkg:pypi/lil-tweak-engine@0.7.1",
+      "type": "library",
+      "version": "0.7.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/mcp@1.28.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2726bca5e7193f61c5dde8b12500a6de2d9acf6d1a1c0be9e8c2e706437991df"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d51e36a5f5644faea4f85ea649bfffa6bc6c26770d42798ad6a3de3d2ba69683"
+        }
+      ],
+      "name": "mcp",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/mcp@1.28.1",
+      "type": "library",
+      "version": "1.28.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/openai@2.48.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "231b1e7661dda14574986c2f71451e9d584b7fe69e0ee6480e12ed090b48fc16"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c98df30aaaf93c51979f64d3e7c5b76464f8be0173368266229eb8fe6bd30f2c"
+        }
+      ],
+      "name": "openai",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/openai@2.48.0",
+      "type": "library",
+      "version": "2.48.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/openai-agents@0.18.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c6ed971fdeb34d39a9931787bd3960c1e84dc5d7345705794cc5cab8a1158d07"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e637f5f5a50692ccbedb0e4f7f2e4f8e2facfcddd41142f35faf90c89b700fc3"
+        }
+      ],
+      "name": "openai-agents",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/openai-agents@0.18.3",
+      "type": "library",
+      "version": "0.18.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/packaging@26.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661"
+        }
+      ],
+      "name": "packaging",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/packaging@26.2",
+      "type": "library",
+      "version": "26.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/pillow@12.3.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "06ff022112bc9cbf83b60f8e028d94ad87b60621706487e65f673de61610ab59"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0740a512dc522224c77d9aa5a8d70d8b7d73fb91f2c21125d8d025d3b8990e45"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0847a763afefb695bc912d7c131e7e0632d4edc1d8698f58ddabec8e46b8b6d3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0dd2064cbc55aaec028ef5fbb60fa47bb6c3e7918e07ff17935284b227a9d2df"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0feb2e9d6ad6c9e3c06effe9d00f3f1e618a6643273576b016f591e9315a7139"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1182d52bc2d5e5d7d0949503aa7e36d12f42205dc287e4883f407b1988820d39"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "164b31cd1a0490ab6efae01aa5df49da7061be0af1b30e035b6e9a1bfe34ee6e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1657923d2d45afb66526e5b933e5b3052e6bdea196c90d3abb2424e18c77dae8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "186941b6aef820ad110fb01fb06eb925374dc3a21b17e37ec9a53b250c6fe2d1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "21900ce7ba264168cd50defae43cd75d25c833ad4ad6e73ffc5596d12e25ac89"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "23aceaa007d6172b02c277f0cd359c79492bbb14f7072b4ede9fbcaf20648130"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "24870b09b224f7ae3c39ed07d10e819d06f8720bc551847b1d623832b5b0e28d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "251bf95b67017e27b13d82f5b326234ca62d70f9cf4c2b9032de2358a3b12c7b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "28ce87c5ab450a9dd970b52e5aca5fe63ed432d18a2eaddd1979a00a1ba24ace"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "30f2aa603c41533cc25c05acd0da21636e84a315768feb631c937177db558931"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "331b624368d4f1d069149002f25f44bc61c8919ce8ddb3c45bdad8f6e2d89510"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3b8182a766685eaa002637e28b4ec8d6b18819a0c71f579bf0dbaa5830297cce"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3edce1d53195db527e0191f84b71d02022de0540bf43a16ed734ed7537b07385"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "446c34dcc4324b084a53b705127dc15717b22c5e140ae0a3c38349d4efec071e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4998562bf62a445225f22e07c896bb04b35b1b1f2eb6d760584c9c51d7a5f78c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4b0a7fe987b14c31ebda6083f74f22b561fd3739bc0ac51e019622e3d72668c7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4e8c2a84d977f50b9daed6eeaf3baef67d00d5d74d932288f02cb94518ee3ace"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "53aa02d20d10c3d814d536aa4e5ac9b84ca0ff5a88377963b085ad6822f93e64"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "571b9fcb07b97ef3a492028fb3d2dc0993ca23a06138b0315286566d29ef718a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "57b3d78c95ba9059768b10e28b813002261d3f3dfc55cc48b0c988f625175827"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5afb51d599ea772b8365ae807ae557f18bccfe46ab261fd1c2a9ed700fc6eb17"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6b02afb9b97f65fbca5f31db6a2a3ba21aa93030225f150fa3f249717e938fb4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "71d6097b330eea8fd15097780c8e89cb1a8ce7838669f48c5bacd6f663dd4701"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "756c768d0c9c2955feb7a56c37ea24aea2e369f8d36a88da270b6a9f19e62b5e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "78cb2c6865a35ab8ff8b75fd122f6033b92a62c82801110e48ddd6c936a45d91"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7a743ff716f746fc19a9557f60dab1600d4613255f8a7aeb3cdde4db7eb15a66"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8728f216dcdb6e6d555cf971cb34076139ad74b31fc2c14da4fafc741c5f6217"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "877c3f311ff35410f690861c4409e7ccbf0cd2f878e50628a28e5a0bb689e658"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8cd2f7bdda092d99c9fc2fb7391354f306d01443d22785d0cbfafa2e2c8bb418"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "962864dc93511324d51ddbb5b9f8731bf71675b93ca612a07441896f4688fb8c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9cf95fe4d0f84c82d282745d9bb08ad9f926efa00be4697e767b814ce40d4330"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9e881fca225083806662a5c43d627d215f258ff43c890f831966c7d7ba9c7402"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a2b55dd6b2a4c4b7d87ffa56bdb33fdc5fdb9a462173861a7bc097f17d91cb09"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a45650e8ce7fafffd731db8550230db6b0d306d181a90b67d3e6bca2f1990930"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a876864214e136f0eb367788dbd7df045f4806801518e2cfe9e13229cfe06d8f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae26d61dfa7a47befdc7572b521024e8745f3d809bd95ca9505a7bba9ef849ec"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "af8d94b0db561cf68b88a267c5c44b49e134f525d0dc2cb7ed413a66bc23559a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b629de27fda84b42cde7edef0d85f13b958b47f6e9bbcbba9b673c562a89bd8b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ba09209fbe443b4acccebe845d8a138b89a8f4fbaeedd44953490b5315d5e965"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ba54cfebe86920a559a7c4d6b9050791c20513650a1952ebe3368c7dc70306f8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bf16ba1b4d0b6b7c8e534936632270cf70eb00dbe09005bc345b2677b726855c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cf1845d02ad822a369a49f2bb9345b1614744267682e7a03527dc3bf6eea1777"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d69141514cc30b774ceea5e3ed3a6635c8d8a96edf664689b890f4089111fb35"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d9c7f76c0673154f044e9d78c8655fb4213f6ca31a836df48b40fe5d187717b9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dbce0b29841537a2fa4a214c2bbf14de3587c9680caa9b4e217568472490b28f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dc624f6bc473dacdf7ef7eb8678d0d08edf15cd94fad6ae5c7d6cc67a4e4902f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e158cb00350dc278f3b91551101aa7d12415a66ebf2c91d8d5ac14e56ddd3ad0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e491916b378fba47242221bb9ead245211b70d504f495d105d17b14a24b4907c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e795b7eb908249c4e43c7c99fac7c2c75dab0c43566e37db472a355f63693d71"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e91206ee562682b51b98ef4b26a6ef48fd84e15fd4c4bc5ec768eb641d206838"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e9871b1ffbfa9656b60aeee92ed5136a5742696006fa322b29ea3d8da0ecc9cf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e9aeb04d6aef139de265b29683e119b638208f88cf73cdd1658aa07221165321"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f13c32a3abd6079a66d9526e18dad9b6d280384d49d7c54040cd57b6424041d9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f7401aebd7f581d7f83a439d87d474999317ee099218e5ad25d125290990ba65"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fa4ecea169a355be7a3ade2c783e2ed12f0e40d2c5621cda8b3297faf7fbb9f5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fdafc9cce40277e0f7a0feabce0ee50dd2fa1800f3b38015e51296b5e814048d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fe3cca2e4e8a592be0f269a1ca4835c25199d9f3ce815c8491048f785b0a0198"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7"
+        }
+      ],
+      "name": "pillow",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pillow@12.3.0",
+      "type": "library",
+      "version": "12.3.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pluggy@1.6.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746"
+        }
+      ],
+      "name": "pluggy",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pluggy@1.6.0",
+      "type": "library",
+      "version": "1.6.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pycparser@3.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992"
+        }
+      ],
+      "name": "pycparser",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pycparser@3.0",
+      "type": "library",
+      "version": "3.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic@2.13.4",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c40756b57adaa8b1efeeced5c196f3f3b7c435f90e84ea7f443901bec8099ef6"
+        }
+      ],
+      "name": "pydantic",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pydantic@2.13.4",
+      "type": "library",
+      "version": "2.13.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic-core@2.46.4",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "00c603d540afdd6b80eb39f078f33ebd46211f02f33e34a32d9f053bba711de0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0186750b482eefa11d7f435892b09c5c606193ef3375bcf94aa00ae6bfb66262"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0cbe8b01f948de4286c74cdd6c667aceb38f5c1e26f0693b3983d9d74887c65e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "184c081504d17f1c1066e430e117142b2c77d9448a97f7b65c6ac9fd9aee238d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1a7dd0b3ee80d90150e3495a3a13ac34dbcbfd4f012996a6a1d8900e91b5c0fb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1d8ba486450b14f3b1d63bc521d410ec7565e52f887b9fb671791886436a42f7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2108ba5c1c1eca18030634489dc544844144ee36357f2f9f780b93e7ddbb44b5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "23ace664830ee0bfe014a0c7bc248b1f7f25ed7ad103852c317624a1083af462"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2412e734dcb48da14d4e4006b82b46b74f2518b8a26ee7e58c6844a6cd6d03c4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "29c61fc04a3d840155ff08e475a04809278972fe6aef51e2720554e96367e34b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3009f12e4e90b7f88b4f9adb1b0c4a3d58fe7820f3238c190047209d148026df"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3245406455a5d98187ec35530fd772b1d799b26667980872c8d4614991e2c4a2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "372429a130e469c9cd698925ce5fc50940b7a1336b0d82038e63d5bbc4edc519"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3a233125ac121aa3ffba9a2b59edfc4a985a76092dc8279586ab4b71390875e7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3bf92c5d0e00fefaab325a4d27828fe6b6e2a21848686b5b60d2d9eeb09d76c6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3ecbc122d18468d06ca279dc26a8c2e2d5acb10943bb35e36ae92096dc3b5565"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3fb702cd90b0446a3a1c5e470bfa0dd23c0233b676a9099ddcc964fa6ca13898"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "428e04521a40150c85216fc8b85e8d39fece235a9cf5e383761238c7fa9b96fb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4fc73cb559bdb54b1134a706a2802a4cddd27a0633f5abb7e53056268751ac6a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4fcbe087dbc2068af7eda3aa87634eba216dbda64d1ae73c8684b621d33f6596"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "56cb4851bcaf3d117eddcef4fe66afd750a50274b0da8e22be256d10e5611987"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5855698a4856556d86e8e6cd8434bc3ac0314ee8e12089ae0e143f64c6256e4e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5a4330cdbc57162e4b3aa303f588ba752257694c9c9be3e7ebb11b4aca659b5d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5b712b53160b79a5850310b912a5ef8e57e56947c8ad690c227f5c9d7e561712"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5d5902252db0d3cedf8d4a1bc68f70eeb430f7e4c7104c8c476753519b423008"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "617d7e2ca7dcb8c5cf6bcb8c59b8832c94b36196bbf1cbd1bfb56ed341905edd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "62f875393d7f270851f20523dd2e29f082bcc82292d66db2b64ea71f64b6e1c1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "633147d34cf4550417f12e2b1a0383973bdf5cdfde212cb09e9a581cf10820be"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6b3ace8194b0e5204818c92802dcdca7fc6d88aabbb799d7c795540d9cd6d292"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7027560ee92211647d0d34e3f7cd6f50da56399d26a9c8ad0da286d3869a53f3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7283d57845ecf5a163403eb0702dfc220cc4fbdd18919cb5ccea4f95ee1cdab4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7a5f930472650a82629163023e630d160863fce524c616f4e5186e5de9d9a49b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "811ff8e9c313ab425368bcbb36e5c4ebd7108c2bbf4e4089cfbb0b01eff63fac"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8233f2947cf85404441fd7e0085f53b10c93e0ee78611099b5c7237e36aacbf7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "82cf5301172168103724d49a1444d3378cb20cdee30b116a1bd6031236298a5d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "85bb3611ff1802f3ee7fdd7dbff26b56f343fb432d57a4728fdd49b6ef35e2f4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8d0820e8192167f80d88d64038e609c31452eeca865b4e1d9950a27a4609b00b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8daafc69c93ee8a0204506a3b6b30f586ef54028f52aeeeb5c4cfc5184fd5914"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "926c9541b14b12b1681dca8a0b75feb510b06c6341b70a8e500c2fdcff837cce"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9401557acd873c3a7f3eb9383edef8ac4968f9510e340f4808d427e75667e7b4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9551187363ffc0de2a00b2e47c25aeaeb1020b69b668762966df15fc5659dd5a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "962ccbab7b642487b1d8b7df90ef677e03134cf1fd8880bf698649b22a69371f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "97e7cf2be5c77b7d1a9713a05605d49460d02c6078d38d8bef3cbe323c548424"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9aa768456404a8bf48a4406685ac2bec8e72b62c69313734fa3b73cf33b3a894"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9d56801be94b86a9da183e5f3766e6310752b99ff647e38b09a9500d88e46e76"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9fa8ae11da9e2b3126c6426f147e0fba88d96d65921799bb30c6abd1cb2c97fb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ad785e92e6dc634c21555edc8bd6b64957ab844541bcb96a1366c202951ae526"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "af8244b2bef6aaad6d92cda81372de7f8c8d36c9f0c3ea36e827c60e7d9467a0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b2f69dec1725e79a012d920df1707de5caf7ed5e08f3be4435e25803efc47458"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b8458003118a712e66286df6a707db01c52c0f52f7db8e4a38f0da1d3b94fc4e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bfec22eab3c8cc2ceec0248aec886624116dc079afa027ecc8ad4a7e62010f8a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c1b3f518abeca3aa13c712fd202306e145abf59a18b094a6bafb2d2bbf59192c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c50f2528cf200c5eed56faf3f4e22fcd5f38c157a8b78576e6ba3168ec35f000"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c68fcd102d71ea85c5b2dfac3f4f8476eff42a9e078fd5faefff6d145063536b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c94f0688e7b8d0a67abf40e57a7eaaecd17cc9586706a31b76c031f63df052b4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cbaf13819775b7f769bf4a1f066cb6df7a28d4480081a589828ef190226881cd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cd2213145bcc2ba85884d0ac63d222fece9209678f77b9b4d76f054c561adb28"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ce5c1d2a8b27468f433ca974829c44060b8097eedc39933e3c206a90ee49c4a9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e739fee756ba1010f8bcccb534252e85a35fe45ae92c295a06059ce58b74ccd3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e846ae7835bf0703ae43f534ab79a867146dadd59dc9ca5c8b53d5c8f7c9ef02"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e9c26f834c65f5752f3f06cb08cb86a913ceb7274d0db6e267808a708b46bc89"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f027324c56cd5406ca49c124b0db10e56c69064fec039acc571c29020cc87c76"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f99626688942fb746e545232e7726926f3be91b5975f8b55327665fafda991c7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fbdb89b3e1c94a30cc5edfce477c6e6a5dc4d8f84665b455c27582f211a1c72c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fc3e9034a63de20e15e8ade85358bc6efc614008cab72898b4b4952bea0509ff"
+        }
+      ],
+      "name": "pydantic-core",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pydantic-core@2.46.4",
+      "type": "library",
+      "version": "2.46.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic-settings@2.14.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f"
+        }
+      ],
+      "name": "pydantic-settings",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pydantic-settings@2.14.2",
+      "type": "library",
+      "version": "2.14.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/pygments@2.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176"
+        }
+      ],
+      "name": "pygments",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pygments@2.20.0",
+      "type": "library",
+      "version": "2.20.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pyjwt@2.13.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728"
+        }
+      ],
+      "name": "pyjwt",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pyjwt@2.13.0",
+      "type": "library",
+      "version": "2.13.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/pytest@8.4.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "86c0d0b93306b961d58d62a4db4879f27fe25513d4b969df351abdddb3c30e01"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79"
+        }
+      ],
+      "name": "pytest",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pytest@8.4.2",
+      "type": "library",
+      "version": "8.4.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/pytest-asyncio@1.4.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42"
+        }
+      ],
+      "name": "pytest-asyncio",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pytest-asyncio@1.4.0",
+      "type": "library",
+      "version": "1.4.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/python-dotenv@1.2.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3"
+        }
+      ],
+      "name": "python-dotenv",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/python-dotenv@1.2.2",
+      "type": "library",
+      "version": "1.2.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/python-multipart@0.0.32",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23"
+        }
+      ],
+      "name": "python-multipart",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/python-multipart@0.0.32",
+      "type": "library",
+      "version": "0.0.32"
+    },
+    {
+      "bom-ref": "pkg:pypi/pywin32@312",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "59aba5d5940842075343a5ddc6b11f1cdf0d1567fe745290359dfbcc7c2eb831"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5c1fbe4a937a73ae9297384a3da38518cbc694c68ad8a809b2e19acd350f03ed"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6017c58e12f6809fbb0555b75df144c2922a9ffd18e4b9b5afa863b6c1a9d950"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7a27df850933d16a8eabfbaeb73d52b273e2da667f80d70b01a89d1f6828d02c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9fce94568364e0155e6dfb781ac5d95903be8baf28670632beab1b523f300daa"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a4dd3a848290ef724347b19f301045831d8e802fa4464f491b98b1e0a081432e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a77a90fbb6881238d2ca9c6fd797b25817f3768fe78d214a90137ff055a75f5b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a8597d28f267b39074aef51fa593530082b39cbe5a074226096857b1fed2dfb9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b457f6d628a47e8a7346ce22acb7e1a46a4a78b52e1d17e1af56871bd19a93bc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c2f03a0f73f804a13c2735b99392b0cd426bb4f2c4d0178e5ac966a0f21618d5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c53e878d15a1c44788082bfe712a905433473aa38f86375b7cf8b45e3acbaaf9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dab4f65ac9c4e48400a2a0530c46c3c579cd5905ecd11b80692373915269208b"
+        }
+      ],
+      "name": "pywin32",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pywin32@312",
+      "type": "library",
+      "version": "312"
+    },
+    {
+      "bom-ref": "pkg:pypi/pyyaml@6.0.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "02893d100e99e03eda1c8fd5c441d8c60103fd175728e23e431db1b589cf5ab3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "16249ee61e95f858e83976573de0f5b2893b3677ba71c9dd36b9cf8be9ac6d65"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "41715c910c881bc081f1e8872880d3c650acf13dfa8214bad49ed4cede7c34ea"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4a2e8cebe2ff6ab7d1050ecd59c25d4c8bd7e6f400f5f82b96557ac0abafd0ac"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4ad1906908f2f5ae4e5a8ddfce73c320c2a1429ec52eafd27138b7f1cbe341c9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "501a031947e3a9025ed4405a168e6ef5ae3126c59f90ce0cd6f2bfc477be31b7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5190d403f121660ce8d1d2c1bb2ef1bd05b5f68533fc5c2ea899bd15f4399b35"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5498cd1645aa724a7c71c8f378eb29ebe23da2fc0d7a08071d89469bf1d2defb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5fdec68f91a0c6739b380c83b951e2c72ac0197ace422360e6d5a959d8d97b2c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "64386e5e707d03a7e172c0701abfb7e10f0fb753ee1d773128192742712a98fd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "66e1674c3ef6f541c35191caae2d429b967b99e02040f5ba928632d9a7f0f065"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6adc77889b628398debc7b65c073bcb99c4a0237b248cacaf3fe8a557563ef6c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7c6610def4f163542a622a73fb39f534f8c101d690126992300bf3207eab9764"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8d1fab6bb153a416f9aeb4b8763bc0f22a5586065f86f7664fc23339fc1c1fac"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8da9669d359f02c0b91ccc01cac4a67f16afec0dac22c2ad09f46bee0697eba8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8dc52c23056b9ddd46818a57b78404882310fb473d63f17b07d5c40421e47f8e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "93dda82c9c22deb0a405ea4dc5f2d0cda384168e466364dec6255b293923b2f3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "96b533f0e99f6579b3d4d4995707cf36df9100d67e0c8303a0c55b27b5f99bc5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a33284e20b78bd4a18c8c2282d549d10bc8408a2a7ff57653c0cf0b9be0afce5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a80cb027f6b349846a3bf6d73b5e95e782175e52f22108cfa17876aaeff93702"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b3bc83488de33889877a0f2543ade9f70c67d66d9ebb4ac959502e12de895788"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c1ff362665ae507275af2853520967820d9124984e0f7466736aea23d8611fba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d0eae10f8159e8fdad514efdc92d74fd8d682c933a6dd088030f3834bc8e6b26"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "eda16858a3cab07b80edaf74336ece1f986ba330fdb8ee0d6c0d68fe82bc96be"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f7057c9a337546edc7973c0d3ba84ddcdf0daa14533c2065749c9075001090e6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0"
+        }
+      ],
+      "name": "pyyaml",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/pyyaml@6.0.3",
+      "type": "library",
+      "version": "6.0.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/referencing@0.37.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8"
+        }
+      ],
+      "name": "referencing",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/referencing@0.37.0",
+      "type": "library",
+      "version": "0.37.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/requests@2.34.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed"
+        }
+      ],
+      "name": "requests",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/requests@2.34.2",
+      "type": "library",
+      "version": "2.34.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/rpds-py@2026.6.3",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0be972be84cfcaf46c8c6edf690ca0f154ac17babf1f6a955a51579b34ad2dc5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "127565fead0a10943b282957bd5447804ff3160ad79f2ad2635e6d249e380680"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "166cf54d9f44fc6ceb53c7860258dde44a81406646de79f8ed3234fca3b6e538"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1967debc37f64f2c4dc90a7f563aec558b471966e12adcac4e1c4240496b6ebf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1cebd1337c242e4ec2293e541f712b2da849b29f48f0c293684b71c0632625d4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1cf01971c4f2c5553b772a542e4aaf191789cd331bc2cd4ff0e6e65ba49e1e97"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "22bffe6042b9bcb0822bcd1955ec00e245daf17b4344e4ed8e9551b976b63e96"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "23a439f31ccbeff1574e24889128821d1f7917470e830cf6544dced1c662262a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "24e9c5386e16669b674a69c156c8eeefcb578f3b3397b713b08e6d60f3c7b187"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "270b293dae9058fc9fcedab50f13cebf46fb8ed1d1d54e0521a9da5d6b211975"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "29dfa0533a5d4c94d4dfa1b694fcb56c9c63aad8330ffdd816fd225d0a7a162f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2a9c6f195058cb45335e8cc3802745c603d716eb96bc9625950c1aac71c0c703"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2c958bf94822e9290a40aaf2a822d4bc5c88099093e3948ad6c571eca9272e5f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2c99f7e8ccb3dd6e3e4bfeac657a7b208c9bac8075f4b078c02d7404c34107fa"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2f7c26fbc5acd2522b95d4177fe4710ffd8e9b20529e703ffbf8db4d93903f05"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "38a2fea2787428f811719ceb9114cb78964a3138838320c29ac39526c79c16ba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3cfe765c1da0072636ca06628261e0ea05688e160d5c8a03e0217c3854037223"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "425560c6fa0415f27261727bb20bd097568485e5eb0c121f1949417d1c516885"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4470ce197d4090875cf6affbf1f853338387428df97c4fb7b7106317b8214698"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4f4bca01b63096f606e095734dd56e74e175f94cfbf24ff3d63281cec61f7bb7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "501f9f04a588d6a09179368c57071301445191767c64e4b52a6aa9871f1ef5ed"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "536bceea4fa4acf7e1c61da2b5786304367c816c8895be71b8f537c480b0ea1f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "538949e262e46caa31ac01bdb3c1e8f642622922cacbabbae6a8445d9dc33eaf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "539d75de9e0d536c84ff18dfeb805398e58227001ce09231a26a08b9aed1ee0e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "54f45a148e28767bf343d33a684693c70e451c6f4c0e9904709a723fafbdfc1f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "55927d532399c2c646100ff7feb48eaa940ad70f42cd68e1328f3ded9f81ca24"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "58eadac9cd119677b60e1cf8ac4052f35949d71b8a9e5556efccbe82533cf22a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "62698275682bf121181861295c9181e789030a2d516071f5b8f3c23c170cd0fc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "639c8929aa0afe81be836b04de888460d6bed38b9c54cfc18da8f6bfabf5af5d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "67e3a721ffc5d8d2210d3671872298c4a84e4b8035cfe42ffd7cde35d772b146"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6de4744d05bd1aa1be4ed7ea1189e3979196808008113bbbf899a460966b925e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6e84adbcf4bf841aed8116a8264b9f50b4cb3e7bd89b516122e616ac56ca269e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7491ee23305ac3eb59e492b6945881f5cd77a6f731061a3f25b77fd40f9e99a4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "79486287de1730dbaff3dbd124d0ca4d2ef7f9d29bf2544f1f93c09b5bcbbd12"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8020133a74bd81b4572dd8e4be028a6b1ebcd70e6726edc3918008c08bee6ee6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "808345f53cb952433ca2816f1604ff3515608a81784954f38d4452acfe8e61d5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "842e7b070435622248c7a2c44ae53fa1440e073cc3023bc919fed570884097a7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "847927daf4cffbd4e90e42bc890069897101edd015f956cb8721b3473372edda"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "882076c00c0a608b131187055ddc5ae29f2e7eaf870d6168980420d58528a5c8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8b95977e7211527ab0ba576e286d023389fbeeb32a6b7b771665d333c60e5342"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8c2642a7603ec0b16ed77da4555db3b4b472341904873788327c0b0d7b95f1bb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8c3d1e9c15b9d51ca0391e13da1a25a0a4df3c58a37c9dc368e0736cf7f69df0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8c6e5a2f750cc71c3e3b11d71661f21d6f9bc6cebc6564b1466417a1ec03ec77"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8e4320744c1ffdd95a603def63344bfab2d33edeab301c5007e7de9f9f5b3885"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8f2e5c5ee828d42cb11760761c0af6507927bec42d0ad5458f97c9203b054617"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "900a67df3fd1660b035a4761c4ce73c382ea6b35f90f9863c36c6fd8bf8b09bb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "913ca42ccad3f8cc6e292b587ae8ae49c8c823e5dce51a736252fc7c7cdfa577"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9250a9a0a6fd4648b3f868da8d91a4c52b5811a62df58e753d50ae4454a36f80"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "931908d9fc855d8f74783377822be318edb6dcb19e47169dc038f9a1bf60b06e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9826217f048f620d9a712672818bf231442c1b35d96b227a07eabd11b4bb6945"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a0811d33247c3d6128a3001d763f2aa056bb3425204335400ac54f89eec3a0d0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a136d453475ac0fcbda502ef1e6504bd28d6d904700915d278deeab0d00fe140"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a214c993455f99a89aaeadc9b21241900037adc9d97203e374d75513c5911822"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a3086b538543802f84c843911242db20447de00d8752dd0efc936dbcf02218ba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a550fb4950a06dde3beb4721f5ad4b25bf4513784665b0a8522c792e2bd822a4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a9f4645593036b81bbdb36b9c8e0ea0d1c3fee968c4d59db0344c14087ef143a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "aca6c1ef08a82bfe327cc156da694660f599923e2e6665b6d81c9c2d0ac9ffc8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "acac386b453c2516111b50985d60ce46e7fadb5ea71ae7b25f4c946935bf27cf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae3d4fe8c0b9213624fdce7279d70e3b148b682ca20719ebd193a23ebfa47324"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae50181a047c871561212bb97f7932a2d45fb53e947bd9b57ebad85b529cbc53"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae6dd8f10bd17aad820876d24caec9efdafd80a318d16c0a48edb5e136902c6b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "af05d726809bff6b141be124d4c7ce998f9c9c7f30edb1f46c07aa103d540b41"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "afd70d95892096cdb26f15a00c45907b17817577aa8d1c76b2dcc2788391f9e9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bc0011654b91cc4fb2ae701bec0a0ba1e552c0714247fa7af6c59e0ccfa3a4e1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bcfbcf66006befb9fd2aeaa9e01feaf881b4dc330a02ba07d2322b1c11be7b5d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bdbd97738551fca3917c1bd7188bec1920bb520104f28e7e1007f9ceb17b7690"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c60924535c75f1566b6eb75b5c31a48a43fef04fa2d0d201acbad8a9969c6107"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c7b9a2f8f4d8e90af72571d3d495deebdd7e3c75451f5b41719aee166e940fc2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ccffae9a092a00deb7efd545fe5e2c33c33b88e7c054337e9a74c179347d0b7d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cdc7e35386f3847df728fbcb5e887e2d79c19e2fa1eba9e51b6621d23e3243af"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d15fde0e6fb0d88a60d221204873743e5d9f0b7d29165e62cd86d0413ad74ba6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d34c20167764fbcf927194d532dd7e0c56772f0a5f943fa5ef9e9afbba8fb9db"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d483fe17f01ad64b7bf7cc38fcefff1ca9fb83f8c2b2542b68f97ffe0611b369"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d7469697dce35be237db177d42e2a2ee26e6dcc5fc052078a6fefabd288c6edd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dc319e5a1de4b6913aac94bf6a2f9e847371e0a140a43dd4991db1a09bc2d504"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e059c5dde6452b44424bd1834557556c226b57781dee1227af23518459722b13"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e4316bf32babbed84e691e352faf967ce2f0f024174a8643c37c94a1080374fc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e55d236be29255554da47abe5c577637db7c24a02b8b46f0ca9524c855801868"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ea7bb13b7c9a29791f87a0387ba7d3ad3a6d783d827e4d3f27b40a0ff44495e2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ea964164cc9afa72d4d9b23cc28dafae93693c0a53e0b42acbff15b22c3f9ddd"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ec829541c45bca16e61c7ae50c20501f213605beb75d1aba91a6ee37fbbb56a4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ecabd69db66de867690f9797f2f8fa27ba501bbc24540cbdbdc649cd15888ba6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ed0c1e5d10cdc7135537988c74a0188da68e2f3c30813ba3744ab1e42e0480f9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f0840b5b17057f7fd918b76183a4b5a0635f43e14eb2ce60dce1d4ee4707ea00"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f4d78253f6996be4901669ad25319f842f740eccf4d58e3c7f3dd39e6dde1d8f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f56f1695bc5c0871cbc33dc0130fcf503aab0c57dcc5a6700a4f49eba4f2652e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f826877d462181e5eb1c26a0026b8d0cab05d99844ecb6d8bf3627a2ca0c0442"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f90938e92afda60266da758ee7d363447f7f0138c9559f9e1811629580582d90"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "faa679d19a6696fd54259ad321251ad77a13e70e03dd834daa762a44fb6196ef"
+        }
+      ],
+      "name": "rpds-py",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/rpds-py@2026.6.3",
+      "type": "library",
+      "version": "2026.6.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/ruff@0.16.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0ff4a79ce3ec0172f3241943835de1c4cb4e2dcd07f0f8c2d02603dbbbee4b17"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "14296fedcd2705c77ab8235439278bbb38f285cf7da5528b00b3e330c3d4872d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "28ea2b7df8ebf7f9da6b7d47b230ab48f387c0a29be3b474c4d0740e197bb9af"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "33a3dfac8c35f81498dea9181bccc2f4c4bc8f1521a1dd9406e77643e0f0fb09"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3c954b1d580bfa035b41654f7858cc7e71d5fc3ac5b723dd62bd9133830ed522"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "429c117f022bf481fabd9d551e7a3952b24c65e6ef44337ea09d90bebef14472"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "48044c678e9cb8698246c99b14aaccfa6601dea7379eb48a6f8f73f7a6d86cd0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4f11a8d11010301d0a398a2fdef67691feca7294da6aef55e2150e8fa2cd520b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6e364e5ed22ed8dc05082fd78e35308618260907ac2d3c1d637b2e682415b6c9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7aa0959bad8eb8bef50340154fc9b58678dae31fa4293afa38b44b6e552c0213"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7fab76fa065c873f41ff744347c6e77bcc3dfec4bcc754dc26b63d23c0f7f5fb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a5237a0bda500d30d81b8e07a6973a5cbc772864cbf746ae2f4e8a2e01c9f4ed"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a9b50c55e263103586b3dcf5f73d479eb8cb5fdb6098fec59a62891dab653717"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d327b8fc113a1d4421a04f3839d3752057c8dd1ee320223a6f3f52d04ada462a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e01c21d10eb1b29f47b7454e1f4056db9a3f0260c646aa88457c610291db9f81"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e460aafd5495ec89efaa6ced2e4a9a581116451e1c88b9d37ef497e0f8e93982"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e5115729eb08c585e5121978ba5d5b60caeae394ce21b9fb5e6cd33a1c6c9b1e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e95c448fca1fb2a18372a9440926c5a6ee789639bb975c72e7ae6d0b04218ab4"
+        }
+      ],
+      "name": "ruff",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/ruff@0.16.0",
+      "type": "library",
+      "version": "0.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/setuptools@82.0.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb"
+        }
+      ],
+      "name": "setuptools",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/setuptools@82.0.1",
+      "type": "library",
+      "version": "82.0.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/sniffio@1.3.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"
+        }
+      ],
+      "name": "sniffio",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/sniffio@1.3.1",
+      "type": "library",
+      "version": "1.3.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/socksio@1.0.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "95dc1f15f9b34e8d7b16f06d74b8ccf48f609af32ab33c608d08761c5dcbb1f3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f88beb3da5b5c38b9890469de67d0cb0f9d494b78b106ca1845f96c10b91c4ac"
+        }
+      ],
+      "name": "socksio",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/socksio@1.0.0",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/sse-starlette@3.4.6",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "56217ab4c9a9f9c5db7b21e08732d3e7c2b807f45231ad23de0551a24c4a41f6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "725f8a1bd6d26ae1b2c9610c0ef5065dfdd496f3988d28adcf8c4b49dc25c627"
+        }
+      ],
+      "name": "sse-starlette",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/sse-starlette@3.4.6",
+      "type": "library",
+      "version": "3.4.6"
+    },
+    {
+      "bom-ref": "pkg:pypi/starlette@1.3.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6"
+        }
+      ],
+      "name": "starlette",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/starlette@1.3.1",
+      "type": "library",
+      "version": "1.3.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/tqdm@4.70.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "55b0b0dbd97462d06ebee91e4dac24ed4d4702be82b24f07e6c1d27e08cea220"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7f585706bfddbdebf89daac705b2dfcc16890130727d3197ca62c732b4310953"
+        }
+      ],
+      "name": "tqdm",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/tqdm@4.70.0",
+      "type": "library",
+      "version": "4.70.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5"
+        }
+      ],
+      "name": "typing-extensions",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "type": "library",
+      "version": "4.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464"
+        }
+      ],
+      "name": "typing-inspection",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/typing-inspection@0.4.2",
+      "type": "library",
+      "version": "0.4.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/urllib3@2.7.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897"
+        }
+      ],
+      "name": "urllib3",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/urllib3@2.7.0",
+      "type": "library",
+      "version": "2.7.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/uvicorn@0.51.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5d38af6cd620f2ae3849fb44fd4879e0890aa1febe8d47eb355fb45d93fe6a5b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f6f4b69b657c312f516dd2d268ab9ae6f254b11e4bac504f37b2ab58b24dd0b0"
+        }
+      ],
+      "name": "uvicorn",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/uvicorn@0.51.0",
+      "type": "library",
+      "version": "0.51.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/uvloop@0.22.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0530a5fbad9c9e4ee3f2b33b148c6a64d47bbad8000ea63704fa8260f4cf728e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1cdf5192ab3e674ca26da2eada35b288d2fa49fdd0f357a19f0e7c4e7d5077c8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1f38ec5e3f18c8a10ded09742f7fb8de0108796eb673f30ce7762ce1b8550cad"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "297c27d8003520596236bdb2335e6b3f649480bd09e00d1e3a99144b691d2a35"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "37554f70528f60cad66945b885eb01f1bb514f132d92b6eeed1c90fd54ed6289"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3879b88423ec7e97cd4eba2a443aa26ed4e59b45e6b76aabf13fe2f27023a142"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4baa86acedf1d62115c1dc6ad1e17134476688f08c6efd8a2ab076e815665c74"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "512fec6815e2dd45161054592441ef76c830eddaad55c8aa30952e6fe1ed07c0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "51eb9bd88391483410daad430813d982010f9c9c89512321f5b60e2cddbdddd6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "561577354eb94200d75aca23fbde86ee11be36b00e52a4eaf8f50fb0c86b7705"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6c84bae345b9147082b17371e3dd5d42775bddce91f885499017f4607fdaf39f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6cde23eeda1a25c75b2e07d39970f3374105d5eafbaab2a4482be82f272d5a5e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6e2ea3d6190a2968f4a14a23019d3b16870dd2190cd69c8180f7c632d21de68d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "700e674a166ca5778255e0e1dc4e9d79ab2acc57b9171b79e65feba7184b3370"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7b5b1ac819a3f946d3b2ee07f09149578ae76066d70b44df3fa990add49a82e4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "93f617675b2d03af4e72a5333ef89450dfaa5321303ede6e67ba9c9d26878079"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b31dc2fccbd42adc73bc4e7cdbae4fc5086cf378979e53ca5d0301838c5682c6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b76324e2dc033a0b2f435f33eb88ff9913c156ef78e153fb210e03c13da746b3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b91328c72635f6f9e0282e4a57da7470c7350ab1c9f48546c0f2866205349d21"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "badb4d8e58ee08dad957002027830d5c3b06aea446a6a3744483c2b3b745345c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bc5ef13bbc10b5335792360623cc378d52d7e62c2de64660616478c32cd0598e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c1955d5a1dd43198244d47664a5858082a3239766a839b2102a269aaff7a4e25"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "daf620c2995d193449393d6c62131b3fbd40a63bf7b307a1527856ace637fe88"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e047cc068570bac9866237739607d1313b9253c3051ad84738cbb095be0537b2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fe94b4564e865d968414598eea1a6de60adba0c040ba4ed05ac1300de402cd42"
+        }
+      ],
+      "name": "uvloop",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/uvloop@0.22.1",
+      "type": "library",
+      "version": "0.22.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/watchfiles@1.2.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "01859b11fd9fbca670f4d5da00fbac282cfea9bd67a2125d8b2833a3b5617ea9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "01ea8d66f0693b9b60a6541c8d10263091ca9a9060d242f3c1f3143f9aad2c98"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "054dc20fd2e3132b4c3883b4a00d72fd6e1f56fdaf89fccd12e8057d74cd74d7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0a105bc2283f67e8fbec74253ec2d94925de92ed72c0393f1206bf326b7b7b69"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0a37faaed405c67e28e6be45a1fa4f206ef5a2860f27c237db9fa30704c38242"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0c4997d4e4a55f0d02b6cde327322daf3a0400e5df6c6b15948994bf72497925"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0cb4d80e212f116474a545c21c912b445f16bb0cef9e6a73a498164223e14e2f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0e831a271c035d89789cffc386b6aa1375f39f1cd25eb7ca0997e4970d152fc5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "10d86db20695afe7997ac9e1717637d6714a8d0220458c33f3d2061f54cec427"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1bc6195825b7dcd217968bb1f801a60fd4c16e8eeab5bedc7fe917d7d5995ab4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "20aa0e708b920bde876a4aa82dc7dd6ebea228a63a67cda6632c2fc87b787efa"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "23282a321c8baf9b3a3c4afff673f9fe65eb7fdc2338d765ccad9d3d1916a5ba"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2581a94056e55d7d0a31a823ea92bf73749c489ca2285bfdc0fbe6b2bb49d50c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2995c176de7692b86a2e4c58d9ec718f753150a979cb4a754e2b4ffa38e70906"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2b37d10b5a63bd4d87e18472d80fa525bd670586fae62e5dd580452764879b65"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2cb93af48550faf1cea04c303107c8b75833de7013e57ce27d3b8d21d8d0f58c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2d95ddc1eb6914154253d239089900813f6a767e174b8e6a50e7fdacb7e4236c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3416ff151bb6b5a8d8d11664974fbef4d9305b9b2957839ab5a270468fd8df30"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3651aa7058595e9cfb75d35dd5ada2bf9f48a5b8a0f3562821d3e210c507e077"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "37a6721cdf3f65dbb13aa9503510ccb4451603ac837e44d265d7992a597e1374"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "41bc1199f7523b3f82843c88cbb979180c949caef0342cf90968f178e5d49b01"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "43d818978d06062d9b22c4fab2ebe44cf5213d42dc8e62bda8c2760cfa2eeb33"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4429f3b105524a10b72c3a819b091c495d2811d419c1e1e8df773a5a5974f831"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4543579a9bdb0c9560039b4ffddbdb39545707659fbc430ce4c10f3f68d557f9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4c887eba18b7945ac73067a8b4a66f21cd46c2539b2bc68588f7be6c7eb6d26b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4e4ff8e37f99cf1da89e255e07c9c4b37c214038c4283707bdec308cb1b0ea1f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4f34e26a19f91f710c08e0183429f0d1d15df734e6bc78c31e77b9ea9c433658"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5327989a465505f05cfe06f04fa9d0c2fd5432bb243e10e6f012b1bdca3c8579"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "56d8641cf834c2836922899105bd3ce3d0dfc69291d52edf0b4d0436829b34c0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "63ac26eefbf4af1741247d6fb68b11c49a25b2f7413fbd318a83a12aaa9cf666"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "71283b39fd17e5408eb123bd37aeecfd9d54c81fc184421943208aadb879d103"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "71cd71740ed2c15211ebb237ced4e39a1cdf6f80566e5fe95428da1626f4fde6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7571e4464cb6e434958f867f7f730b8ab0b75e3f8e5eac0499168486ab3c33a8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7a2cffd17d27d2ecbb310c2b1d8174f222a5495b1a721894afa88ec11e25b898"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7a7ce236284f002a156f70add88efe5c70879cccbb658be0822c54b1306fc09d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7ba0480b9a74af058f43b337e937a451e109295c420916d68ad24e3dc02f5e44"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8520a4ab0e37f770afc34459c4f8f7019e153f9124dc101c15538365875d1ab2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "86bc13c25a8d1fcd70b51d0ce7c9b65e90de5666fcbfd3e34957cc73ee19aeb5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8f200104103feb097de4cab8fe4f5dd18a2026934c7dea98c55a2f5fd6d5a33b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8f70d8b291ef6e88d19b1f297a6905ddb978888d9272b0d05e6f53309856bcfc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8fa585ede612ee9f9e91b18bebf9ba11b9ae29a4e3a0d0cf6fca3e382133f0d5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "922c0e019fe68b3ae392965a766b02a71ba1168c932cebc3733cd52c5fe5b377"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9649193aa27bd9ff2e80ff29bfaa93085496c7a3a377592823cc58b77ee88add"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9f04b092229ad2c50126dd3c922c8822e51e605993764a33058d4a791ab42281"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a0f27f01bee51861392bb6b7c4fdb290b27d1eb194e9e28788d68102a0e898d9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a204794696ffb8f9b10fba6f7cb5216d42f3b2b71860ccac6b6e42f5f10973b0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ae99b14c5f21e026e0e9d96f40e07d8570ebee6cafd9d8fc318354606daa7a28"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b141a4891c995a039cd89e9a49e62df1dc8a559a5d1a6e4c7106d16c12777a55"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b4e77f6a55f858504069abd35d336a637555c09bca453dde1ee1e5ada8a6a1fb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b718bf356bbc15e559bd8ef41782b573b8ae0e3f177ab244b440568d7ea02cfb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b8c8358484d5fa12ef34f05b7f4168eaf1932f408725ff6d023c33ec17bd79d4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b974946a10af379d425e2eef5b62f5c6ebeaccf91d45eaad6f5b27ecd4f91aa0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b9909cc2b48468b575eefa944919e1fe8a36c5849d5c7c168f80a8c1db69398e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b9f732dc58b2dbe69e464ccf8fff7a03b0dd0be439da4c0720d3558527d3d6b4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bb7e52ecf68ba46d22df23467b87cffeb2146908aa523ebfe803019618cfda06"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bc13eb17538be00c874699dc0abe4ee2bc8d50bb1166a6b9e175ef3fd7eb8f26"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c0db965c5f79aa49fe672d297cf1febc5ad149b658594944f49a54a2b96270a7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c525543d91961c6955b2636b308569e84a1d1c5f5f2932041ab9ef46422f43e3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c5c19526f4e54a00f2666a6c0e9e40d582c09e865055ea7378bf0009aab857b3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "c995fba777f1ea992f090f9236e9284cf7a5d1a0130dd5a3d82c598cacd76838"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ca148d73dea36c9763aaa351e4d7a51780ec1584217c45276f4fe8239c768b71"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cee9d5efd929efdac5f7e58f72b3376f676b64050a91c5b99a7094c5b2317488"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d20029a60a71a052a24c4db7673bc4de39ab89adbaccbfb5d67987c5d73f424d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d413349d565dab74297f2a63e84a097936be69bf8f3b3801f27f380e32040f44"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d4a4b147f5dca2a5d325a06a832fb43f345751adfbc63204aec30e0d9ca965a2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d73a585accffa5ae39c17264c36ec3166d2fad7000c780f5ef83b2722afb9dd2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e140ed30ebde76796b686e67c182cff10ea2fbab186fafd1560f74bb5a473a6e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e53a384f76b631c3ae5334ce6a52f0baa3a911eb94a4eac7f160079868b716d5"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "eb283ee99e21ad6443c8cdb06ac5b34b1308c329cbdf03fa02b445363714c799"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ecb47f183a8025b2aa18b546725c3657e542112ae9c0613a2af79b4fa8d04ad7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f155b3a1b2a5fc89cdc70d47ee5d54e3b75e88efa34982028a35daef9ba00379"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f22943b7770483f6ea0721c6b11d022947a98eb0acae14694de034f4d0d38925"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f28b2725eb8cce327b9b3ab02415c853011dc55c95832fe90de6bc56f5315f72"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f88af53d6ddaf72179ef613ddc905e6f4785f712b49b80b3bef9f3525e6194b4"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "faea288b6f0ab1902ef08f4ca6de005dccf856c4e0c4f21b8c5fce02d90a1b08"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fff610d7bb2256a317bb1e96f0d7862c7aa8076733ee5df0fd41bbe76a24a4f4"
+        }
+      ],
+      "name": "watchfiles",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/watchfiles@1.2.0",
+      "type": "library",
+      "version": "1.2.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/websockets@16.1.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "01fbdcbac298efe19360b94bc0039c8f746f0220ba570f327577bfee81059175"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "024193f8551a2b0eafbdd160911012c4e6c228c28430c84433253299a9e42d6a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "056ae37939ed7e9974f364f5864e76e49182622d8f9751ac1903c0d09b013985"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0f62863e8a00a6d33c3d6566ec0b89f23787b747ffe0c3bc71ec0e76b82c94b1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "0ffd3031ea8bda8d61762e84220186105ba3b748b3c8da2ae4f7816fac03e573"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "195c978b065fa40910582464f99d6b15c8b314c68e0546549a55ed83f4735328"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1d27fa8462ad6a1cb36206a3d0640b2333340def181fae11ed7f9adeaa5c0747"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1db4de4a0e95673f7545d393c49eeb0c2f18ac1ef93073218c79d5cdb2ee75ab"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "1f79c89b5eb034d1722938a891916582f8f7f503f58ca22518a63c3f2cd18499"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "23253dd5bcae3f9aaee0a1d30967a8dbd52e5d3cff93a2e5b84df57b77d4750d"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "249116b4a76063d930a46391ad56e135c286e4562a18309029fc2c73f4ed4c62"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2a606d9c24035242a3e256e9d5b77ed9cd6bccfcb7cf993e5ca3c0f6f68fb6a7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2a636ff1e7a5c4edf71ef0e79adae7f25dba93b4fcbe3dc958733477ffeb0eaf"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "2bb5d041a8307d2e18782e7ce777f6fdb1e8c2f5d09291484b18c294b789d9aa"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "38565aca3e01ea8734e578fb2118dade0ecb0250533f29e22b8d1a7a196cf4d0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "39f2a024af5c345ffe8fcf1ee18c049c024c94df393bb09b044a6917c77bde43"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "3df13f73af9b3b38ab1195eb299ecb67a4330c911c97ae04043ff74085728abe"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "414e596c75f74e0994084694189d7dc9229fb278e33064d6784b73ffbba3ca31"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "41c8e77f17294c0ac18008a7309b99b34ee72247ef10b6dff4c3f8b5ac29896b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "42290eb6db4ccaca7012656738214f8514082fb6fa40cdeb61bb9a471b52e383"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "42f599f4d48c7e1a3338fdaac3acd075be3b3cf02d4b274f3bf2767aedd3d217"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "43e3a9fdd7cbf7ba6040c31fae0faf84ca1474fef777c4e37912f1540f854499"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "443aefe96b7fdb132e2a70806cca1f2af49bb3f28e47abcd7c2e9dcf4d8fa1b8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "46dcaa042cd1de6c59e7d9269fa63ff7572b6df40510600b678f0826b3c7af51"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "496af849a472b531f758dbd4d61338f5000538cb1a7b3d20d9d32a264517f509"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4b57693728576d84ede0a77987ab16881b783d2cd9f1dc180a8fbbc3f79c4428"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4e3b680b1e0a27457e727a0d572fd81dffa87b6dbf8b228ab57da64f7d85aead"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "4e8d01cc3bcae7bbf8167f944aeafefed590fae5693552bba9794a9df68371cc"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5283810d2646741a0d8da2aa733d6aefa0545809afccb2a5d105a26bc45125f1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "53260c8930da5771cec89439bff99c20c8cb03ddb9588b980697355a83cd4bd3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "536676848fc5961aca9d20389951f59169508f765637a172403dc5434d722fa0"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "54509b8e92fee4453e152b7558ddef37ce9705a044922f2095a6105e3f80c96f"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "5e3b7d601f6f84156b08cc4a5e541c2b50ad7b36cfc302b657a12477c904a5df"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "61922544a0587a13fd3f53e4c0e5e606510c7b0d9d22c8444e5fae22a06b38cb"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6456ff333092d509127d75a638cb411afae8ff17f092635015d1902efec8a293"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "69159730a823dde3ea8d08783e8d47ef135a6d7e8d44eb127e32b321c9db8e3e"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "69e52d175a0a7d1e13b4b67ad41c560b7d98e8c6f6126eb0bda496c784faf8c7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "6abbd3e82c731c8e531714466acd5d87b5e88ac3243465337ba71d68e23ae7e3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "79eace538c6a97e96d0d03d4f9d314f9677f5ed85a8a984992ffd90b13cb8a56"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "7b1b19636af86a3c7995d4d028dbe376f39b4bf31541146f9c123582a6c94562"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8087e82f842609734c9b5a1330464f8e94e346ba0e18c832c08bafa4b0d63c15"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "8483c2096363120eea8b07c06ae7304d520f686665fffd4811fad423930a65d7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "84a2cef8deffbd9ab8ee0ea546a2a6a7030c28f44e6cdd4547dbfeb489eb8999"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "92b820d345f7a3fc7b8163949ee92df910f290c3fc517b3d5301c78065adafe1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "952303a7318d4cbe1011400839bb2051c9f84fa0a35923267f5daba34b15d458"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "97fd3a0e8b53efa41970ac1dff3d8cf0d2884cadeb4caaf95db7ad1526926ee3"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9c1c5705e314449e3308872fe084b8571ce078ee4fc55a98a769bdefe5917392"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "9f63bcef7f4b02b06b35fc01c93b96c43b5e88e1e8868676caacf493d5a31f3a"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a0eadbbf2c30f01efa58e1f110eb6fa293261f6b0b1aa38f7f48707107690af9"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "a28fcbc9b6baf54a2e23f8655f308e4ccc6afdd7266f8fe7954f320dcda0f785"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "aabe464bfd13bd25f4821faf111da6fefdc389f870265a53105580e45b0a2e49"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ab59169ace05dcb49a1d4118f0bde139557adf45091bd85747e36bf5de984dd1"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "b436f6ec4fc3a6b4237c84d3f83170ed2b40bb584222f0ac47a0c8a5921980c7"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bae954c382e013d5ea5b190d2830526bfa45ad121c326da0049b8c769f185db6"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "bcce07e23e5769375158f5efdcdafa8d5cd014b93c6683865b840ed65b96f231"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cc97814dfb786a83b6e2dc2e79351e1b83e6d715647d6887fcabd83026417a00"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cd2ca96a082a36964aca83e992f72abeb61b7306c1a6cba4c7d06a7b93750cac"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cfb70b4eb56cac4da0a83588f3ad50d46beb0690391082f3d4e2d488c70b68ea"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d6bec75c290fe484a8ba4cacdf838501e17c06ecfbbf31eede81a9e431bd7751"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "d9531d9cbeac99af6f038fb1bc351403531f7d634a2c2e10e2f7c854c6ed5b68"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dab9eb87869da2d6ed3af3f3adf28414baae6ec9d4df355ffc18889132f3436c"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "db234eda965dcce15df96bb9709f587cd87d4d52aaf0e80e2f34ec04c7670c57"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "dcc04fedf83effaeb9cce98abc9469bb1b42ef85f03e01c8c1f4438ef7555737"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e047dc87ef7ca50f4d309bf775ad4a71711c58556d75d7bd0604b2317f43e94b"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "e09f753a169951eb4f28c2c774f71069304f66e7277e0f5a2892423599cfa854"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "ed5bb271084b46530ee2ddc0410537a9961152c5ccba2fc98c5276d992ccba87"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f0aa4aad3b1b69ad3fd85a0fd0952ec64331c762bd77ec51cc814170873890b2"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f17dbe07eb3ea7f99e4df9b7e0efefe80fbf30d37a8cc4d561a0aed310bc8847"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "f5d497865f05bb222cab7016c6034542e84e5f29f49c6fd3f4939cda7197b5b8"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "fce6c48559c86d1ac3632ccb1bebc7d5442fbe79bd9bb0e40379ee54be2a4051"
+        }
+      ],
+      "name": "websockets",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/websockets@16.1.1",
+      "type": "library",
+      "version": "16.1.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/wheel@0.47.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "212281cab4dff978f6cedd499cd893e1f620791ca6ff7107cf270781e587eced"
+        },
+        {
+          "alg": "SHA-256",
+          "content": "cc72bd1009ba0cf63922e28f94d9d83b920aa2bb28f798a31d0691b02fa3c9b3"
+        }
+      ],
+      "name": "wheel",
+      "properties": [
+        {
+          "name": "liltweak:lock-source",
+          "value": "{\"registry\": \"https://pypi.org/simple\"}"
+        }
+      ],
+      "purl": "pkg:pypi/wheel@0.47.0",
+      "type": "library",
+      "version": "0.47.0"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "github:islamismylifebey-web/lil-tweak",
+      "name": "lil-tweak-engine",
+      "type": "application",
+      "version": "0.7.1"
+    },
+    "properties": [
+      {
+        "name": "liltweak:repository",
+        "value": "github:islamismylifebey-web/lil-tweak"
+      },
+      {
+        "name": "liltweak:branch",
+        "value": "codex/lil-tweak-live-workbench-build"
+      },
+      {
+        "name": "liltweak:baseline-commit",
+        "value": "373400cb2b459dbf8a37dacceb0d3d1186eef949"
+      },
+      {
+        "name": "liltweak:candidate-commit",
+        "value": "recorded-externally-after-freeze"
+      }
+    ]
+  },
+  "serialNumber": "urn:uuid:00000000-0000-4000-8000-000000000071",
+  "specVersion": "1.6",
+  "version": 1
+}

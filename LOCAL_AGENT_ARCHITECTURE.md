@@ -1,5 +1,9 @@
 # Lil Tweak Local Agent Architecture
 
+> Historical checkpoint — superseded by `MASTER_BUILDER_ARCHITECTURE.md`. The classification and
+> environment facts below describe the earlier baseline only. Current controlling verdict:
+> **ARCHITECTURE IMPLEMENTED AND TESTED — NOT OPERATIONAL**.
+
 ## Release status
 
 `PARTIALLY OPERATIONAL — BLOCKERS REMAIN`

@@ -11,6 +11,12 @@ from pydantic import Field, StrictStr
 
 from .creator_contract import CreatorSchema
 from .live_contract import HostedSandboxProbeResult, LiveModelUsage
+from .model_catalog import MODEL_CATALOG
+from .reasoning_policy import (
+    FoundationModel,
+    ReasoningEffort,
+    ReasoningRequestMode,
+)
 
 
 class HostedSandboxProbeError(RuntimeError):
@@ -22,9 +28,9 @@ class _ProbeSummary(CreatorSchema):
 
 
 class OpenAIHostedSandboxProbe:
-    MODEL = "gpt-5.6-luna"
-    INPUT_PRICE_PER_MILLION_USD = 1.0
-    OUTPUT_PRICE_PER_MILLION_USD = 6.0
+    MODEL_ID = FoundationModel.LUNA
+    MODEL = MODEL_ID.value
+    REASONING_EFFORT = ReasoningEffort.LOW.value
     CONTAINER_MINIMUM_USD = 0.03
     APPROVED_COST_CEILING_USD = 0.04
 
@@ -58,7 +64,12 @@ class OpenAIHostedSandboxProbe:
             model_settings=ModelSettings(
                 tool_choice="shell",
                 max_tokens=512,
-                reasoning={"effort": "low"},
+                reasoning={
+                    "mode": ReasoningRequestMode.STANDARD.value,
+                    "effort": self.REASONING_EFFORT,
+                    "context": "current_turn",
+                    "summary": "auto",
+                },
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,
@@ -95,17 +106,7 @@ class OpenAIHostedSandboxProbe:
             output_tokens=usage.output_tokens,
             total_tokens=usage.total_tokens,
         )
-        token_cost = (
-            math.ceil(
-                (
-                    bounded_usage.input_tokens * self.INPUT_PRICE_PER_MILLION_USD
-                    + bounded_usage.output_tokens * self.OUTPUT_PRICE_PER_MILLION_USD
-                )
-                / 1_000_000
-                * 1_000_000
-            )
-            / 1_000_000
-        )
+        token_cost = self._token_cost_usd(bounded_usage)
         actual_cost = math.ceil((self.CONTAINER_MINIMUM_USD + token_cost) * 1_000_000) / 1_000_000
         verified = (
             len(shell_outputs) == 1
@@ -123,6 +124,18 @@ class OpenAIHostedSandboxProbe:
             estimated_actual_cost_usd=actual_cost,
             verified=verified,
         )
+
+    @classmethod
+    def _token_cost_usd(cls, usage: LiveModelUsage) -> float:
+        price = MODEL_CATALOG.price_band(
+            cls.MODEL_ID,
+            input_tokens=usage.input_tokens,
+        )
+        raw_cost = (
+            usage.input_tokens * float(price.input_per_million_usd)
+            + usage.output_tokens * float(price.output_per_million_usd)
+        ) / 1_000_000
+        return math.ceil(raw_cost * 1_000_000) / 1_000_000
 
     @staticmethod
     def _raw_type(value: object) -> str | None:

@@ -10,6 +10,16 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .reasoning_policy import (
+    PROFILE_REGISTRY,
+    REASONING_POLICY,
+    ReasoningProfileName,
+    ReasoningProfileUnavailable,
+    require_primary_engineering_model,
+)
+
+_ORDINARY_PROFILE = PROFILE_REGISTRY[ReasoningProfileName.ORDINARY]
+
 
 def _float_env(name: str, default: float) -> float:
     raw = os.getenv(name)
@@ -94,6 +104,15 @@ def _owner_id_env() -> str:
     return value
 
 
+def _engineering_model_env() -> str:
+    try:
+        return require_primary_engineering_model(
+            os.getenv("LILTWEAK_MODEL", REASONING_POLICY.primary_model.value)
+        ).value
+    except ReasoningProfileUnavailable as exc:
+        raise ValueError("LILTWEAK_MODEL must name the canonical primary model") from exc
+
+
 @dataclass(frozen=True)
 class Settings:
     environment: str
@@ -122,8 +141,10 @@ class Settings:
     server_host: str = "127.0.0.1"
     workbench_enabled: bool = False
     workbench_model_enabled: bool = False
-    workbench_model: str = "gpt-5.6-terra"
-    workbench_reasoning_tier: str = "high"
+    workbench_model: str = _ORDINARY_PROFILE.model.value
+    workbench_reasoning_tier: str = _ORDINARY_PROFILE.variant.effort.value
+    workbench_reasoning_mode: str = _ORDINARY_PROFILE.variant.request_mode.value
+    workbench_reasoning_profile: str = _ORDINARY_PROFILE.name.value
     workbench_workspace_root: Path = Path("./workbench-tasks")
     workbench_session_ttl_seconds: int = 3_600
     workbench_rate_limit_per_minute: int = 120
@@ -169,8 +190,22 @@ class Settings:
             raise ValueError("LILTWEAK_LIVE_INPUT_TOKEN_LIMIT is invalid")
         if self.live_output_token_limit < 1_024 or self.live_output_token_limit > 32_000:
             raise ValueError("LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT is invalid")
-        if self.workbench_reasoning_tier not in {"low", "medium", "high", "xhigh"}:
+        if self.workbench_reasoning_tier not in {"low", "medium", "high", "xhigh", "max"}:
             raise ValueError("LILTWEAK_WORKBENCH_REASONING_TIER is invalid")
+        if self.workbench_reasoning_mode not in {"standard", "pro"}:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_MODE is invalid")
+        try:
+            profile = PROFILE_REGISTRY[ReasoningProfileName(self.workbench_reasoning_profile)]
+        except (KeyError, ValueError) as exc:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_PROFILE is invalid") from exc
+        if (
+            self.workbench_model != profile.model.value
+            or self.workbench_reasoning_tier != profile.variant.effort.value
+            or self.workbench_reasoning_mode != profile.variant.request_mode.value
+        ):
+            raise ValueError(
+                "Workbench model, mode, and effort must match the named reasoning profile"
+            )
         if self.workbench_session_ttl_seconds < 300 or self.workbench_session_ttl_seconds > 86_400:
             raise ValueError("LILTWEAK_WORKBENCH_SESSION_TTL_SECONDS is invalid")
         if (
@@ -208,10 +243,6 @@ class Settings:
                 )
         if self.workbench_enabled and not self.dev_api_key:
             raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
-        if self.workbench_model_enabled and not os.getenv("OPENAI_API_KEY"):
-            raise ValueError(
-                "enabled Workbench model adapter requires configured provider credentials"
-            )
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -273,7 +304,7 @@ class Settings:
             database_path=Path(os.getenv("LILTWEAK_DB_PATH", "./data/liltweak.db")),
             dev_api_key=os.getenv("LILTWEAK_DEV_API_KEY"),
             auth_disabled=auth_disabled,
-            model=os.getenv("LILTWEAK_MODEL", "gpt-5.6-luna"),
+            model=_engineering_model_env(),
             monthly_budget_usd=_float_env("LILTWEAK_MONTHLY_BUDGET_USD", 250.0),
             job_hard_limit_usd=_float_env("LILTWEAK_JOB_HARD_LIMIT_USD", 5.0),
             planning_reservation_usd=_float_env(
@@ -312,8 +343,18 @@ class Settings:
             server_host=os.getenv("LILTWEAK_SERVER_HOST", "127.0.0.1"),
             workbench_enabled=_bool_env("LILTWEAK_WORKBENCH_ENABLED", False),
             workbench_model_enabled=_bool_env("LILTWEAK_WORKBENCH_MODEL_ENABLED"),
-            workbench_model=os.getenv("LILTWEAK_WORKBENCH_MODEL", "gpt-5.6-terra"),
-            workbench_reasoning_tier=os.getenv("LILTWEAK_WORKBENCH_REASONING_TIER", "high"),
+            workbench_model=os.getenv("LILTWEAK_WORKBENCH_MODEL", _ORDINARY_PROFILE.model.value),
+            workbench_reasoning_tier=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_TIER",
+                _ORDINARY_PROFILE.variant.effort.value,
+            ),
+            workbench_reasoning_mode=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_MODE",
+                _ORDINARY_PROFILE.variant.request_mode.value,
+            ),
+            workbench_reasoning_profile=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_PROFILE", _ORDINARY_PROFILE.name.value
+            ),
             workbench_workspace_root=Path(
                 os.getenv("LILTWEAK_WORKBENCH_WORKSPACE_ROOT", "./workbench-tasks")
             ),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path, PureWindowsPath
 
@@ -29,7 +30,9 @@ from liltweak.workbench_executor import (
 )
 from liltweak.workbench_policy import ToolPolicyBroker
 from liltweak.workbench_repository import WorkbenchRepositoryRegistry
+from liltweak.workbench_security import SecurityBoundaryError
 from liltweak.workbench_store import WorkbenchStore
+from tests.canonical_helpers import enable_test_canonical_capabilities
 from tests.repository_helpers import initialize_repository
 
 REPOSITORY_ID = "local:fixture"
@@ -103,9 +106,10 @@ def _controller(
         signing_key=b"c" * 32,
         durable_signatures=True,
     )
+    workbench_store = enable_test_canonical_capabilities(WorkbenchStore(database))
     control = WorkbenchController(
         creator=creator,
-        store=WorkbenchStore(database),
+        store=workbench_store,
         model=model,
         executor=BoundedToolExecutor(workspaces, DisconnectedProcessTransport()),
         workspaces=workspaces,
@@ -234,12 +238,91 @@ async def test_planning_model_receives_relative_source_paths_and_screened_excerp
     assert planned.state == WorkbenchState.AWAITING_APPROVAL
     assert len(model.inspection_summaries) == 1
     context = json.loads(model.inspection_summaries[0])
-    assert context["file_count"] >= 1
-    assert any(item["path"] == "src/app.py" for item in context["files"])
-    app_excerpt = next(item for item in context["excerpts"] if item["path"] == "src/app.py")
+    assert context["schema_version"] == "workbench-planning-context-v2"
+    manifest = context["context_manifest"]
+    assert manifest["schema_version"] == "context-manifest-v1"
+    assert manifest["policy"]["input_token_ceiling"] == 12_000
+    assert manifest["policy"]["reserved_output_tokens"] == 4_096
+    assert any(item["path"] == "src/app.py" for item in manifest["selected_files"])
+    app_excerpt = next(item for item in manifest["excerpts"] if item["path"] == "src/app.py")
     assert "FastAPI" in app_excerpt["text"]
+    assert context["source_binding"]["workspace_tree_digest"] == (
+        task.imported.source_snapshot_digest
+    )
+    assert context["source_binding"]["context_manifest_digest"] == manifest["manifest_digest"]
+    assert context["trusted_git_facts"]["head"]
+    assert context["trusted_acceptance"]["commands"] == list(task.imported.acceptance_commands)
     assert str(repository.resolve()) not in model.inspection_summaries[0]
-    assert all(not Path(item["path"]).is_absolute() for item in context["files"])
+    assert all(not Path(item["path"]).is_absolute() for item in manifest["selected_files"])
+    evidence = control.store.list_evidence(task.id)
+    context_evidence = next(
+        item for item in evidence if item.event_type == "context_manifest_built"
+    )
+    model_evidence = next(item for item in evidence if item.event_type == "model_plan_received")
+    assert context_evidence.payload["context_manifest_digest"] == manifest["manifest_digest"]
+    assert context_evidence.payload["context_source_tree_digest"] == manifest["source_tree_digest"]
+    assert model_evidence.payload["context_manifest_digest"] == manifest["manifest_digest"]
+
+
+@pytest.mark.asyncio
+async def test_materialized_workspace_drift_blocks_context_before_model(tmp_path: Path) -> None:
+    control, model, _repository, _registry = _controller(tmp_path)
+    task = control.receive_repository_task(
+        repository_id=REPOSITORY_ID,
+        title="Bound context",
+        direction="Inspect the FastAPI app and its tests.",
+    )
+    control.inspect(task.id)
+    (control.workspaces.task_root(task.id) / "src" / "app.py").write_text(
+        "changed after inspection\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WorkbenchError, match="changed before context assembly"):
+        await control.analyze(task.id)
+
+    assert model.inspection_summaries == []
+
+
+@pytest.mark.asyncio
+async def test_context_manifest_blocks_secret_before_model(tmp_path: Path) -> None:
+    control, model, _repository, _registry = _controller(tmp_path)
+    task_id = "task:unsafe-secret"
+    workspace = control.workspaces.task_root(task_id)
+    secret = "sk-" + "proj-" + "Q" * 32
+    (workspace / "unsafe.txt").write_text(secret, encoding="utf-8")
+    imported = TaskImport(
+        title="test",
+        direction="run bounded tests",
+        source_snapshot_digest=control.workspaces.tree_digest(workspace),
+    )
+    task = control.receive(imported, task_id=task_id)
+    control.inspect(task.id)
+
+    with pytest.raises(WorkbenchError, match="rejected unsafe workspace content"):
+        await control.analyze(task.id)
+
+    assert model.inspection_summaries == []
+
+
+def test_workspace_inventory_blocks_hardlink_before_model(tmp_path: Path) -> None:
+    control, model, _repository, _registry = _controller(tmp_path)
+    task_id = "task:unsafe-hardlink"
+    workspace = control.workspaces.task_root(task_id)
+    first = workspace / "first.txt"
+    first.write_text("shared safe content\n", encoding="utf-8")
+    os.link(first, workspace / "second.txt")
+    imported = TaskImport(
+        title="test",
+        direction="run bounded tests",
+        source_snapshot_digest=control.workspaces.tree_digest(workspace),
+    )
+    task = control.receive(imported, task_id=task_id)
+
+    with pytest.raises(SecurityBoundaryError, match="hardlink"):
+        control.inspect(task.id)
+
+    assert model.inspection_summaries == []
 
 
 def test_repository_api_routes_require_owner_session_csrf_and_hide_host_paths(
@@ -254,7 +337,7 @@ def test_repository_api_routes_require_owner_session_csrf_and_hide_host_paths(
         database_path=tmp_path / "api.db",
         dev_api_key="owner-secret",
         auth_disabled=False,
-        model="test-model",
+        model="gpt-5.6-sol",
         monthly_budget_usd=10,
         job_hard_limit_usd=1,
         workspace_root=source_root,
@@ -264,7 +347,7 @@ def test_repository_api_routes_require_owner_session_csrf_and_hide_host_paths(
         workbench_enabled=True,
         workbench_workspace_root=workbench_root,
     )
-    client = TestClient(create_app(settings=configured))
+    client = TestClient(create_app(settings=configured), base_url="http://127.0.0.1")
     inspection_body = {"direction": "Inspect the FastAPI app and its tests."}
     task_body = {
         "title": "Inspect fixture",
