@@ -562,23 +562,27 @@ def prepare_training_readiness(
             item[0].candidate_id,
         ),
     ):
-        retained = retained_by_content.get(prepared.content_digest)
-        if retained is not None:
+        retained_pair = retained_by_content.get(prepared.content_digest)
+        if retained_pair is not None:
             exclusions.append(
-                _exclusion(candidate, ExclusionReason.EXACT_DUPLICATE, retained[1].case_digest)
+                _exclusion(
+                    candidate,
+                    ExclusionReason.EXACT_DUPLICATE,
+                    retained_pair[1].case_digest,
+                )
             )
             continue
         retained_by_content[prepared.content_digest] = (candidate, prepared)
 
-    retained = tuple(retained_by_content.values())
+    retained_pairs = tuple(retained_by_content.values())
     holdout_shingles = {
         digest
-        for _, prepared in retained
+        for _, prepared in retained_pairs
         if prepared.split is not TrainingSplit.TRAIN
         for digest in prepared.shingle_digests
     }
     cases: list[PreparedTrainingCase] = []
-    for candidate, prepared in retained:
+    for candidate, prepared in retained_pairs:
         overlap = (
             set(prepared.shingle_digests).intersection(holdout_shingles)
             if prepared.split is TrainingSplit.TRAIN

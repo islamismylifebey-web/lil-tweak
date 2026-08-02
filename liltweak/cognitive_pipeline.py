@@ -5,7 +5,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Final, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
@@ -28,12 +28,17 @@ from .reasoning_contract import (
 from .reasoning_policy import ReasoningProfileName, profile_for_role
 from .reasoning_prompts import (
     PROMPT_OUTPUT_TYPES,
-    PROMPT_REGISTRY_VERSION,
     PromptName,
     render_prompt,
 )
 
-COGNITIVE_PIPELINE_VERSION = "1.0.0"
+COGNITIVE_PIPELINE_VERSION: Final[Literal["1.0.0"]] = "1.0.0"
+type TerminalCognitiveState = Literal[
+    CognitiveState.COGNITIVE_READY,
+    CognitiveState.NO_CHANGE_PROPOSED,
+    CognitiveState.BLOCKED,
+    CognitiveState.FAILED,
+]
 
 
 class CognitiveSchema(BaseModel):
@@ -46,12 +51,12 @@ class CognitiveSchema(BaseModel):
 
 
 class CognitiveCallRequest(CognitiveSchema):
-    schema_version: Literal[COGNITIVE_PIPELINE_VERSION]
+    schema_version: Literal["1.0.0"]
     call_id: StrictStr = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     role: ReasoningRole
     profile_name: ReasoningProfileName
     prompt_name: PromptName
-    prompt_version: Literal[PROMPT_REGISTRY_VERSION]
+    prompt_version: Literal["1.1.0"]
     instructions: StrictStr
     instructions_digest: Sha256
     input_text: StrictStr
@@ -110,7 +115,7 @@ class CognitiveEvent(CognitiveSchema):
 
 
 class CognitivePipelineResult(CognitiveSchema):
-    schema_version: Literal[COGNITIVE_PIPELINE_VERSION]
+    schema_version: Literal["1.0.0"]
     run_id: StrictStr = Field(pattern=r"^cognitive_[A-Za-z0-9][A-Za-z0-9._:-]{0,117}$")
     task_id: StrictStr
     state: Literal[
@@ -287,7 +292,10 @@ class CognitivePipelineController:
             )
             state = target
 
-        def finish(target: CognitiveState, reason: str | None) -> CognitivePipelineResult:
+        def finish(
+            target: TerminalCognitiveState,
+            reason: str | None,
+        ) -> CognitivePipelineResult:
             if state != target:
                 transition(target, reason or "cognitive pipeline reached its terminal state")
             return CognitivePipelineResult(
@@ -592,7 +600,7 @@ class CognitivePipelineController:
                     or finalization.recommended_state != CognitiveState.COGNITIVE_READY
                     or finalization.task_completion_claimed
                 ):
-                    target = (
+                    target: TerminalCognitiveState = (
                         CognitiveState.FAILED
                         if finalization.status == OutcomeStatus.FAILED
                         else CognitiveState.BLOCKED

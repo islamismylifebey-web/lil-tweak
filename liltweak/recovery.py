@@ -25,6 +25,7 @@ from .models import (
     JobRecord,
     RecoveryPackage,
     RecoveryStatus,
+    RepositoryInspection,
 )
 from .repository import (
     RepositoryAccessError,
@@ -129,9 +130,15 @@ class RecoveryCapture:
                 before = self.inspector.inspect(reference)
                 self._require_matching_snapshot(job, package, before)
                 self._validate_git_boundary(repository)
+                base_head = package.base_head
+                if base_head is None:
+                    raise RecoveryBlockedError(
+                        "missing_base_revision",
+                        "recovery capture requires a resolved base revision",
+                    )
                 prepared, untracked_manifest = self._prepare_artifacts(
                     repository,
-                    package.base_head,
+                    base_head,
                     reference.allowed_paths,
                     package.planned_artifacts,
                 )
@@ -212,8 +219,11 @@ class RecoveryCapture:
         self,
         job: JobRecord,
         package: RecoveryPackage,
-        inspection,
+        inspection: RepositoryInspection,
     ) -> None:
+        approved_inspection = job.inspection
+        if approved_inspection is None:
+            raise RecoveryUnavailableError("repository inspection is required")
         if not inspection.read_only_verified or not inspection.complete:
             raise RecoveryBlockedError(
                 "inspection_incomplete",
@@ -230,7 +240,7 @@ class RecoveryCapture:
                 "repositories with unresolved conflicts cannot be captured",
             )
         if (
-            inspection.repository_fingerprint != job.inspection.repository_fingerprint
+            inspection.repository_fingerprint != approved_inspection.repository_fingerprint
             or inspection.repository_fingerprint != package.source_fingerprint
             or inspection.git.recovery_snapshot_digest is None
             or not hmac.compare_digest(
@@ -631,6 +641,11 @@ class RecoveryCapture:
             if content is None:
                 after = None
             else:
+                if metadata is None:
+                    raise RecoveryBlockedError(
+                        "tracked_file_unavailable",
+                        "tracked working-tree metadata became unavailable",
+                    )
                 total_worktree_bytes += len(content)
                 if total_worktree_bytes > self.limits.max_tracked_total_bytes:
                     raise RecoveryBlockedError(
@@ -857,6 +872,7 @@ class RecoveryCapture:
         b_path = self._quote_patch_path(f"b/{path}")
         output = bytearray(b"diff --git " + a_path + b" " + b_path + b"\n")
         if before is None:
+            assert after is not None
             output.extend(f"new file mode {after.mode}\n".encode("ascii"))
         elif after is None:
             output.extend(f"deleted file mode {before.mode}\n".encode("ascii"))
@@ -1331,7 +1347,7 @@ class RecoveryCapture:
         *,
         job: JobRecord,
         package: RecoveryPackage,
-        inspection,
+        inspection: RepositoryInspection,
         after_capture_fingerprint: str,
         artifacts: list[ArtifactRecord],
         untracked_manifest: list[dict[str, Any]],

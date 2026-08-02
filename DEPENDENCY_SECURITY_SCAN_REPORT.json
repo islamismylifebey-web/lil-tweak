@@ -7,10 +7,10 @@
     "status": "BLOCKED"
   },
   "lock_integrity": {
-    "lock_sha256": "2ad058b7806d07d0bad2f75707b02fb36fd5f92292caed222e544892da5bcda3",
+    "lock_sha256": "45c86942e8d52408bbae05feb5a7c16d6851c118b47fa790bfefc0921e3c25a3",
     "status": "PASSED"
   },
-  "locked_package_count": 60,
+  "locked_package_count": 66,
   "operational_release_gate": "BLOCKED",
   "repository": "github:islamismylifebey-web/lil-tweak",
   "runner_image_scan": {
@@ -19,8 +19,8 @@
   },
   "schema_version": "dependency-security-scan-v1",
   "secret_scan": {
-    "files_considered": 242,
-    "files_scanned": 242,
+    "files_considered": 246,
+    "files_scanned": 246,
     "fixture_policy": "A synthetic credential-rejection fixture is allowlisted only when its path, complete-file SHA-256 digest, and exact rule-id tuple all match this generator's reviewed fixture registry. Any content change becomes a release finding.",
     "release_findings": [],
     "scan_blockers": [],

@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
-from typing import Protocol
+from typing import Literal, Protocol
 
 from .creator import CreatorEnvelopeError, CreatorService
 from .creator_contract import RoutePreviewRequest, RouteStatus, content_digest
@@ -265,42 +265,64 @@ class RepositoryExecutionController:
             raise RepositoryExecutionError("registered source changed after job inspection")
 
         created_at = datetime.now(UTC)
-        values = {
-            "id": f"repo_exec_{uuid.uuid4().hex}",
-            "job_id": job.id,
-            "organization_id": job.task.organization_id,
-            "project_id": job.task.project_id,
-            "brief_digest": request.envelope.brief_digest,
-            "route_digest": verified_route.decision_digest,
-            "recipe_id": recipe.recipe_id,
-            "recipe_digest": recipe.recipe_digest,
-            "source": source,
-            "sandbox_profile_digest": profile.profile_digest,
-            "workspace_mount_digest": content_digest(
-                {
-                    "source_manifest_digest": source.manifest_digest,
-                    "sandbox_profile_digest": profile.profile_digest,
-                    "recipe_digest": recipe.recipe_digest,
-                }
-            ),
-            "image_ref": recipe.image_ref,
-            "commands": recipe.commands,
-            "wall_clock_seconds": recipe.wall_clock_seconds,
-            "memory_megabytes": recipe.memory_megabytes,
-            "cpu_count": recipe.cpu_count,
-            "pid_limit": recipe.pid_limit,
-            "file_size_limit_bytes": recipe.file_size_limit_bytes,
-            "output_byte_limit": recipe.output_byte_limit,
-            "created_at": created_at,
-            "expires_at": created_at + timedelta(minutes=15),
-            "attempt_nonce": hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
-        }
+        execution_id = f"repo_exec_{uuid.uuid4().hex}"
+        workspace_mount_digest = content_digest(
+            {
+                "source_manifest_digest": source.manifest_digest,
+                "sandbox_profile_digest": profile.profile_digest,
+                "recipe_digest": recipe.recipe_digest,
+            }
+        )
+        expires_at = created_at + timedelta(minutes=15)
+        attempt_nonce = hashlib.sha256(secrets.token_bytes(32)).hexdigest()
         unsigned = RepositoryExecutionPlan.model_construct(
-            **values,
+            id=execution_id,
+            job_id=job.id,
+            organization_id=job.task.organization_id,
+            project_id=job.task.project_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            recipe_id=recipe.recipe_id,
+            recipe_digest=recipe.recipe_digest,
+            source=source,
+            sandbox_profile_digest=profile.profile_digest,
+            workspace_mount_digest=workspace_mount_digest,
+            image_ref=recipe.image_ref,
+            commands=recipe.commands,
+            wall_clock_seconds=recipe.wall_clock_seconds,
+            memory_megabytes=recipe.memory_megabytes,
+            cpu_count=recipe.cpu_count,
+            pid_limit=recipe.pid_limit,
+            file_size_limit_bytes=recipe.file_size_limit_bytes,
+            output_byte_limit=recipe.output_byte_limit,
+            created_at=created_at,
+            expires_at=expires_at,
+            attempt_nonce=attempt_nonce,
             plan_digest="0" * 64,
         )
         plan = RepositoryExecutionPlan(
-            **values,
+            id=execution_id,
+            job_id=job.id,
+            organization_id=job.task.organization_id,
+            project_id=job.task.project_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            recipe_id=recipe.recipe_id,
+            recipe_digest=recipe.recipe_digest,
+            source=source,
+            sandbox_profile_digest=profile.profile_digest,
+            workspace_mount_digest=workspace_mount_digest,
+            image_ref=recipe.image_ref,
+            commands=recipe.commands,
+            wall_clock_seconds=recipe.wall_clock_seconds,
+            memory_megabytes=recipe.memory_megabytes,
+            cpu_count=recipe.cpu_count,
+            pid_limit=recipe.pid_limit,
+            file_size_limit_bytes=recipe.file_size_limit_bytes,
+            output_byte_limit=recipe.output_byte_limit,
+            created_at=created_at,
+            expires_at=expires_at,
+            attempt_nonce=attempt_nonce,
             plan_digest=content_digest(unsigned.model_dump(mode="json", exclude={"plan_digest"})),
         )
         record = ExecutionRecord(plan=plan, status=ExecutionStatus.PENDING_APPROVAL)
@@ -495,16 +517,16 @@ class RepositoryExecutionController:
         verification: ExecutionVerification,
     ) -> ExecutionOutcomeRecord:
         created_at = datetime.now(UTC)
-        values = {
-            "execution_id": plan.id,
-            "plan_digest": plan.plan_digest,
-            "status": ("verified_success" if verification.verified else "verified_failure"),
-            "evidence": evidence,
-            "verification": verification,
-            "created_at": created_at,
-        }
+        status: Literal["verified_success", "verified_failure"] = (
+            "verified_success" if verification.verified else "verified_failure"
+        )
         unsigned = ExecutionOutcomeRecord.model_construct(
-            **values,
+            execution_id=plan.id,
+            plan_digest=plan.plan_digest,
+            status=status,
+            evidence=evidence,
+            verification=verification,
+            created_at=created_at,
             outcome_digest="0" * 64,
             verifier_signature="0" * 64,
         )
@@ -520,7 +542,12 @@ class RepositoryExecutionController:
             hashlib.sha256,
         ).hexdigest()
         return ExecutionOutcomeRecord(
-            **values,
+            execution_id=plan.id,
+            plan_digest=plan.plan_digest,
+            status=status,
+            evidence=evidence,
+            verification=verification,
+            created_at=created_at,
             outcome_digest=digest,
             verifier_signature=signature,
         )

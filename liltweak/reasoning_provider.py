@@ -12,6 +12,8 @@ from typing import Any, Literal, TypeVar, cast
 import openai
 from openai import AsyncOpenAI
 from openai.lib._parsing._responses import type_to_text_format_param
+from openai.types.responses.response_input_param import ResponseInputParam
+from openai.types.shared_params.reasoning import Reasoning
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
 from .reasoning_contract import (
@@ -125,6 +127,34 @@ def _digest_text(value: str) -> str:
 def _digest_json(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported reasoning request mode")
+
+
+def _provider_reasoning_effort(
+    effort: ReasoningEffort,
+) -> Literal["none", "low", "medium", "high", "xhigh", "max"]:
+    if effort == ReasoningEffort.NONE:
+        return "none"
+    if effort == ReasoningEffort.LOW:
+        return "low"
+    if effort == ReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == ReasoningEffort.HIGH:
+        return "high"
+    if effort == ReasoningEffort.XHIGH:
+        return "xhigh"
+    if effort == ReasoningEffort.MAX:
+        return "max"
+    raise AssertionError("unsupported reasoning effort")
 
 
 def _provider_item(value: object) -> object:
@@ -280,22 +310,25 @@ class OpenAIResponsesReasoningProvider:
         )
         request_mode = qualification_request_mode or profile.variant.request_mode
         reasoning_effort = qualification_effort or profile.variant.effort
-        reasoning = {
-            "mode": request_mode.value,
-            "effort": reasoning_effort.value,
-            "context": (
+        reasoning = Reasoning(
+            mode=_provider_reasoning_mode(request_mode),
+            effort=_provider_reasoning_effort(reasoning_effort),
+            context=(
                 "all_turns"
                 if profile.context_mode == ContextMode.STABLE_ALL_TURNS
                 else "current_turn"
             ),
-            "summary": "auto",
-        }
-        provider_input: str | list[dict[str, Any]] = input_text
+            summary="auto",
+        )
+        provider_input: str | ResponseInputParam = input_text
         if replay_items:
-            provider_input = [
-                *replay_items,
-                {"role": "user", "content": input_text},
-            ]
+            provider_input = cast(
+                ResponseInputParam,
+                [
+                    *replay_items,
+                    {"role": "user", "content": input_text},
+                ],
+            )
         try:
             async with asyncio.timeout(timeout_seconds):
                 async with self._semaphore:
@@ -423,7 +456,7 @@ class OpenAIResponsesReasoningProvider:
         profile: ReasoningProfileDefinition,
         instructions: str,
         input_text: str,
-        provider_input: str | list[dict[str, Any]],
+        provider_input: str | ResponseInputParam,
         output_type: type[TOutput],
         counted_input_tokens: int,
         input_token_ceiling: int,

@@ -5,7 +5,6 @@ from typing import Annotated, Literal
 from pydantic import Field, StrictStr
 
 from .reasoning_contract import (
-    REASONING_CONTRACT_VERSION,
     CognitiveState,
     EvidenceReference,
     ReasoningRole,
@@ -19,7 +18,7 @@ from .reasoning_contract import (
 class CognitiveFinalization(StatusedContract):
     """Non-authoritative final cognitive synthesis; it can never complete a task."""
 
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.FINALIZER]
     tool_authority: Literal[ToolAuthority.NONE]
     fresh_context: Literal[True]

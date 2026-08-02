@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from typing import cast
 
 from liltweak.runner_qualification import (
     LocalRunnerProbeExpectations,
@@ -310,12 +311,13 @@ def discover() -> dict[str, object]:
             "Owner worktree bytes remained unchanged.",
         )
         context = registry.planning_context(inspection)
-        grounded = "src/calculator.py" in json.dumps(context) and bool(context["excerpts"])
+        excerpts = cast(list[object], context["excerpts"])
+        grounded = "src/calculator.py" in json.dumps(context) and bool(excerpts)
         _record(
             cases,
             "grounded-planning-context",
             "PASS" if grounded else "FAIL",
-            f"excerpts={len(context['excerpts'])} files_truncated={context['files_truncated']}",
+            f"excerpts={len(excerpts)} files_truncated={context['files_truncated']}",
         )
 
         secret_repository = _fixture(repositories, "secret", secret=True)

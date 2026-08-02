@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import tarfile
@@ -44,12 +45,29 @@ def _package_artifacts(
             archive.writestr(name, f"payload:{name}\n")
         archive.writestr("lil_tweak_engine-0.7.1.dist-info/METADATA", wheel_metadata)
     sdist = tmp_path / "lil_tweak_engine-0.7.1.tar.gz"
-    with tarfile.open(sdist, "w:gz") as archive:
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT) as archive:
         for name in sorted(REQUIRED_SDIST_PAYLOAD | set(sdist_extra_payload)):
             data = f"payload:{name}\n".encode()
             info = tarfile.TarInfo(f"lil_tweak_engine-0.7.1/{name}")
+            info.mode = 0o644
+            info.uid = 0
+            info.gid = 0
+            info.uname = ""
+            info.gname = ""
+            info.mtime = int(REQUIRED_SOURCE_DATE_EPOCH)
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
+    with (
+        sdist.open("wb") as output,
+        gzip.GzipFile(
+            filename="",
+            fileobj=output,
+            mode="wb",
+            mtime=int(REQUIRED_SOURCE_DATE_EPOCH),
+        ) as compressed,
+    ):
+        compressed.write(tar_buffer.getvalue())
     return wheel, sdist
 
 
@@ -92,8 +110,15 @@ def test_package_artifacts_become_provenance_subjects(
     ]
     assert report["build_system"] == {
         "requires": ["setuptools==82.0.1", "wheel==0.47.0"],
-        "build_backend": "setuptools.build_meta",
+        "build_backend": "build_backend",
+        "backend_path": ["."],
     }
+    assert [material["path"] for material in report["materials"]] == [
+        "MANIFEST.in",
+        "build_backend.py",
+        "pyproject.toml",
+        "uv.lock",
+    ]
     assert report["environment"]["SOURCE_DATE_EPOCH"] == REQUIRED_SOURCE_DATE_EPOCH
     assert report["reproducible_build_epoch"] == "2025-01-01T00:00:00+00:00"
     assert report["observation_time"] == "recorded externally with exact-commit verification"
@@ -131,6 +156,20 @@ def test_generated_inventory_cannot_be_mislabeled_as_project_license(tmp_path: P
         package_artifact_subjects(wheel, sdist)
 
 
+@pytest.mark.parametrize("evidence_name", ["BUILD_PROVENANCE.json", "FINAL_FILE_MANIFEST.json"])
+def test_generated_evidence_cannot_enter_package_artifacts(
+    tmp_path: Path,
+    evidence_name: str,
+) -> None:
+    wheel, sdist = _package_artifacts(tmp_path, extra_payload=(evidence_name,))
+    with pytest.raises(ArtifactValidationError, match="provenance cycle"):
+        package_artifact_subjects(wheel, sdist)
+
+    wheel, sdist = _package_artifacts(tmp_path, sdist_extra_payload=(evidence_name,))
+    with pytest.raises(ArtifactValidationError, match="provenance cycle"):
+        package_artifact_subjects(wheel, sdist)
+
+
 @pytest.mark.parametrize("missing_kind", ["wheel", "sdist"])
 def test_missing_package_artifact_fails_closed(tmp_path: Path, missing_kind: str) -> None:
     wheel, sdist = _package_artifacts(tmp_path)
@@ -149,6 +188,51 @@ def test_malformed_sdist_fails_closed(tmp_path: Path) -> None:
     sdist.write_bytes(b"not-a-source-archive")
 
     with pytest.raises(ArtifactValidationError, match="valid gzip tar"):
+        package_artifact_subjects(wheel, sdist)
+
+
+def test_nondeterministic_sdist_metadata_fails_closed(tmp_path: Path) -> None:
+    wheel, sdist = _package_artifacts(tmp_path)
+    with tarfile.open(sdist, "w:gz") as archive:
+        data = b"noncanonical\n"
+        info = tarfile.TarInfo("lil_tweak_engine-0.7.1/pyproject.toml")
+        info.size = len(data)
+        archive.addfile(info, io.BytesIO(data))
+
+    with pytest.raises(ArtifactValidationError, match="gzip"):
+        package_artifact_subjects(wheel, sdist)
+
+
+def test_sdist_rejects_concatenated_gzip_payload(tmp_path: Path) -> None:
+    wheel, sdist = _package_artifacts(tmp_path)
+    hidden = gzip.compress(b"hidden trailing payload", mtime=int(REQUIRED_SOURCE_DATE_EPOCH))
+    sdist.write_bytes(sdist.read_bytes() + hidden)
+
+    with pytest.raises(ArtifactValidationError, match="trailing gzip payload"):
+        package_artifact_subjects(wheel, sdist)
+
+
+def test_sdist_rejects_unknown_tar_member_type(tmp_path: Path) -> None:
+    wheel, sdist = _package_artifacts(tmp_path)
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT) as archive:
+        member = tarfile.TarInfo("lil_tweak_engine-0.7.1/unknown")
+        member.type = b"Z"
+        member.mode = 0o644
+        member.mtime = int(REQUIRED_SOURCE_DATE_EPOCH)
+        archive.addfile(member)
+    with (
+        sdist.open("wb") as output,
+        gzip.GzipFile(
+            filename="",
+            fileobj=output,
+            mode="wb",
+            mtime=int(REQUIRED_SOURCE_DATE_EPOCH),
+        ) as compressed,
+    ):
+        compressed.write(tar_buffer.getvalue())
+
+    with pytest.raises(ArtifactValidationError, match="cannot be normalized safely"):
         package_artifact_subjects(wheel, sdist)
 
 

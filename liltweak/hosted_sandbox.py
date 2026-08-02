@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 
 from agents import Agent, ModelSettings, RunConfig, Runner, ShellTool
 from agents.items import ToolCallOutputItem
+from openai.types.shared.reasoning import Reasoning
 from pydantic import Field, StrictStr
 
 from .creator_contract import CreatorSchema
@@ -15,7 +16,6 @@ from .model_catalog import MODEL_CATALOG
 from .reasoning_policy import (
     FoundationModel,
     ReasoningEffort,
-    ReasoningRequestMode,
 )
 
 
@@ -64,12 +64,12 @@ class OpenAIHostedSandboxProbe:
             model_settings=ModelSettings(
                 tool_choice="shell",
                 max_tokens=512,
-                reasoning={
-                    "mode": ReasoningRequestMode.STANDARD.value,
-                    "effort": self.REASONING_EFFORT,
-                    "context": "current_turn",
-                    "summary": "auto",
-                },
+                reasoning=Reasoning(
+                    mode="standard",
+                    effort="low",
+                    context="current_turn",
+                    summary="auto",
+                ),
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,

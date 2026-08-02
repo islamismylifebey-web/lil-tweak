@@ -14,7 +14,7 @@ from .reasoning_contract import (
     ToolAuthority,
 )
 
-REASONING_POLICY_VERSION = "1.0.0"
+REASONING_POLICY_VERSION: Final[Literal["1.0.0"]] = "1.0.0"
 
 
 class PolicySchema(BaseModel):
@@ -78,7 +78,7 @@ class ReasoningVariant(PolicySchema):
 
 class ReasoningProfileDefinition(PolicySchema):
     profile_id: StrictStr
-    profile_version: Literal[REASONING_POLICY_VERSION]
+    profile_version: Literal["1.0.0"]
     name: ReasoningProfileName
     model: FoundationModel
     variant: ReasoningVariant
@@ -121,9 +121,9 @@ class RoleProfileBinding(PolicySchema):
 
 
 class CanonicalReasoningPolicy(PolicySchema):
-    schema_version: Literal[REASONING_POLICY_VERSION]
+    schema_version: Literal["1.0.0"]
     policy_id: Literal["lil-tweak.reasoning-policy"]
-    policy_version: Literal[REASONING_POLICY_VERSION]
+    policy_version: Literal["1.0.0"]
     primary_model: Literal[FoundationModel.SOL]
     models: tuple[ModelDefinition, ...]
     profiles: tuple[ReasoningProfileDefinition, ...]

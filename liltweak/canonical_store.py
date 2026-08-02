@@ -6,9 +6,11 @@ import re
 import secrets
 import sqlite3
 import uuid
+from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
 from threading import RLock
+from typing import cast
 
 from .canonical_lifecycle import (
     LEGAL_TRANSITIONS,
@@ -214,7 +216,7 @@ class CanonicalStateStore:
         *,
         expected_version: int,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
     ) -> CanonicalTask:
         """Append an event and advance the canonical CAS version without changing state."""
 
@@ -239,7 +241,7 @@ class CanonicalStateStore:
         expected_version: int,
         target: TaskState,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
         failure_reason: str | None = None,
     ) -> CanonicalTask:
         if target not in _GENERIC_TRANSITION_TARGETS:
@@ -249,7 +251,7 @@ class CanonicalStateStore:
             self._assert_not_stopped_locked()
             task = self._get_task_locked(task_id)
             self._require_expected_version(task, expected_version)
-            required = ()
+            required: tuple[CapabilityName, ...] = ()
             if target == TaskState.PLANNING:
                 required = (CapabilityName.MODEL,)
             elif target == TaskState.RUNNER_PREFLIGHT:
@@ -789,7 +791,7 @@ class CanonicalStateStore:
         expected_version: int,
         target: TaskState,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
         failure_reason: str | None = None,
     ) -> CanonicalTask:
         """Close live dispatch/approval authority and enter CANCELED or FAILED atomically."""
@@ -1336,7 +1338,7 @@ class CanonicalStateStore:
         *,
         target: TaskState,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
         plan_digest: str | None = None,
         verification_decision_digest: str | None = None,
         checkpoint_receipt_digest: str | None = None,
@@ -1407,7 +1409,7 @@ class CanonicalStateStore:
         task: CanonicalTask,
         *,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
     ) -> CanonicalTask:
         changed = CanonicalTask.model_validate(
             task.model_copy(
@@ -1476,7 +1478,7 @@ class CanonicalStateStore:
         task_id: str,
         *,
         event_type: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
     ) -> CanonicalEvidence:
         if len(canonical_json(payload).encode()) > MAX_EVIDENCE_BYTES:
             raise CanonicalConflict("canonical evidence payload exceeds its byte limit")
@@ -1733,7 +1735,7 @@ class CanonicalStateStore:
         ).fetchone()
         if row is None:
             raise CanonicalStoreError("canonical emergency control is missing")
-        return row
+        return cast(sqlite3.Row, row)
 
     def _assert_runtime_locked(self) -> None:
         active = self._control_locked()["active_runtime_id"]
@@ -1748,7 +1750,7 @@ class CanonicalStateStore:
         self,
         event_type: str,
         actor_id: str,
-        payload: dict[str, object],
+        payload: Mapping[str, object],
     ) -> None:
         row = self._connection.execute(
             """

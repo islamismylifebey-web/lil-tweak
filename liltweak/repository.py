@@ -16,7 +16,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal, overload
 from urllib.parse import urlsplit
 
 from .models import (
@@ -1292,6 +1292,7 @@ class RepositoryInspector:
             and head_revision is not None
         )
         if inventories_ok:
+            assert head_revision is not None
             head_entries = self._parse_tree_inventory(tree_output, object_format)
             index_entries = self._parse_index_inventory(index_output, object_format)
             self._reject_unsupported_index_flags(index_flags_output)
@@ -1858,9 +1859,9 @@ class RepositoryInspector:
 
         required_blobs: set[str] = set()
         for path in set(staged).union(modified).union(deleted):
-            for entry in (head_by_path.get(path), index_stage_zero.get(path)):
-                if entry is not None and entry.mode != "160000":
-                    required_blobs.add(entry.object_id)
+            for candidate_entry in (head_by_path.get(path), index_stage_zero.get(path)):
+                if candidate_entry is not None and candidate_entry.mode != "160000":
+                    required_blobs.add(candidate_entry.object_id)
         for object_id in sorted(required_blobs):
             remaining = self.limits.max_total_bytes - total_bytes
             output_limit = min(
@@ -2068,6 +2069,30 @@ class RepositoryInspector:
             and left.st_mtime_ns == right.st_mtime_ns
             and left.st_ctime_ns == right.st_ctime_ns
         )
+
+    @overload
+    def _run_git(
+        self,
+        repository: Path,
+        arguments: list[str],
+        warnings: list[str],
+        *,
+        decode: Literal[True] = True,
+        output_limit: int | None = None,
+        allowed_return_codes: set[int] | None = None,
+    ) -> tuple[str, bool, bool]: ...
+
+    @overload
+    def _run_git(
+        self,
+        repository: Path,
+        arguments: list[str],
+        warnings: list[str],
+        *,
+        decode: Literal[False],
+        output_limit: int | None = None,
+        allowed_return_codes: set[int] | None = None,
+    ) -> tuple[bytes, bool, bool]: ...
 
     def _run_git(
         self,
@@ -2313,7 +2338,8 @@ class RepositoryInspector:
     ) -> None:
         if len(xy) != 2:
             return
-        index_state, worktree_state = xy
+        index_state = xy[0]
+        worktree_state = xy[1]
         if index_state not in {".", " "}:
             _append_bounded(staged, path, self.limits.max_list_items)
         if "D" in xy:

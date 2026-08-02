@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Iterable
 from datetime import timedelta
+from typing import cast
 
 from .canonical_lifecycle import CapabilityName
 from .context_manifest import ContextManifest, ContextPolicy, build_context_manifest
@@ -243,7 +245,8 @@ class WorkbenchController:
                     **repository_facts,
                 },
             )
-            if task.imported.examination is not None:
+            examination = task.imported.examination
+            if examination is not None:
                 envelope = self.creator.compile_for_trusted_harness(
                     self._creator_request(task.imported),
                     actor_id=self.owner_id,
@@ -270,7 +273,7 @@ class WorkbenchController:
                     event_type="trusted_prerequisites_satisfied",
                     payload={
                         "source_snapshot_digest": digest,
-                        "examination_config_digest": (task.imported.examination.config_digest),
+                        "examination_config_digest": examination.config_digest,
                         "satisfied_prerequisites": list(satisfied),
                         "creator_brief_digest": envelope.brief_digest,
                         "creator_route_digest": route.decision_digest,
@@ -601,6 +604,7 @@ class WorkbenchController:
         task = self.store.get_task(task_id)
         if task.state != WorkbenchState.APPROVED or task.plan is None:
             raise WorkbenchError("task is not approved for execution")
+        plan = task.plan
         if self.store.is_emergency_stopped():
             raise WorkbenchError("emergency stop is active")
         if not self.executor.connected:
@@ -611,7 +615,7 @@ class WorkbenchController:
         if approval.purpose != ApprovalPurpose.EXECUTE:
             raise WorkbenchError("rollback approval cannot authorize plan execution")
         attempt = task.active_attempt + 1
-        tool_digests = tuple(step.request_digest for step in task.plan.steps)
+        tool_digests = tuple(step.request_digest for step in plan.steps)
         current_source_digest = self.workspaces.tree_digest(self.workspaces.task_root(task_id))
         if current_source_digest != task.imported.source_snapshot_digest:
             raise WorkbenchError("source changed after approval")
@@ -648,7 +652,7 @@ class WorkbenchController:
         try:
             entered_testing = False
             required_failures: list[str] = []
-            for step in task.plan.steps:
+            for step in plan.steps:
                 if self.store.is_emergency_stopped():
                     self.executor.cancel(task_id)
                     raise WorkbenchError("emergency stop activated during execution")
@@ -717,18 +721,18 @@ class WorkbenchController:
             if not entered_testing:
                 raise WorkbenchError("execution never entered the required testing phase")
             runs = self.store.list_runs(task_id)
-            current = [run for run in runs if run.attempt == attempt]
+            current_runs = [run for run in runs if run.attempt == attempt]
             test_ids = {
                 step.tool_id
-                for step in task.plan.steps
+                for step in plan.steps
                 if step.required and step.phase == StepPhase.TEST
             }
             verification_ids = {
                 step.tool_id
-                for step in task.plan.steps
+                for step in plan.steps
                 if step.required and step.phase == StepPhase.VERIFICATION
             }
-            passed_ids = {run.tool_id for run in current if run.success}
+            passed_ids = {run.tool_id for run in current_runs if run.success}
             if (
                 not test_ids
                 or not verification_ids
@@ -739,7 +743,7 @@ class WorkbenchController:
             removed_transients = self.workspaces.discard_server_transients(task_id, snapshot)
             verified_artifacts = self.workspaces.expected_artifacts(
                 task_id,
-                task.plan.expected_artifacts,
+                plan.expected_artifacts,
             )
             final_tree_digest = self.workspaces.tree_digest(self.workspaces.task_root(task_id))
             patch_name, patch_digest, changed_paths = self.workspaces.generate_patch(
@@ -778,7 +782,7 @@ class WorkbenchController:
                     "verified": True,
                     "test_tool_ids": sorted(test_ids),
                     "verification_tool_ids": sorted(verification_ids),
-                    "run_ids": [run.id for run in current],
+                    "run_ids": [run.id for run in current_runs],
                     "completion_evidence_id": completion.id,
                     "final_tree_digest": final_tree_digest,
                     "patch_digest": patch_digest,
@@ -790,8 +794,8 @@ class WorkbenchController:
                 return task
             return self.store.transition(task_id, WorkbenchState.COMPLETED)
         except Exception as exc:
-            current = self.store.get_task(task_id)
-            if current.state in {WorkbenchState.EXECUTING, WorkbenchState.TESTING}:
+            current_task = self.store.get_task(task_id)
+            if current_task.state in {WorkbenchState.EXECUTING, WorkbenchState.TESTING}:
                 self.store.transition(task_id, WorkbenchState.FAILED, blocked_reason=str(exc))
             raise
 
@@ -984,12 +988,16 @@ class WorkbenchController:
                     ),
                 ]
             )
+            verified_artifacts = cast(
+                Iterable[object],
+                completion.payload.get("verified_artifacts", []),
+            )
             resources.extend(
                 (
                     f"artifact={item['path']} sha256={item['sha256']} "
                     f"bytes={item['bytes']} executable={str(item['executable']).lower()}"
                 )
-                for item in completion.payload.get("verified_artifacts", [])
+                for item in verified_artifacts
                 if isinstance(item, dict)
             )
         if task.imported.examination is not None:

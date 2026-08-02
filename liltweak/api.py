@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from .agent import DeterministicPlanner, PlanningProviderError
 from .approvals import ApprovalError
@@ -284,12 +286,15 @@ def create_app(
     )
     if settings.workbench_enabled:
         if workbench_controller is None:
-            workbench_root_key = (
-                creator_key
-                or hashlib.sha256(
-                    settings.dev_api_key.encode("utf-8") + b"LilTweakWorkbenchRootV1"
+            if creator_key is not None:
+                workbench_root_key = creator_key
+            else:
+                dev_api_key = settings.dev_api_key
+                if dev_api_key is None:
+                    raise RuntimeError("private Workbench authentication is not configured")
+                workbench_root_key = hashlib.sha256(
+                    dev_api_key.encode("utf-8") + b"LilTweakWorkbenchRootV1"
                 ).digest()
-            )
             workbench_store = WorkbenchStore(
                 settings.database_path,
                 signing_key=hashlib.sha256(
@@ -318,29 +323,32 @@ def create_app(
                 model_connected and model_authorized and model_healthy and model_qualified
             )
             current_model_gate = workbench_store.canonical.capability(CapabilityName.MODEL)
-            model_gate_values = {
-                "status": (
-                    CapabilityStatus.OPERATIONAL
-                    if model_operational
-                    else CapabilityStatus.BLOCKED
-                    if settings.workbench_model_enabled
-                    else CapabilityStatus.DISABLED_BY_POLICY
-                ),
+            model_status = (
+                CapabilityStatus.OPERATIONAL
+                if model_operational
+                else CapabilityStatus.BLOCKED
+                if settings.workbench_model_enabled
+                else CapabilityStatus.DISABLED_BY_POLICY
+            )
+            provider_installed = workbench_reasoning_provider is not None
+            model_detail_code = (
+                "qualified_provider_injected"
+                if model_operational
+                else "provider_not_qualified"
+                if settings.workbench_model_enabled
+                else "model_disabled_by_policy"
+            )
+            model_gate_values: dict[str, object] = {
+                "status": model_status,
                 "feature_enabled": settings.workbench_model_enabled,
-                "installed": workbench_reasoning_provider is not None,
-                "configured": workbench_reasoning_provider is not None,
+                "installed": provider_installed,
+                "configured": provider_installed,
                 "connected": model_connected,
                 "healthy": model_healthy,
                 "qualified": model_qualified,
                 "authorized": model_authorized,
                 "operational": model_operational,
-                "detail_code": (
-                    "qualified_provider_injected"
-                    if model_operational
-                    else "provider_not_qualified"
-                    if settings.workbench_model_enabled
-                    else "model_disabled_by_policy"
-                ),
+                "detail_code": model_detail_code,
             }
             if any(
                 getattr(current_model_gate, name) != value
@@ -349,8 +357,17 @@ def create_app(
                 workbench_store.canonical.update_capability(
                     CapabilityName.MODEL,
                     expected_version=current_model_gate.version,
+                    status=model_status,
+                    feature_enabled=settings.workbench_model_enabled,
+                    installed=provider_installed,
+                    configured=provider_installed,
+                    connected=model_connected,
+                    healthy=model_healthy,
+                    qualified=model_qualified,
+                    authorized=model_authorized,
+                    operational=model_operational,
+                    detail_code=model_detail_code,
                     actor_id="factory:model_capability_sync",
-                    **model_gate_values,
                 )
             workbench_controller = WorkbenchController(
                 creator=creator_service,
@@ -389,7 +406,10 @@ def create_app(
         )
 
     @app.middleware("http")
-    async def private_api_headers(request: Request, call_next):
+    async def private_api_headers(
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
         is_workbench_surface = request.url.path == "/workbench" or request.url.path.startswith(
             ("/workbench/", "/v1/workbench")
         )
@@ -613,7 +633,7 @@ def create_app(
         )
 
     @app.get("/health")
-    async def health() -> dict:
+    async def health() -> dict[str, object]:
         return service.health().model_dump(mode="json")
 
     @app.get(

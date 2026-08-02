@@ -14,12 +14,15 @@ import sys
 import tarfile
 import tomllib
 import zipfile
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from typing import TypedDict
 
 APP_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(APP_ROOT))
 
+from build_backend import _normalized_sdist_bytes  # noqa: E402
 from liltweak.repository import secret_rule_ids  # noqa: E402
 
 BASELINE_COMMIT = "373400cb2b459dbf8a37dacceb0d3d1186eef949"
@@ -31,7 +34,11 @@ OUTPUT_NAMES = (
     "BUILD_PROVENANCE.json",
     "DEPENDENCY_SECURITY_SCAN_REPORT.json",
 )
+FORBIDDEN_EVIDENCE_ARTIFACTS = frozenset((*OUTPUT_NAMES, "FINAL_FILE_MANIFEST.json"))
 MAX_SECRET_SCAN_FILE_BYTES = 5_000_000
+MAX_PACKAGE_ARTIFACT_BYTES = 25_000_000
+MAX_PACKAGE_UNPACKED_BYTES = 100_000_000
+MAX_PACKAGE_MEMBERS = 100_000
 REQUIRED_SOURCE_DATE_EPOCH = "1735689600"
 REQUIRED_WHEEL_PAYLOAD = frozenset(
     {
@@ -48,10 +55,37 @@ REQUIRED_WHEEL_PAYLOAD = frozenset(
     }
 )
 REQUIRED_SDIST_PAYLOAD = REQUIRED_WHEEL_PAYLOAD | frozenset(
-    {"README.md", "pyproject.toml", "liltweak/__init__.py"}
+    {
+        "MANIFEST.in",
+        "README.md",
+        "build_backend.py",
+        "pyproject.toml",
+        "liltweak/__init__.py",
+    }
 )
 FORBIDDEN_WHEEL_DIRECTORIES = frozenset({"evals", "scripts", "tests"})
-SYNTHETIC_SECRET_FIXTURE_ALLOWLIST: dict[str, dict[str, object]] = {
+
+
+class LockedPackage(TypedDict):
+    name: str
+    version: str
+    purl: str
+    hashes: list[str]
+    source: dict[str, object]
+
+
+class SecretFixtureExpectation(TypedDict):
+    content_sha256: str
+    rule_ids: tuple[str, ...]
+
+
+class SecretFinding(TypedDict):
+    path: str
+    rule_ids: list[str]
+    content_sha256: str
+
+
+SYNTHETIC_SECRET_FIXTURE_ALLOWLIST: dict[str, SecretFixtureExpectation] = {
     "tests/test_context_manifest.py": {
         "content_sha256": "13b6139b1e9a29c07bdd7e4290b4d6d165476ebc9642e0b26ede04839b5a20cd",
         "rule_ids": ("openai-api-key",),
@@ -106,6 +140,11 @@ def _read_regular_artifact(path: Path, *, expected_suffix: str, kind: str) -> by
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ArtifactValidationError(f"{kind} artifact is not a regular file: {path}")
+        if before.st_size > MAX_PACKAGE_ARTIFACT_BYTES:
+            raise ArtifactValidationError(
+                f"{kind} artifact exceeds the "
+                f"{MAX_PACKAGE_ARTIFACT_BYTES}-byte safety limit: {path}"
+            )
         with os.fdopen(descriptor, "rb", closefd=False) as handle:
             data = handle.read()
         after = os.fstat(descriptor)
@@ -149,6 +188,10 @@ def _inspect_wheel(data: bytes, *, path: Path) -> None:
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             infos = archive.infolist()
+            if len(infos) > MAX_PACKAGE_MEMBERS:
+                raise ArtifactValidationError(f"wheel contains too many archive members: {path}")
+            if sum(info.file_size for info in infos) > MAX_PACKAGE_UNPACKED_BYTES:
+                raise ArtifactValidationError(f"wheel exceeds the unpacked size limit: {path}")
             names = [info.filename for info in infos]
             if len(names) != len(set(names)):
                 raise ArtifactValidationError(f"wheel contains duplicate archive members: {path}")
@@ -208,6 +251,12 @@ def _inspect_wheel(data: bytes, *, path: Path) -> None:
         raise ArtifactValidationError(
             "wheel is missing required runtime payload: " + ", ".join(missing)
         )
+    packaged_evidence = sorted(FORBIDDEN_EVIDENCE_ARTIFACTS.intersection(logical_files))
+    if packaged_evidence:
+        raise ArtifactValidationError(
+            "wheel contains generated evidence and would create a provenance cycle: "
+            + ", ".join(packaged_evidence)
+        )
     if forbidden:
         raise ArtifactValidationError(
             "wheel contains forbidden development payload: " + ", ".join(sorted(forbidden))
@@ -216,11 +265,48 @@ def _inspect_wheel(data: bytes, *, path: Path) -> None:
 
 def _inspect_sdist(data: bytes, *, path: Path) -> None:
     try:
-        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        if len(data) < 10 or data[:3] != b"\x1f\x8b\x08":
+            raise ArtifactValidationError(f"sdist is not a valid gzip tar archive: {path}")
+        if data[3] != 0:
+            raise ArtifactValidationError(
+                f"sdist gzip header must not embed optional metadata: {path}"
+            )
+        required_epoch = int(REQUIRED_SOURCE_DATE_EPOCH)
+        gzip_mtime = int.from_bytes(data[4:8], "little")
+        if gzip_mtime != required_epoch:
+            raise ArtifactValidationError(
+                f"sdist gzip mtime is not SOURCE_DATE_EPOCH={required_epoch}: {path}"
+            )
+        if data[8:10] != b"\x02\xff":
+            raise ArtifactValidationError(f"sdist gzip header is not canonical: {path}")
+        decompressor = zlib.decompressobj(wbits=31)
+        tar_payload = decompressor.decompress(data, MAX_PACKAGE_UNPACKED_BYTES + 1)
+        if decompressor.unconsumed_tail or len(tar_payload) > MAX_PACKAGE_UNPACKED_BYTES:
+            raise ArtifactValidationError(f"sdist exceeds the unpacked size limit: {path}")
+        tar_payload += decompressor.flush()
+        if len(tar_payload) > MAX_PACKAGE_UNPACKED_BYTES:
+            raise ArtifactValidationError(f"sdist exceeds the unpacked size limit: {path}")
+        if not decompressor.eof or decompressor.unused_data:
+            raise ArtifactValidationError(
+                f"sdist contains a truncated stream or trailing gzip payload: {path}"
+            )
+        try:
+            canonical_sdist = _normalized_sdist_bytes(data, epoch=required_epoch)
+        except (RuntimeError, ValueError) as exc:
+            raise ArtifactValidationError(f"sdist cannot be normalized safely: {path}") from exc
+        if canonical_sdist != data:
+            raise ArtifactValidationError(f"sdist is not byte-canonical: {path}")
+        with tarfile.open(fileobj=io.BytesIO(tar_payload), mode="r:") as archive:
             members = archive.getmembers()
+            if len(members) > MAX_PACKAGE_MEMBERS:
+                raise ArtifactValidationError(f"sdist contains too many archive members: {path}")
+            if archive.pax_headers:
+                raise ArtifactValidationError(f"sdist contains global PAX metadata: {path}")
             names = [member.name for member in members]
             if len(names) != len(set(names)):
                 raise ArtifactValidationError(f"sdist contains duplicate archive members: {path}")
+            if names != sorted(names):
+                raise ArtifactValidationError(f"sdist archive members are not sorted: {path}")
             roots: set[str] = set()
             logical_files: set[str] = set()
             for member in members:
@@ -236,9 +322,22 @@ def _inspect_sdist(data: bytes, *, path: Path) -> None:
                         f"sdist contains an unsafe archive member {name!r}: {path}"
                     )
                 roots.add(pure.parts[0])
-                if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+                if not (member.isfile() or member.isdir()):
                     raise ArtifactValidationError(
                         f"sdist contains a non-regular archive member {name!r}: {path}"
+                    )
+                expected_mode = 0o755 if member.isdir() else 0o755 if member.mode & 0o100 else 0o644
+                if (
+                    member.mtime != required_epoch
+                    or member.uid != 0
+                    or member.gid != 0
+                    or member.uname
+                    or member.gname
+                    or member.mode != expected_mode
+                    or set(member.pax_headers) - {"path"}
+                ):
+                    raise ArtifactValidationError(
+                        f"sdist contains noncanonical metadata for {name!r}: {path}"
                     )
                 if member.isfile() and len(pure.parts) > 1:
                     logical_files.add("/".join(pure.parts[1:]))
@@ -255,7 +354,13 @@ def _inspect_sdist(data: bytes, *, path: Path) -> None:
                 raise ArtifactValidationError(
                     f"sdist falsely packages LICENSE_INVENTORY.json as a license file: {path}"
                 )
-    except (tarfile.TarError, UnicodeDecodeError) as exc:
+            packaged_evidence = sorted(FORBIDDEN_EVIDENCE_ARTIFACTS.intersection(logical_files))
+            if packaged_evidence:
+                raise ArtifactValidationError(
+                    "sdist contains generated evidence and would create a provenance cycle: "
+                    + ", ".join(packaged_evidence)
+                )
+    except (OSError, EOFError, tarfile.TarError, UnicodeDecodeError, zlib.error) as exc:
         raise ArtifactValidationError(f"sdist is not a valid gzip tar archive: {path}") from exc
 
 
@@ -298,15 +403,22 @@ def _build_system(root: Path = APP_ROOT) -> dict[str, object]:
         raise ArtifactValidationError("pyproject.toml has no [build-system] table")
     requirements = build_system.get("requires")
     backend = build_system.get("build-backend")
+    backend_path = build_system.get("backend-path", [])
     if (
         not isinstance(requirements, list)
         or not requirements
         or not all(isinstance(requirement, str) and requirement for requirement in requirements)
         or not isinstance(backend, str)
         or not backend
+        or not isinstance(backend_path, list)
+        or not all(isinstance(item, str) and item for item in backend_path)
     ):
         raise ArtifactValidationError("pyproject.toml has an incomplete build-system definition")
-    return {"requires": requirements, "build_backend": backend}
+    return {
+        "requires": requirements,
+        "build_backend": backend,
+        "backend_path": backend_path,
+    }
 
 
 def _source_date_epoch() -> int:
@@ -339,9 +451,9 @@ def git_output(*arguments: str) -> str:
     return result.stdout.strip()
 
 
-def locked_packages() -> list[dict[str, object]]:
+def locked_packages() -> list[LockedPackage]:
     lock = tomllib.loads((APP_ROOT / "uv.lock").read_text(encoding="utf-8"))
-    packages: list[dict[str, object]] = []
+    packages: list[LockedPackage] = []
     for item in lock["package"]:
         name = item["name"]
         version = item["version"]
@@ -374,7 +486,7 @@ def locked_packages() -> list[dict[str, object]]:
     return sorted(packages, key=lambda package: (str(package["name"]), str(package["version"])))
 
 
-def sbom(packages: list[dict[str, object]]) -> dict[str, object]:
+def sbom(packages: list[LockedPackage]) -> dict[str, object]:
     components = []
     for package in packages:
         if "editable" in package["source"]:
@@ -420,7 +532,7 @@ def sbom(packages: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
-def license_inventory(packages: list[dict[str, object]]) -> dict[str, object]:
+def license_inventory(packages: list[LockedPackage]) -> dict[str, object]:
     records: list[dict[str, object]] = []
     for package in packages:
         name = str(package["name"])
@@ -530,7 +642,7 @@ def _read_scan_candidate(
         os.close(descriptor)
 
 
-def _is_exact_synthetic_fixture(relative: str, finding: dict[str, object]) -> bool:
+def _is_exact_synthetic_fixture(relative: str, finding: SecretFinding) -> bool:
     expected = SYNTHETIC_SECRET_FIXTURE_ALLOWLIST.get(relative)
     return expected is not None and (
         finding["content_sha256"] == expected["content_sha256"]
@@ -553,13 +665,13 @@ def _workflow_action_is_immutably_referenced(reference: str) -> bool:
 
 
 def security_report(
-    packages: list[dict[str, object]],
+    packages: list[LockedPackage],
     *,
     root: Path = APP_ROOT,
     files: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
-    findings: list[dict[str, object]] = []
-    fixture_findings: list[dict[str, object]] = []
+    findings: list[SecretFinding] = []
+    fixture_findings: list[SecretFinding] = []
     scan_blockers: list[dict[str, object]] = []
     scanned = 0
     considered_files = tracked_files() if files is None else files
@@ -572,11 +684,11 @@ def security_report(
         scanned += 1
         rules = secret_rule_ids(data)
         if rules:
-            finding = {
-                "path": relative,
-                "rule_ids": list(rules),
-                "content_sha256": digest_bytes(data),
-            }
+            finding = SecretFinding(
+                path=relative,
+                rule_ids=list(rules),
+                content_sha256=digest_bytes(data),
+            )
             if _is_exact_synthetic_fixture(relative, finding):
                 fixture_findings.append(finding)
             else:
@@ -665,11 +777,8 @@ def provenance(
             ).stdout.strip(),
         },
         "materials": [
-            {"path": "uv.lock", "sha256": digest_bytes((APP_ROOT / "uv.lock").read_bytes())},
-            {
-                "path": "pyproject.toml",
-                "sha256": digest_bytes((APP_ROOT / "pyproject.toml").read_bytes()),
-            },
+            {"path": path, "sha256": digest_bytes((APP_ROOT / path).read_bytes())}
+            for path in ("MANIFEST.in", "build_backend.py", "pyproject.toml", "uv.lock")
         ],
         "subjects": package_subjects,
         "evidence_artifacts": [

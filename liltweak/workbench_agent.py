@@ -7,22 +7,26 @@ import math
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from agents import Agent, ModelRetrySettings, ModelSettings, RunConfig, Runner
 from openai import AsyncOpenAI
 from openai.lib._parsing._responses import type_to_text_format_param
+from openai.types.shared.reasoning import Reasoning as ModelReasoning
+from openai.types.shared_params.reasoning import Reasoning as ReasoningParam
 
 from .model_catalog import MODEL_CATALOG
 from .reasoning_contract import ProviderQualificationState, ReasoningRole
 from .reasoning_policy import (
     PROFILE_REGISTRY,
     FoundationModel,
+    ReasoningEffort,
     ReasoningProfileName,
     ReasoningProfileUnavailable,
+    ReasoningRequestMode,
     require_production_profile,
 )
-from .reasoning_prompts import PromptName, render_prompt
+from .reasoning_prompts import PromptName, RenderedPrompt, render_prompt
 from .reasoning_provider import (
     OpenAIResponsesReasoningProvider,
     ProviderCallEvidence,
@@ -41,6 +45,34 @@ _MODEL_PRICES_USD_PER_MILLION = {
 }
 
 
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported Workbench reasoning mode")
+
+
+def _provider_reasoning_effort(
+    effort: ReasoningEffort,
+) -> Literal["none", "low", "medium", "high", "xhigh", "max"]:
+    if effort == ReasoningEffort.NONE:
+        return "none"
+    if effort == ReasoningEffort.LOW:
+        return "low"
+    if effort == ReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == ReasoningEffort.HIGH:
+        return "high"
+    if effort == ReasoningEffort.XHIGH:
+        return "xhigh"
+    if effort == ReasoningEffort.MAX:
+        return "max"
+    raise AssertionError("unsupported Workbench reasoning effort")
+
+
 class WorkbenchModelError(RuntimeError):
     pass
 
@@ -52,7 +84,7 @@ class InputTokenCounter(Protocol):
         model: str,
         instructions: str,
         provider_input: str,
-        reasoning: dict[str, str],
+        reasoning: ReasoningParam,
     ) -> int: ...
 
 
@@ -66,7 +98,7 @@ class OpenAIInputTokenCounter:
         model: str,
         instructions: str,
         provider_input: str,
-        reasoning: dict[str, str],
+        reasoning: ReasoningParam,
     ) -> int:
         try:
             result = await self._client.responses.input_tokens.count(
@@ -346,7 +378,7 @@ class CanonicalWorkbenchModelAdapter:
             and self._qualification.qualification_state == ProviderQualificationState.LIVE_QUALIFIED
         )
 
-    def _validate_evidence(self, evidence: ProviderCallEvidence, rendered) -> None:
+    def _validate_evidence(self, evidence: ProviderCallEvidence, rendered: RenderedPrompt) -> None:
         if (
             evidence.provider != self.provider_name
             or evidence.role != ReasoningRole.PLANNER
@@ -552,6 +584,7 @@ class OpenAIWorkbenchModelAdapter:
             or profile.variant.request_mode.value != reasoning_mode
         ):
             raise ValueError("Workbench model settings do not match the named reasoning profile")
+        self._profile = profile
         prompt_path = (
             prompt_path or Path(__file__).parents[1] / "docs" / "workbench-agent-prompt.md"
         )
@@ -598,11 +631,11 @@ class OpenAIWorkbenchModelAdapter:
         provider_payload = f"{self._instructions}\n{provider_input}".encode()
         if secret_rule_ids(provider_payload):
             raise WorkbenchModelError("Lil Tweak planning input was rejected")
-        reasoning = {
-            "effort": self.reasoning_tier,
-            "mode": self.reasoning_mode,
-            "context": "current_turn",
-        }
+        reasoning = ReasoningParam(
+            effort=_provider_reasoning_effort(self._profile.variant.effort),
+            mode=_provider_reasoning_mode(self._profile.variant.request_mode),
+            context="current_turn",
+        )
         token_counter = self._token_counter or OpenAIInputTokenCounter()
         counted_input_tokens = await token_counter.count(
             model=self.model_name,
@@ -624,7 +657,11 @@ class OpenAIWorkbenchModelAdapter:
             model=self.model_name,
             model_settings=ModelSettings(
                 max_tokens=self._output_token_ceiling,
-                reasoning=reasoning,
+                reasoning=ModelReasoning(
+                    effort=_provider_reasoning_effort(self._profile.variant.effort),
+                    mode=_provider_reasoning_mode(self._profile.variant.request_mode),
+                    context="current_turn",
+                ),
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,

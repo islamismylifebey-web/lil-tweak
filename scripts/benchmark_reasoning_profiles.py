@@ -94,7 +94,7 @@ async def invoke(
         output_token_ceiling=2_048,
         timeout_seconds=240,
         qualification_call=True,
-        replay_items=replay_items,  # type: ignore[arg-type]
+        replay_items=replay_items,
         qualification_request_mode=mode,
         qualification_effort=effort,
     )
@@ -134,7 +134,7 @@ async def main() -> int:
                 call_id="benchmark:continuation",
                 mode=ReasoningRequestMode.STANDARD,
                 effort=ReasoningEffort.HIGH,
-                replay_items=first.replay_items,  # type: ignore[arg-type]
+                replay_items=first.replay_items,
             )
             continuation = record(continued)
             continuation["items_replayed"] = len(first.replay_items)

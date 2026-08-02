@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
 from types import MappingProxyType
-from typing import Literal, Protocol, runtime_checkable
+from typing import Final, Literal, NoReturn, Protocol, cast, runtime_checkable
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr, model_validator
 
@@ -61,7 +61,12 @@ _GIT_ENVIRONMENT = {
     "SSH_ASKPASS": "/bin/false",
 }
 HARDENED_GIT_ENVIRONMENT: Mapping[str, str] = MappingProxyType(_GIT_ENVIRONMENT)
-HARDENED_GIT_ENVIRONMENT_DIGEST = content_digest(_GIT_ENVIRONMENT)
+HARDENED_GIT_ENVIRONMENT_DIGEST: Final[
+    Literal["b4aefd9ba3363ee0216e8a800bac8b5e3a83dbd4035e2fe54ca7a29bb9b812a5"]
+] = cast(
+    Literal["b4aefd9ba3363ee0216e8a800bac8b5e3a83dbd4035e2fe54ca7a29bb9b812a5"],
+    content_digest(_GIT_ENVIRONMENT),
+)
 
 _SAFE_GIT_STDIN_TEMPLATES = frozenset(
     {
@@ -213,7 +218,9 @@ class StructuredGitCommand(WorkbenchSchema):
     executable_registry_id: Literal["publisher.git.v1"] = "publisher.git.v1"
     executable_sha256: StrictStr = Field(pattern=SHA256)
     argv: tuple[StrictStr, ...] = Field(min_length=2, max_length=128)
-    environment_digest: Literal[HARDENED_GIT_ENVIRONMENT_DIGEST] = HARDENED_GIT_ENVIRONMENT_DIGEST
+    environment_digest: Literal[
+        "b4aefd9ba3363ee0216e8a800bac8b5e3a83dbd4035e2fe54ca7a29bb9b812a5"
+    ] = HARDENED_GIT_ENVIRONMENT_DIGEST
     stdin_blob_sha256: StrictStr | None = Field(default=None, pattern=SHA256)
     timeout_seconds: StrictInt = Field(default=120, ge=1, le=600)
 
@@ -586,7 +593,7 @@ class DisabledRepositoryPublisherClient:
         del restore_state, approval
         self._unavailable()
 
-    def _unavailable(self) -> None:
+    def _unavailable(self) -> NoReturn:
         raise RepositoryPublisherUnavailable(
             f"repository publisher unavailable: {self._capability.reason_code}"
         )

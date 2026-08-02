@@ -2,15 +2,49 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from agents import Agent, ModelSettings, RunConfig, Runner
+from openai.types.shared.reasoning import Reasoning
 
 from .models import PlanResult, TaskCreate
 from .reasoning_contract import ReasoningRole
-from .reasoning_policy import profile_for_role, require_primary_engineering_model
+from .reasoning_policy import (
+    ReasoningEffort,
+    ReasoningRequestMode,
+    profile_for_role,
+    require_primary_engineering_model,
+)
 
 _PLANNING_PROFILE = profile_for_role(ReasoningRole.PLANNER)
+
+
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported planning reasoning mode")
+
+
+def _provider_reasoning_effort(
+    effort: ReasoningEffort,
+) -> Literal["none", "low", "medium", "high", "xhigh", "max"]:
+    if effort == ReasoningEffort.NONE:
+        return "none"
+    if effort == ReasoningEffort.LOW:
+        return "low"
+    if effort == ReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == ReasoningEffort.HIGH:
+        return "high"
+    if effort == ReasoningEffort.XHIGH:
+        return "xhigh"
+    if effort == ReasoningEffort.MAX:
+        return "max"
+    raise AssertionError("unsupported planning reasoning effort")
 
 
 class PlanningProviderError(RuntimeError):
@@ -104,12 +138,12 @@ class OpenAIPlanner:
             model=self.model_id,
             model_settings=ModelSettings(
                 max_tokens=4_000,
-                reasoning={
-                    "mode": _PLANNING_PROFILE.variant.request_mode.value,
-                    "effort": _PLANNING_PROFILE.variant.effort.value,
-                    "context": "all_turns",
-                    "summary": "auto",
-                },
+                reasoning=Reasoning(
+                    mode=_provider_reasoning_mode(_PLANNING_PROFILE.variant.request_mode),
+                    effort=_provider_reasoning_effort(_PLANNING_PROFILE.variant.effort),
+                    context="all_turns",
+                    summary="auto",
+                ),
                 include_usage=True,
                 store=False,
             ),

@@ -17,7 +17,8 @@ dependencies = [
 
 [build-system]
 requires = ["setuptools==82.0.1", "wheel==0.47.0"]
-build-backend = "setuptools.build_meta"
+build-backend = "build_backend"
+backend-path = ["."]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -37,11 +38,13 @@ migrations = ["*.sql"]
 
 [dependency-groups]
 dev = [
+  "mypy==2.3.0",
   "pillow>=11,<13",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
   "setuptools==82.0.1",
+  "types-setuptools==82.0.0.20260518",
   "wheel==0.47.0",
 ]
 
@@ -50,6 +53,16 @@ addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["liltweak", "scripts", "main.py", "build_backend.py"]
+plugins = ["pydantic.mypy"]
+strict = true
+show_error_codes = true
+pretty = false
+warn_unused_configs = true
+incremental = false
 
 [tool.ruff]
 line-length = 100

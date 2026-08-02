@@ -68,6 +68,17 @@ jobs:
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
           uv build --offline --out-dir "$RUNNER_TEMP/build"
+          uv build --offline --out-dir "$RUNNER_TEMP/build-repeat"
+          first_wheel="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          first_sdist="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          repeat_wheel="$(find "$RUNNER_TEMP/build-repeat" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          repeat_sdist="$(find "$RUNNER_TEMP/build-repeat" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$first_wheel"
+          test -n "$first_sdist"
+          test -n "$repeat_wheel"
+          test -n "$repeat_sdist"
+          cmp --silent "$first_wheel" "$repeat_wheel"
+          cmp --silent "$first_sdist" "$repeat_sdist"
           uv run --no-sync --offline python - <<'PY'
           import os
           import shutil
@@ -186,6 +197,12 @@ jobs:
           uv run --no-sync --offline python scripts/generate_final_manifest.py \
             --check --commit HEAD
 
+      - name: Static type check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline mypy
+
       - name: Tests
         shell: bash
         run: |
@@ -232,6 +249,7 @@ jobs:
             --out-dir "$RESULTS/from-sdist"
           rebuilt_wheel="$(find "$RESULTS/from-sdist" -maxdepth 1 -type f -name '*.whl' -print -quit)"
           test -n "$rebuilt_wheel"
+          cmp --silent "$wheel_artifact" "$rebuilt_wheel"
           uv run --no-sync --offline python - "$rebuilt_wheel" "$sdist_artifact" <<'PY'
           import sys
           from pathlib import Path
@@ -279,7 +297,7 @@ jobs:
           assert phase7["provider_calls"] == 0
           assert phase7["paid_calls"] == 0
           assert phase7["executions"] == 0
-          assert capability["summary"]["FAIL"] == 0
+          assert capability["counts"] == {"PASS": 10, "BLOCKED": 10, "FAIL": 0}
           assert smoke["execution_connected"] is False
           assert smoke["inspection_read_only"] is True
           assert smoke["recovery_source_unchanged"] is True
@@ -306,6 +324,7 @@ jobs:
           assert security["known_vulnerability_database_scan"]["status"] == "BLOCKED"
           assert security["runner_image_scan"]["status"] == "BLOCKED"
           for name in (
+              "BUILD_PROVENANCE.json",
               "SUPPLY_CHAIN_SBOM.json",
               "LICENSE_INVENTORY.json",
               "DEPENDENCY_SECURITY_SCAN_REPORT.json",

@@ -138,7 +138,7 @@ async def run_smoke(live: bool) -> None:
         workspace_root = Path(directory) / "workspace"
         workspace_root.mkdir()
         _create_smoke_repository(workspace_root)
-        planner = OpenAIPlanner(_live_smoke_model_id())
+        planner: DeterministicPlanner | OpenAIPlanner = OpenAIPlanner(_live_smoke_model_id())
         if not live:
             planner = DeterministicPlanner()
         service = _service(planner, Path(directory) / "smoke.db", workspace_root)

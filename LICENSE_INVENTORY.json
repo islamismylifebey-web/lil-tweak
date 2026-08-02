@@ -3,7 +3,7 @@
   "branch": "codex/lil-tweak-live-workbench-build",
   "candidate_commit": "recorded_externally_after_freeze",
   "operational_release_gate": "BLOCKED",
-  "package_count": 60,
+  "package_count": 66,
   "packages": [
     {
       "license_classifiers": [],
@@ -27,6 +27,13 @@
       "package": "anyio",
       "status": "OBSERVED",
       "version": "4.14.2"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "ast-serialize",
+      "status": "OBSERVED",
+      "version": "0.6.0"
     },
     {
       "license_classifiers": [],
@@ -180,6 +187,13 @@
     },
     {
       "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "librt",
+      "status": "OBSERVED",
+      "version": "0.13.0"
+    },
+    {
+      "license_classifiers": [],
       "license_expression": null,
       "package": "lil-tweak-engine",
       "status": "UNKNOWN_REVIEW_REQUIRED",
@@ -193,6 +207,20 @@
       "package": "mcp",
       "status": "OBSERVED",
       "version": "1.28.1"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "mypy",
+      "status": "OBSERVED",
+      "version": "2.3.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "MIT",
+      "package": "mypy-extensions",
+      "status": "OBSERVED",
+      "version": "1.1.0"
     },
     {
       "license_classifiers": [
@@ -218,6 +246,15 @@
       "package": "packaging",
       "status": "OBSERVED",
       "version": "26.2"
+    },
+    {
+      "license_classifiers": [
+        "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+      ],
+      "license_expression": null,
+      "package": "pathspec",
+      "status": "OBSERVED",
+      "version": "1.1.1"
     },
     {
       "license_classifiers": [],
@@ -403,6 +440,13 @@
       "package": "tqdm",
       "status": "OBSERVED",
       "version": "4.70.0"
+    },
+    {
+      "license_classifiers": [],
+      "license_expression": "Apache-2.0",
+      "package": "types-setuptools",
+      "status": "OBSERVED",
+      "version": "82.0.0.20260518"
     },
     {
       "license_classifiers": [],

@@ -85,7 +85,9 @@ class MemoryProvenance(MemorySchema):
         "evidence_digests",
     )
     @classmethod
-    def digest_fields_are_lowercase_sha256(cls, value):
+    def digest_fields_are_lowercase_sha256(
+        cls, value: str | tuple[str, ...]
+    ) -> str | tuple[str, ...]:
         values = value if isinstance(value, tuple) else (value,)
         if any(
             not isinstance(item, str)

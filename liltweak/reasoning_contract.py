@@ -17,7 +17,7 @@ from pydantic import (
     model_validator,
 )
 
-REASONING_CONTRACT_VERSION = "1.0.0"
+REASONING_CONTRACT_VERSION: Final[Literal["1.0.0"]] = "1.0.0"
 
 Sha256 = Annotated[StrictStr, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 SafeId = Annotated[
@@ -251,17 +251,21 @@ class EvidenceReference(ReasoningSchema):
 
     @model_validator(mode="after")
     def validate_line_range(self) -> EvidenceReference:
-        if (self.start_line is None) != (self.end_line is None):
+        start_line = self.start_line
+        end_line = self.end_line
+        if (start_line is None) != (end_line is None):
             raise ValueError("evidence line range must provide both endpoints")
-        if self.start_line is not None and (
-            self.source_path is None or self.start_line < 1 or self.end_line < self.start_line
+        if (
+            start_line is not None
+            and end_line is not None
+            and (self.source_path is None or start_line < 1 or end_line < start_line)
         ):
             raise ValueError("evidence line range is invalid")
         return self
 
 
 class TaskIntake(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.INTAKE]
     tool_authority: Literal[ToolAuthority.NONE]
     task_id: SafeId
@@ -287,7 +291,7 @@ class RetrievalQuery(ReasoningSchema):
 
 
 class RetrievalPlan(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.RETRIEVER]
     tool_authority: Literal[ToolAuthority.READ_ONLY_BROKERED]
     task_id: SafeId
@@ -366,7 +370,7 @@ class CompactionRecord(ReasoningSchema):
 
 
 class ContextManifest(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.RETRIEVER]
     tool_authority: Literal[ToolAuthority.READ_ONLY_BROKERED]
     task_id: SafeId
@@ -465,7 +469,7 @@ class ExpectedArtifact(ReasoningSchema):
 
 
 class EngineeringPlan(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.PLANNER]
     tool_authority: Literal[ToolAuthority.NONE]
     plan_id: SafeId
@@ -508,7 +512,7 @@ class CritiqueFinding(ReasoningSchema):
 
 
 class PlanCritique(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.CRITIC]
     tool_authority: Literal[ToolAuthority.NONE]
     fresh_context: Literal[True]
@@ -536,7 +540,7 @@ class CandidateChange(ReasoningSchema):
 
 
 class CandidateManifest(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.IMPLEMENTER]
     tool_authority: Literal[ToolAuthority.NONE]
     candidate_id: SafeId
@@ -556,7 +560,7 @@ class CandidateManifest(StatusedContract):
 
 
 class CandidateCritique(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.CRITIC]
     tool_authority: Literal[ToolAuthority.NONE]
     fresh_context: Literal[True]
@@ -587,7 +591,7 @@ class RequirementDecision(StatusedContract):
 
 
 class VerificationDecision(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.VERIFIER]
     tool_authority: Literal[ToolAuthority.NONE]
     fresh_context: Literal[True]
@@ -632,7 +636,7 @@ class QualificationScenario(StatusedContract):
 
 
 class ProviderQualification(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     qualification_id: SafeId
     provider: Annotated[StrictStr, Field(min_length=1, max_length=128)]
     configured: StrictBool
@@ -688,7 +692,7 @@ class CapabilityDimensions(ReasoningSchema):
 
 
 class CapabilityClassification(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     capability_id: SafeId
     name: Annotated[StrictStr, Field(min_length=1, max_length=256)]
     state: CapabilityState
@@ -733,7 +737,7 @@ class CompletionArtifact(ReasoningSchema):
 
 
 class CompletionReport(StatusedContract):
-    schema_version: Literal[REASONING_CONTRACT_VERSION]
+    schema_version: Literal["1.0.0"]
     role: Literal[ReasoningRole.FINALIZER]
     tool_authority: Literal[ToolAuthority.NONE]
     report_id: SafeId

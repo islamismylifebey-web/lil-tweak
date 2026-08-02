@@ -2,7 +2,10 @@
   "baseline_commit": "373400cb2b459dbf8a37dacceb0d3d1186eef949",
   "branch": "codex/lil-tweak-live-workbench-build",
   "build_system": {
-    "build_backend": "setuptools.build_meta",
+    "backend_path": [
+      "."
+    ],
+    "build_backend": "build_backend",
     "requires": [
       "setuptools==82.0.1",
       "wheel==0.47.0"
@@ -21,28 +24,36 @@
     {
       "byte_count": 2261,
       "path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
-      "sha256": "179b1c0f2507c1a6fcc3a8a62535a1b3a09b576aabe8f032326f742fb1d31678"
+      "sha256": "ac2945ecc615fa5c31df102f0dee6a5adc443284911524a4ad169afa1096564a"
     },
     {
-      "byte_count": 11839,
+      "byte_count": 12928,
       "path": "LICENSE_INVENTORY.json",
-      "sha256": "0f2599a12b9d87c4c52aa61d02b12d7789c782d64fc15720cdb329f6b986e44d"
+      "sha256": "ff8c73785f64cd07471546e4b0d97f9a81ba40a67980bb06312840794ea9ec19"
     },
     {
-      "byte_count": 133184,
+      "byte_count": 152666,
       "path": "SUPPLY_CHAIN_SBOM.json",
-      "sha256": "261994ece8d1bdda2cbb97ef1a3a762a3762438cc940f48a484ef5704d307e56"
+      "sha256": "0eb45379e4d65d7e483582f6072f9d34e3c033d0cc986deb6ff7516020ee194a"
     }
   ],
   "gcp_access_performed": false,
   "materials": [
     {
-      "path": "uv.lock",
-      "sha256": "2ad058b7806d07d0bad2f75707b02fb36fd5f92292caed222e544892da5bcda3"
+      "path": "MANIFEST.in",
+      "sha256": "5afbe4dd86296fdb2c26a80f3d8f0e8545c10beef91c4f235e1e7c10ba81ca94"
+    },
+    {
+      "path": "build_backend.py",
+      "sha256": "0bb3c129c559b59730d1c4930eafbfbdc40f8091bafaf0b90dc89e44bb0e12e9"
     },
     {
       "path": "pyproject.toml",
-      "sha256": "ddb93318d0de8d9002ad05bc27d9df8e41412e13fce15285f78661f98adc0a3c"
+      "sha256": "55db52a8e0d99dc180f62e9c485fb5a849abdce8fbe82a1739243900635d5b9a"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "45c86942e8d52408bbae05feb5a7c16d6851c118b47fa790bfefc0921e3c25a3"
     }
   ],
   "observation_time": "recorded externally with exact-commit verification",
@@ -54,15 +65,15 @@
   "subjects": [
     {
       "artifact_type": "wheel",
-      "byte_count": 303833,
+      "byte_count": 305958,
       "path": "lil_tweak_engine-0.7.1-py3-none-any.whl",
-      "sha256": "5f6206a66255c88c8e2f1a970867a70a871d5ead748a92e1cafac780f898483e"
+      "sha256": "c269698285c7da5a6414ede3056eba88ac230e5823f33a07ed4c60ad7978e9bc"
     },
     {
       "artifact_type": "sdist",
-      "byte_count": 404865,
+      "byte_count": 405071,
       "path": "lil_tweak_engine-0.7.1.tar.gz",
-      "sha256": "ff1d44f74fa9cc674dbb106a8c6ec5bfc16c354bf899872779dbeedb057d4969"
+      "sha256": "68dadef7774fd034aaea44300661d18cb9d741bd44e4d8f5dec94d64958a50ce"
     }
   ]
 }

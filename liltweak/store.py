@@ -639,24 +639,24 @@ class SQLiteStore:
             raise RuntimeError("database schema version was not installed atomically")
         if int(self._connection.execute("PRAGMA foreign_keys").fetchone()[0]) != 1:
             raise RuntimeError("database foreign-key enforcement is disabled")
-        for table, expected in self._REQUIRED_COLUMNS.items():
-            observed = tuple(
+        for table, expected_columns in self._REQUIRED_COLUMNS.items():
+            observed_columns = tuple(
                 str(row["name"])
                 for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
             )
-            if observed != expected:
+            if observed_columns != expected_columns:
                 raise RuntimeError(f"database table schema is invalid: {table}")
         if self._schema_fingerprint(self._BASELINE_TABLES) != self._BASELINE_SCHEMA_SHA256:
             raise RuntimeError("database baseline constraints or indexes are invalid")
-        for table, expected in self._PHASE7_FOREIGN_KEYS.items():
-            observed = {
+        for table, expected_foreign_keys in self._PHASE7_FOREIGN_KEYS.items():
+            observed_foreign_keys = {
                 (str(row["from"]), str(row["table"]), str(row["to"]))
                 for row in self._connection.execute(f"PRAGMA foreign_key_list({table})").fetchall()
             }
-            if observed != expected:
+            if observed_foreign_keys != expected_foreign_keys:
                 raise RuntimeError(f"database foreign-key schema is invalid: {table}")
-        for table, expected in self._PHASE7_COLUMN_SCHEMA.items():
-            observed = tuple(
+        for table, expected_column_schema in self._PHASE7_COLUMN_SCHEMA.items():
+            observed_column_schema = tuple(
                 (
                     str(row["name"]),
                     str(row["type"]),
@@ -666,10 +666,10 @@ class SQLiteStore:
                 )
                 for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
             )
-            if observed != expected:
+            if observed_column_schema != expected_column_schema:
                 raise RuntimeError(f"database Phase 7 column constraints are invalid: {table}")
-        for table, expected in self._PHASE7_INDEX_SCHEMA.items():
-            observed: set[tuple[tuple[str, ...], bool]] = set()
+        for table, expected_indexes in self._PHASE7_INDEX_SCHEMA.items():
+            observed_indexes: set[tuple[tuple[str, ...], bool]] = set()
             for row in self._connection.execute(f"PRAGMA index_list({table})").fetchall():
                 index_name = str(row["name"])
                 columns = tuple(
@@ -678,8 +678,8 @@ class SQLiteStore:
                         f"PRAGMA index_info({index_name})"
                     ).fetchall()
                 )
-                observed.add((columns, bool(row["unique"])))
-            if observed != expected:
+                observed_indexes.add((columns, bool(row["unique"])))
+            if observed_indexes != expected_indexes:
                 raise RuntimeError(f"database Phase 7 index schema is invalid: {table}")
         sql_row = self._connection.execute(
             """

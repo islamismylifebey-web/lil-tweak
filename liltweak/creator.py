@@ -590,36 +590,49 @@ class AdaptiveRouter:
             max_turns = profile.max_turns
             cost = profile.synthetic_cost_units
 
-        values = {
-            "brief_digest": brief_digest,
-            "status": status,
-            "selected_tier": selected_tier,
-            "reasoning_effort": reasoning_effort,
-            "context_token_ceiling": context_tokens,
-            "max_turns": max_turns,
-            "complexity_score": complexity,
-            "required_capabilities": capabilities,
-            "suggested_tools": self._suggested_tools(brief),
-            "blocked_reasons": tuple(blocked_reasons),
-            "escalation_triggers": (
-                "a deterministic check falsifies the current hypothesis",
-                "required evidence cannot fit the selected context ceiling",
-                "the selected tier fails one validated attempt",
-                "new risk evidence raises the task classification",
-            ),
-            "deescalation_triggers": (
-                "the uncertainty has been resolved by deterministic evidence",
-                "remaining work is mechanical or schema-bound",
-                "verification can complete without further model reasoning",
-            ),
-            "synthetic_cost_units": cost,
-        }
+        suggested_tools = self._suggested_tools(brief)
+        resolved_blocked_reasons = tuple(blocked_reasons)
+        escalation_triggers = (
+            "a deterministic check falsifies the current hypothesis",
+            "required evidence cannot fit the selected context ceiling",
+            "the selected tier fails one validated attempt",
+            "new risk evidence raises the task classification",
+        )
+        deescalation_triggers = (
+            "the uncertainty has been resolved by deterministic evidence",
+            "remaining work is mechanical or schema-bound",
+            "verification can complete without further model reasoning",
+        )
         unsigned = RouteDecision.model_construct(
-            **values,
+            brief_digest=brief_digest,
+            status=status,
+            selected_tier=selected_tier,
+            reasoning_effort=reasoning_effort,
+            context_token_ceiling=context_tokens,
+            max_turns=max_turns,
+            complexity_score=complexity,
+            required_capabilities=capabilities,
+            suggested_tools=suggested_tools,
+            blocked_reasons=resolved_blocked_reasons,
+            escalation_triggers=escalation_triggers,
+            deescalation_triggers=deescalation_triggers,
+            synthetic_cost_units=cost,
             decision_digest="0" * 64,
         )
         return RouteDecision(
-            **values,
+            brief_digest=brief_digest,
+            status=status,
+            selected_tier=selected_tier,
+            reasoning_effort=reasoning_effort,
+            context_token_ceiling=context_tokens,
+            max_turns=max_turns,
+            complexity_score=complexity,
+            required_capabilities=capabilities,
+            suggested_tools=suggested_tools,
+            blocked_reasons=resolved_blocked_reasons,
+            escalation_triggers=escalation_triggers,
+            deescalation_triggers=deescalation_triggers,
+            synthetic_cost_units=cost,
             decision_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"decision_digest"})
             ),

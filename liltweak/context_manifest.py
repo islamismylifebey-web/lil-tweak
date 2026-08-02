@@ -10,7 +10,7 @@ import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import (
     BaseModel,
@@ -29,7 +29,9 @@ from .repository import is_sensitive_path, secret_rule_ids
 SHA256 = r"^[0-9a-f]{64}$"
 REVISION = r"^[0-9a-f]{40,64}$"
 SAFE_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-TOKEN_BOUND_METHOD = "utf8-bytes-as-token-upper-bound-v1"
+TOKEN_BOUND_METHOD: Final[Literal["utf8-bytes-as-token-upper-bound-v1"]] = (
+    "utf8-bytes-as-token-upper-bound-v1"
+)
 
 _VENDOR_DIRECTORIES = frozenset(
     {

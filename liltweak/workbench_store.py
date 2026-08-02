@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 from pathlib import Path
 from threading import RLock
+from typing import cast
 
 from .canonical_lifecycle import (
     ApprovalPurpose as CanonicalApprovalPurpose,
@@ -1692,7 +1693,7 @@ class WorkbenchStore:
         expected = self._sign_record("control", "emergency_stop", self._control_record(row))
         if not isinstance(signature, str) or not hmac.compare_digest(signature, expected):
             raise WorkbenchConflict("emergency control state signature is invalid")
-        return row
+        return cast(sqlite3.Row, row)
 
     def _verify_control_events_locked(self, control: sqlite3.Row) -> list[dict[str, object]]:
         rows = self._connection.execute(

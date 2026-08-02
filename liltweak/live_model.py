@@ -9,9 +9,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from agents import Agent, ModelSettings, RunConfig, Runner
+from openai.types.shared.reasoning import Reasoning
 
 from .costs import BudgetExceededError
 from .creator import CreatorEnvelopeError, CreatorService
@@ -38,7 +39,11 @@ from .live_contract import (
 )
 from .model_catalog import MODEL_CATALOG
 from .reasoning_contract import ReasoningRole
-from .reasoning_policy import REASONING_POLICY, profile_for_role
+from .reasoning_policy import (
+    REASONING_POLICY,
+    ReasoningRequestMode,
+    profile_for_role,
+)
 from .store import SQLiteStore, StoreStateConflictError
 
 
@@ -76,6 +81,30 @@ CREATOR_MODEL_PRICE: Final = ModelPrice(
 CREATOR_REASONING_EFFORT: Final = CreatorReasoningEffort(_CREATOR_PROFILE.variant.effort.value)
 
 
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported Creator reasoning mode")
+
+
+def _provider_reasoning_effort(
+    effort: CreatorReasoningEffort,
+) -> Literal["low", "medium", "high", "xhigh"]:
+    if effort == CreatorReasoningEffort.LOW:
+        return "low"
+    if effort == CreatorReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == CreatorReasoningEffort.HIGH:
+        return "high"
+    if effort == CreatorReasoningEffort.XHIGH:
+        return "xhigh"
+    raise AssertionError("unsupported Creator reasoning effort")
+
+
 @dataclass(frozen=True)
 class ProviderWorkOrder:
     work_order: CreatorWorkOrder
@@ -107,12 +136,12 @@ class OpenAICreatorModelProvider:
             model=proposal.model,
             model_settings=ModelSettings(
                 max_tokens=proposal.output_token_ceiling,
-                reasoning={
-                    "mode": _CREATOR_PROFILE.variant.request_mode.value,
-                    "effort": proposal.reasoning_effort.value,
-                    "context": "all_turns",
-                    "summary": "auto",
-                },
+                reasoning=Reasoning(
+                    mode=_provider_reasoning_mode(_CREATOR_PROFILE.variant.request_mode),
+                    effort=_provider_reasoning_effort(proposal.reasoning_effort),
+                    context="all_turns",
+                    summary="auto",
+                ),
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,
@@ -228,27 +257,38 @@ class LiveCreatorController:
             raise LiveModelApprovalError("live proposal exceeds the configured per-call limit")
 
         created_at = datetime.now(UTC)
-        values = {
-            "id": f"live_proposal_{uuid.uuid4().hex}",
-            "brief_digest": request.envelope.brief_digest,
-            "route_digest": verified_route.decision_digest,
-            "model": price.model,
-            "reasoning_effort": CREATOR_REASONING_EFFORT,
-            "input_token_ceiling": input_ceiling,
-            "output_token_ceiling": output_ceiling,
-            "input_price_per_million_usd": price.input_per_million_usd,
-            "output_price_per_million_usd": price.output_per_million_usd,
-            "cost_ceiling_usd": cost_ceiling,
-            "requested_by": self.owner_id,
-            "created_at": created_at,
-            "expires_at": created_at + timedelta(minutes=15),
-        }
+        proposal_id = f"live_proposal_{uuid.uuid4().hex}"
+        expires_at = created_at + timedelta(minutes=15)
         unsigned = LiveRunProposal.model_construct(
-            **values,
+            id=proposal_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            model=price.model,
+            reasoning_effort=CREATOR_REASONING_EFFORT,
+            input_token_ceiling=input_ceiling,
+            output_token_ceiling=output_ceiling,
+            input_price_per_million_usd=price.input_per_million_usd,
+            output_price_per_million_usd=price.output_per_million_usd,
+            cost_ceiling_usd=cost_ceiling,
+            requested_by=self.owner_id,
+            created_at=created_at,
+            expires_at=expires_at,
             proposal_digest="0" * 64,
         )
         proposal = LiveRunProposal(
-            **values,
+            id=proposal_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            model=price.model,
+            reasoning_effort=CREATOR_REASONING_EFFORT,
+            input_token_ceiling=input_ceiling,
+            output_token_ceiling=output_ceiling,
+            input_price_per_million_usd=price.input_per_million_usd,
+            output_price_per_million_usd=price.output_per_million_usd,
+            cost_ceiling_usd=cost_ceiling,
+            requested_by=self.owner_id,
+            created_at=created_at,
+            expires_at=expires_at,
             proposal_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"proposal_digest"})
             ),

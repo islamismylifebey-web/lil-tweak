@@ -19,7 +19,10 @@ RED = "#ef5b5b"
 GREEN = "#56c48b"
 
 
-def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+def font(
+    size: int,
+    bold: bool = False,
+) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         if bold

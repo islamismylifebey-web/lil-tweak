@@ -25,8 +25,10 @@ from .reasoning_policy import (
     ReasoningRequestMode,
 )
 
-MODEL_CATALOG_VERSION = "2026-08-02.1"
-PRICE_REGISTRY_VERSION = "openai-standard-2026-08-02.1"
+MODEL_CATALOG_VERSION: Final[Literal["2026-08-02.1"]] = "2026-08-02.1"
+PRICE_REGISTRY_VERSION: Final[Literal["openai-standard-2026-08-02.1"]] = (
+    "openai-standard-2026-08-02.1"
+)
 
 
 class CatalogSchema(BaseModel):
@@ -94,7 +96,7 @@ class TokenPriceBand(CatalogSchema):
 
 
 class TextTokenPricing(CatalogSchema):
-    registry_version: Literal[PRICE_REGISTRY_VERSION]
+    registry_version: Literal["openai-standard-2026-08-02.1"]
     processing_tier: Literal[ProcessingTier.STANDARD]
     currency: Literal["USD"]
     unit_tokens: Literal[1_000_000]
@@ -115,7 +117,7 @@ class ModelCatalogEntry(CatalogSchema):
 
 
 class ModelCatalog(CatalogSchema):
-    schema_version: Literal[MODEL_CATALOG_VERSION]
+    schema_version: Literal["2026-08-02.1"]
     catalog_id: Literal["openai.gpt-5.6.model-catalog"]
     updated_on: date
     sources: tuple[OfficialSource, ...]
@@ -162,21 +164,21 @@ OFFICIAL_SOURCES: Final[tuple[OfficialSource, ...]] = (
     OfficialSource(
         source_id="openai-model-guidance-gpt-5.6",
         title="OpenAI API model guidance — GPT-5.6",
-        url="https://developers.openai.com/api/docs/guides/latest-model",
+        url=HttpUrl("https://developers.openai.com/api/docs/guides/latest-model"),
         accessed_on=date(2026, 8, 2),
         scopes=(FactScope.IDENTITY, FactScope.REASONING, FactScope.CAPABILITIES),
     ),
     OfficialSource(
         source_id="openai-reasoning-guide",
         title="OpenAI API reasoning models guide",
-        url="https://developers.openai.com/api/docs/guides/reasoning",
+        url=HttpUrl("https://developers.openai.com/api/docs/guides/reasoning"),
         accessed_on=date(2026, 8, 2),
         scopes=(FactScope.REASONING, FactScope.CAPABILITIES),
     ),
     OfficialSource(
         source_id="openai-model-gpt-5.6-sol",
         title="GPT-5.6 Sol model reference",
-        url="https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+        url=HttpUrl("https://developers.openai.com/api/docs/models/gpt-5.6-sol"),
         accessed_on=date(2026, 8, 2),
         scopes=(
             FactScope.IDENTITY,
@@ -188,7 +190,7 @@ OFFICIAL_SOURCES: Final[tuple[OfficialSource, ...]] = (
     OfficialSource(
         source_id="openai-model-gpt-5.6-terra",
         title="GPT-5.6 Terra model reference",
-        url="https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+        url=HttpUrl("https://developers.openai.com/api/docs/models/gpt-5.6-terra"),
         accessed_on=date(2026, 8, 2),
         scopes=(
             FactScope.IDENTITY,
@@ -200,7 +202,7 @@ OFFICIAL_SOURCES: Final[tuple[OfficialSource, ...]] = (
     OfficialSource(
         source_id="openai-model-gpt-5.6-luna",
         title="GPT-5.6 Luna model reference",
-        url="https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+        url=HttpUrl("https://developers.openai.com/api/docs/models/gpt-5.6-luna"),
         accessed_on=date(2026, 8, 2),
         scopes=(
             FactScope.IDENTITY,
@@ -212,7 +214,7 @@ OFFICIAL_SOURCES: Final[tuple[OfficialSource, ...]] = (
     OfficialSource(
         source_id="openai-api-pricing",
         title="OpenAI API pricing",
-        url="https://developers.openai.com/api/docs/pricing",
+        url=HttpUrl("https://developers.openai.com/api/docs/pricing"),
         accessed_on=date(2026, 8, 2),
         scopes=(FactScope.PRICING,),
     ),

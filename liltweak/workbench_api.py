@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import secrets
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated
 
@@ -385,7 +386,7 @@ def mount_workbench(
     ) -> StreamingResponse:
         controller.store.get_task(task_id)
 
-        async def events():
+        async def events() -> AsyncIterator[str]:
             cursor = after_sequence
             iterations = 1 if once else 60
             for _ in range(iterations):

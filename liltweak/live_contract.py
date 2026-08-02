@@ -40,7 +40,7 @@ class LiveRunProposal(CreatorSchema):
     input_token_ceiling: StrictInt = Field(ge=1, le=200_000)
     output_token_ceiling: StrictInt = Field(ge=1, le=32_000)
     max_turns: Literal[1] = 1
-    price_schedule: Literal[PRICE_REGISTRY_VERSION] = PRICE_REGISTRY_VERSION
+    price_schedule: Literal["openai-standard-2026-08-02.1"] = PRICE_REGISTRY_VERSION
     input_price_per_million_usd: StrictFloat = Field(gt=0, le=1_000)
     output_price_per_million_usd: StrictFloat = Field(gt=0, le=1_000)
     cost_ceiling_usd: StrictFloat = Field(gt=0, le=100)

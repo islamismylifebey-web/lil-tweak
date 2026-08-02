@@ -40,6 +40,8 @@ MAX_QUALIFICATION_BYTES = 128_000
 MAX_QUALIFICATION_LIFETIME_SECONDS = 600
 MAX_LOCAL_CONNECTION_LIFETIME_SECONDS = 300
 
+LocalExecutableRole = Literal["runtime", "limiter", "qualifier", "destroyer"]
+
 REQUIRED_QUALIFICATION_CHECKS: tuple[str, ...] = (
     "network.ipv4_egress_denied",
     "network.ipv6_egress_denied",
@@ -292,27 +294,28 @@ def build_runner_qualification_challenge(
         raise ValueError("runner qualification lifetime is invalid")
     created = issued_at or datetime.now(UTC)
     issuer_public_key = _public_bytes(issuer_private_key)
-    values = {
-        "qualification_id": qualification_id or f"rq_{uuid.uuid4().hex}",
-        "runner_id": runner_id,
-        "key_id": key_id,
-        "issuer_key_id": runner_key_id(issuer_public_key),
-        "nonce": nonce or hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
-        "suite_digest": QUALIFICATION_SUITE_DIGEST,
-        "repository_id": repository_id,
-        "repository_commit": repository_commit,
-        "repository_tree": repository_tree,
-        "image_ref": image_ref,
-        "sandbox_profile_digest": sandbox_profile_digest,
-        "runtime_sha256": runtime_sha256,
-        "limiter_sha256": limiter_sha256,
-        "qualifier_sha256": qualifier_sha256,
-        "destroyer_sha256": destroyer_sha256,
-        "issued_at": created,
-        "expires_at": created + timedelta(seconds=lifetime_seconds),
-    }
+    resolved_qualification_id = qualification_id or f"rq_{uuid.uuid4().hex}"
+    issuer_key_id = runner_key_id(issuer_public_key)
+    resolved_nonce = nonce or hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+    expires_at = created + timedelta(seconds=lifetime_seconds)
     draft = RunnerQualificationChallenge.model_construct(
-        **values,
+        qualification_id=resolved_qualification_id,
+        runner_id=runner_id,
+        key_id=key_id,
+        issuer_key_id=issuer_key_id,
+        nonce=resolved_nonce,
+        suite_digest=QUALIFICATION_SUITE_DIGEST,
+        repository_id=repository_id,
+        repository_commit=repository_commit,
+        repository_tree=repository_tree,
+        image_ref=image_ref,
+        sandbox_profile_digest=sandbox_profile_digest,
+        runtime_sha256=runtime_sha256,
+        limiter_sha256=limiter_sha256,
+        qualifier_sha256=qualifier_sha256,
+        destroyer_sha256=destroyer_sha256,
+        issued_at=created,
+        expires_at=expires_at,
         challenge_digest="0" * 64,
         issuer_signature="A" * 86,
     )
@@ -323,12 +326,44 @@ def build_runner_qualification_challenge(
         )
     )
     unsigned = RunnerQualificationChallenge.model_construct(
-        **values,
+        qualification_id=resolved_qualification_id,
+        runner_id=runner_id,
+        key_id=key_id,
+        issuer_key_id=issuer_key_id,
+        nonce=resolved_nonce,
+        suite_digest=QUALIFICATION_SUITE_DIGEST,
+        repository_id=repository_id,
+        repository_commit=repository_commit,
+        repository_tree=repository_tree,
+        image_ref=image_ref,
+        sandbox_profile_digest=sandbox_profile_digest,
+        runtime_sha256=runtime_sha256,
+        limiter_sha256=limiter_sha256,
+        qualifier_sha256=qualifier_sha256,
+        destroyer_sha256=destroyer_sha256,
+        issued_at=created,
+        expires_at=expires_at,
         challenge_digest=challenge_digest,
         issuer_signature="A" * 86,
     )
     return RunnerQualificationChallenge(
-        **values,
+        qualification_id=resolved_qualification_id,
+        runner_id=runner_id,
+        key_id=key_id,
+        issuer_key_id=issuer_key_id,
+        nonce=resolved_nonce,
+        suite_digest=QUALIFICATION_SUITE_DIGEST,
+        repository_id=repository_id,
+        repository_commit=repository_commit,
+        repository_tree=repository_tree,
+        image_ref=image_ref,
+        sandbox_profile_digest=sandbox_profile_digest,
+        runtime_sha256=runtime_sha256,
+        limiter_sha256=limiter_sha256,
+        qualifier_sha256=qualifier_sha256,
+        destroyer_sha256=destroyer_sha256,
+        issued_at=created,
+        expires_at=expires_at,
         challenge_digest=challenge_digest,
         issuer_signature=encode_runner_signature(
             issuer_private_key.sign(runner_qualification_challenge_signature_message(unsigned))
@@ -582,7 +617,7 @@ class LocalRunnerProbeExpectations(CreatorSchema):
 
 
 class LocalExecutableObservation(CreatorSchema):
-    role: Literal["runtime", "limiter", "qualifier", "destroyer"]
+    role: LocalExecutableRole
     path: StrictStr
     present: StrictBool
     trusted: StrictBool
@@ -797,7 +832,7 @@ class LocalRunnerQualificationProbe:
         self.expectations = expectations
 
     def collect(self) -> LocalRunnerCapabilityReport:
-        executable_specs = (
+        executable_specs: tuple[tuple[LocalExecutableRole, str, str | None, bool], ...] = (
             ("runtime", self.expectations.runtime_path, self.expectations.runtime_sha256, True),
             ("limiter", self.expectations.limiter_path, self.expectations.limiter_sha256, True),
             (
@@ -920,23 +955,30 @@ class LocalRunnerQualificationProbe:
             self._gate(gate_id, passed, failure) for gate_id, passed, failure in gate_inputs
         )
         blockers = tuple(gate.failure_code for gate in gates if gate.failure_code is not None)
-        values = {
-            "provider_id": self.expectations.provider_id,
-            "expectations_digest": content_digest(self.expectations.model_dump(mode="json")),
-            "executables": observations,
-            "runtime_root": runtime_root,
-            "kernel": kernel,
-            "namespace_probe": namespace_probe,
-            "gates": gates,
-            "blockers": blockers,
-            "host_qualified": not blockers,
-        }
+        expectations_digest = content_digest(self.expectations.model_dump(mode="json"))
+        host_qualified = not blockers
         unsigned = LocalRunnerCapabilityReport.model_construct(
-            **values,
+            provider_id=self.expectations.provider_id,
+            expectations_digest=expectations_digest,
+            executables=observations,
+            runtime_root=runtime_root,
+            kernel=kernel,
+            namespace_probe=namespace_probe,
+            gates=gates,
+            blockers=blockers,
+            host_qualified=host_qualified,
             report_digest="0" * 64,
         )
         return LocalRunnerCapabilityReport(
-            **values,
+            provider_id=self.expectations.provider_id,
+            expectations_digest=expectations_digest,
+            executables=observations,
+            runtime_root=runtime_root,
+            kernel=kernel,
+            namespace_probe=namespace_probe,
+            gates=gates,
+            blockers=blockers,
+            host_qualified=host_qualified,
             report_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"report_digest"})
             ),
@@ -1056,24 +1098,32 @@ class LocalRunnerQualificationProbe:
                 authorization_id = authorization.authorization_id
                 authorization_digest = authorization.authorization_digest
 
-        values = {
-            "provider_id": report.provider_id,
-            "report_digest": report.report_digest,
-            "host_qualified": report.host_qualified,
-            "qualification_verified": qualification_verified,
-            "authorization_verified": authorization_verified,
-            "connection_authorized": not failures,
-            "authorization_id": authorization_id,
-            "authorization_digest": authorization_digest,
-            "failure_codes": tuple(failures),
-            "verified_at": observed_at,
-        }
+        connection_authorized = not failures
+        failure_codes = tuple(failures)
         unsigned = LocalRunnerConnectionDecision.model_construct(
-            **values,
+            provider_id=report.provider_id,
+            report_digest=report.report_digest,
+            host_qualified=report.host_qualified,
+            qualification_verified=qualification_verified,
+            authorization_verified=authorization_verified,
+            connection_authorized=connection_authorized,
+            authorization_id=authorization_id,
+            authorization_digest=authorization_digest,
+            failure_codes=failure_codes,
+            verified_at=observed_at,
             decision_digest="0" * 64,
         )
         return LocalRunnerConnectionDecision(
-            **values,
+            provider_id=report.provider_id,
+            report_digest=report.report_digest,
+            host_qualified=report.host_qualified,
+            qualification_verified=qualification_verified,
+            authorization_verified=authorization_verified,
+            connection_authorized=connection_authorized,
+            authorization_id=authorization_id,
+            authorization_digest=authorization_digest,
+            failure_codes=failure_codes,
+            verified_at=observed_at,
             decision_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"decision_digest"})
             ),
@@ -1081,7 +1131,7 @@ class LocalRunnerQualificationProbe:
 
     def _observe_executable(
         self,
-        role: Literal["runtime", "limiter", "qualifier", "destroyer"],
+        role: LocalExecutableRole,
         path_text: str,
         expected_sha256: str | None,
         *,
@@ -1189,7 +1239,7 @@ class LocalRunnerQualificationProbe:
 
     def _namespace_probe(
         self,
-        observed: Mapping[str, LocalExecutableObservation],
+        observed: Mapping[LocalExecutableRole, LocalExecutableObservation],
     ) -> LocalCommandProbeObservation:
         runtime = observed["runtime"]
         limiter = observed["limiter"]
@@ -1413,14 +1463,17 @@ class LocalRunnerQualificationProbe:
 
     @staticmethod
     def _gate(gate_id: str, passed: bool, failure_code: str) -> LocalRunnerProbeGate:
-        values = {
-            "gate_id": gate_id,
-            "passed": passed,
-            "failure_code": None if passed else failure_code,
-        }
-        draft = LocalRunnerProbeGate.model_construct(**values, evidence_digest="0" * 64)
+        resolved_failure = None if passed else failure_code
+        draft = LocalRunnerProbeGate.model_construct(
+            gate_id=gate_id,
+            passed=passed,
+            failure_code=resolved_failure,
+            evidence_digest="0" * 64,
+        )
         return LocalRunnerProbeGate(
-            **values,
+            gate_id=gate_id,
+            passed=passed,
+            failure_code=resolved_failure,
             evidence_digest=content_digest(
                 draft.model_dump(mode="json", exclude={"evidence_digest"})
             ),
