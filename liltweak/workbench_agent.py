@@ -30,6 +30,8 @@ from .reasoning_prompts import PromptName, RenderedPrompt, render_prompt
 from .reasoning_provider import (
     OpenAIResponsesReasoningProvider,
     ProviderCallEvidence,
+    ProviderCallResult,
+    ProviderFailureKind,
     ReasoningProviderError,
 )
 from .repository import secret_rule_ids
@@ -447,17 +449,7 @@ class CanonicalWorkbenchModelAdapter:
         observed_output_tokens = 0
         observed_response_id_hash: str | None = None
         try:
-            result = await self._provider.call(
-                call_id=f"workbench-plan:{uuid.uuid4().hex}",
-                role=ReasoningRole.PLANNER,
-                profile_name=self._profile.name,
-                instructions=rendered.instructions,
-                input_text=rendered.input_payload,
-                output_type=WorkbenchPlan,
-                input_token_ceiling=self._input_token_ceiling,
-                output_token_ceiling=self._output_token_ceiling,
-                timeout_seconds=self._timeout_seconds,
-            )
+            result = await self._call_with_transient_recovery(rendered)
             evidence = result.evidence
             observed_input_tokens = evidence.input_tokens
             observed_output_tokens = evidence.output_tokens
@@ -538,6 +530,36 @@ class CanonicalWorkbenchModelAdapter:
             input_tokens=evidence.input_tokens,
             output_tokens=evidence.output_tokens,
         )
+
+    async def _call_with_transient_recovery(self, rendered: RenderedPrompt) -> ProviderCallResult:
+        transient = {
+            ProviderFailureKind.RATE_LIMIT,
+            ProviderFailureKind.TIMEOUT,
+            ProviderFailureKind.SERVICE,
+        }
+        for attempt in range(2):
+            try:
+                return await self._provider.call(
+                    call_id=f"workbench-plan:{uuid.uuid4().hex}",
+                    role=ReasoningRole.PLANNER,
+                    profile_name=self._profile.name,
+                    instructions=rendered.instructions,
+                    input_text=rendered.input_payload,
+                    output_type=WorkbenchPlan,
+                    input_token_ceiling=self._input_token_ceiling,
+                    output_token_ceiling=self._output_token_ceiling,
+                    timeout_seconds=self._timeout_seconds,
+                )
+            except ReasoningProviderError as exc:
+                unbilled_pre_response_failure = (
+                    exc.input_tokens == 0
+                    and exc.output_tokens == 0
+                    and exc.response_id_digest is None
+                )
+                if attempt == 0 and exc.kind in transient and unbilled_pre_response_failure:
+                    continue
+                raise
+        raise AssertionError("bounded provider recovery loop did not return or raise")
 
 
 class OpenAIWorkbenchModelAdapter:

@@ -239,8 +239,10 @@ _ROLE_INSTRUCTIONS: Final = MappingProxyType(
         PromptName.WORKBENCH_PLAN: (
             "Produce one strict, non-executed WorkbenchPlan bound to the supplied source snapshot. "
             "Tool entries are controller-reviewable requests, never evidence of execution or "
-            "authority. Include required test and independent verification commands and exact "
-            "rollback steps."
+            "authority. Be terse: use at most four steps, keep summary and rationale under 120 "
+            "words each, include exactly one required test and one independent verification "
+            "command when the trusted acceptance evidence supports them, and include one exact "
+            "rollback step. Do not repeat repository evidence in prose."
         ),
     }
 )

@@ -28,6 +28,9 @@ def test_engineering_defaults_are_sol_standard_high_ordinary(tmp_path: Path) -> 
     assert configured.workbench_reasoning_profile == "ordinary"
     assert configured.workbench_reasoning_mode == "standard"
     assert configured.workbench_reasoning_tier == "high"
+    assert configured.workbench_input_token_limit == 12_000
+    assert configured.workbench_output_token_limit == 4_096
+    assert configured.workbench_cost_ceiling_usd == 0.20
 
 
 def test_named_reasoning_profile_prevents_scattered_model_mode_drift(tmp_path: Path) -> None:

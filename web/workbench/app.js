@@ -3,6 +3,8 @@
 const state = {
   csrf: "", task: null, approval: null, runs: [], evidence: [], submission: "",
   submissionLocked: false, health: null, repositories: [], inspection: null,
+  operational: null, projects: [], project: null, planningConversations: [],
+  planningConversation: null,
 };
 const terminalSubmissionStates = new Set(["COMPLETED", "BLOCKED", "FAILED"]);
 const $ = (id) => document.getElementById(id);
@@ -144,6 +146,10 @@ async function refresh() {
     const health = await api("/v1/workbench/health" + suffix);
     state.health = health;
     renderHealth(health);
+    state.operational = await api("/v1/workbench/operational-status");
+    renderOperational(state.operational);
+    await refreshProjectWorkspace();
+    await refreshPlanningChat();
     renderProjects(tasks);
     if (!state.task) return;
     const root = "/v1/workbench/tasks/" + encodeURIComponent(state.task.id);
@@ -183,6 +189,231 @@ async function refresh() {
   } catch (error) { toast(error.message); }
   finally { setBusy(false); }
 }
+
+function renderOperational(operational) {
+  $("status-strip").innerHTML = Object.entries(operational).map(([key, value]) =>
+    '<div class="status-item" data-state="' + escapeHtml(value.state) + '"><strong>' +
+    escapeHtml(key.replaceAll("_", " ")) + "</strong><span>" +
+    escapeHtml(value.state) + "</span><small>" + escapeHtml(value.detail) + "</small></div>"
+  ).join("");
+}
+
+function newId(prefix) {
+  return prefix + ":" + crypto.randomUUID().replaceAll("-", "");
+}
+
+function parseLines(value) {
+  return value.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+async function refreshProjectWorkspace() {
+  const query = encodeURIComponent($("project-search").value || "");
+  const status = $("project-filter").value;
+  const suffix = "?query=" + query + (status ? "&status=" + encodeURIComponent(status) : "");
+  state.projects = await api("/v1/workbench/projects" + suffix);
+  if (state.project) {
+    const match = state.projects.find((project) => project.id === state.project.id);
+    if (match) state.project = match;
+  }
+  renderProjectWorkspace();
+}
+
+function renderProjectWorkspace() {
+  $("workspace-project-list").innerHTML = state.projects.map((project) =>
+    '<button class="list-card workspace-project-select" data-id="' + escapeHtml(project.id) +
+    '"><strong>' + escapeHtml(project.name) + "</strong><br>" +
+    escapeHtml(project.status) + " · NO MODEL CALL · ZERO TOKENS</button>"
+  ).join("") || "<p>No matching projects.</p>";
+  document.querySelectorAll(".workspace-project-select").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.project = state.projects.find((project) => project.id === button.dataset.id) || null;
+      renderProjectEditor();
+    })
+  );
+  renderProjectEditor();
+}
+
+function renderProjectEditor() {
+  const project = state.project;
+  $("project-editor-form").hidden = !project;
+  $("attachment-form").hidden = !project;
+  $("project-export-button").disabled = !project;
+  if (!project) { $("attachment-list").innerHTML = ""; return; }
+  $("editor-project-name").value = project.name;
+  $("editor-project-description").value = project.description;
+  $("editor-project-status").value = project.status;
+  $("editor-requirements").value = project.requirements
+    .map((item) => item.status + " | " + item.text).join("\n");
+  $("editor-milestones").value = project.milestones
+    .map((item) => item.status + " | " + (item.target_date || "") + " | " + item.title).join("\n");
+  $("editor-board").value = project.board
+    .map((item) => item.column + " | " + item.title + " | " + item.detail).join("\n");
+  $("editor-notes").value = project.notes.map((item) => item.text).join("\n");
+  $("attachment-list").innerHTML = project.attachments.map((item) =>
+    '<article class="list-card"><strong>' + escapeHtml(item.filename) + "</strong><br>" +
+    escapeHtml(item.media_type) + " · " + item.size_bytes + " bytes · sha256 " +
+    escapeHtml(item.sha256) + "</article>"
+  ).join("") || "<p>No attachments.</p>";
+}
+
+$("project-create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    state.project = await api("/v1/workbench/projects", { method: "POST", body: json({
+      name: $("project-name").value, description: $("project-description").value,
+    }) });
+    event.target.reset();
+    await refreshProjectWorkspace();
+    toast("Project created with no model call and zero tokens.");
+  } catch (error) { toast(error.message); }
+});
+
+$("project-search-button").onclick = refreshProjectWorkspace;
+
+$("project-editor-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!state.project) return;
+  const project = state.project;
+  const requirements = parseLines($("editor-requirements").value).map((line, index) => {
+    const parts = line.split("|").map((part) => part.trim());
+    return { id: project.requirements[index]?.id || newId("requirement"),
+      status: parts[0] || "planned", text: parts.slice(1).join(" | ") || parts[0] };
+  });
+  const milestones = parseLines($("editor-milestones").value).map((line, index) => {
+    const parts = line.split("|").map((part) => part.trim());
+    return { id: project.milestones[index]?.id || newId("milestone"),
+      status: parts[0] || "planned", target_date: parts[1] || null,
+      title: parts.slice(2).join(" | ") || parts[1] || parts[0] };
+  });
+  const board = parseLines($("editor-board").value).map((line, index) => {
+    const parts = line.split("|").map((part) => part.trim());
+    return { id: project.board[index]?.id || newId("board"), column: parts[0] || "backlog",
+      title: parts[1] || parts[0], detail: parts.slice(2).join(" | ") };
+  });
+  const notes = parseLines($("editor-notes").value).map((line, index) => ({
+    id: project.notes[index]?.id || newId("note"), text: line,
+    created_at: project.notes[index]?.created_at || new Date().toISOString(),
+  }));
+  try {
+    state.project = await api("/v1/workbench/projects/" + encodeURIComponent(project.id), {
+      method: "PUT", body: json({ name: $("editor-project-name").value,
+        description: $("editor-project-description").value,
+        status: $("editor-project-status").value, requirements, milestones, board, notes }),
+    });
+    await refreshProjectWorkspace();
+    toast("Project saved · NO MODEL CALL · ZERO TOKENS.");
+  } catch (error) { toast(error.message); }
+});
+
+$("attachment-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = $("attachment-input").files[0];
+  if (!file || !state.project) return;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    bytes.forEach((value) => { binary += String.fromCharCode(value); });
+    state.project = await api("/v1/workbench/projects/" +
+      encodeURIComponent(state.project.id) + "/attachments", { method: "POST", body: json({
+        filename: file.name, media_type: file.type || "application/octet-stream",
+        content_base64: btoa(binary),
+      }) });
+    event.target.reset();
+    await refreshProjectWorkspace();
+    toast("Attachment stored locally with zero model tokens.");
+  } catch (error) { toast(error.message); }
+});
+
+$("project-export-button").onclick = async () => {
+  if (!state.project) return;
+  try {
+    const exported = await api("/v1/workbench/projects/" +
+      encodeURIComponent(state.project.id) + "/export");
+    const blob = new Blob([json(exported)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = state.project.id.replace(":", "-") + ".json";
+    link.click(); URL.revokeObjectURL(link.href);
+  } catch (error) { toast(error.message); }
+};
+
+$("project-import-input").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    state.project = await api("/v1/workbench/projects/import", {
+      method: "POST", body: await file.text(),
+    });
+    event.target.value = "";
+    await refreshProjectWorkspace();
+    toast("Project imported with no model call and zero tokens.");
+  } catch (error) { toast(error.message); }
+});
+
+async function refreshPlanningChat() {
+  try {
+    state.planningConversations = await api("/v1/workbench/planning/conversations");
+    if (state.planningConversation) {
+      state.planningConversation = state.planningConversations.find(
+        (item) => item.id === state.planningConversation.id) || null;
+    }
+  } catch {
+    state.planningConversations = [];
+    state.planningConversation = null;
+  }
+  renderPlanningChat();
+}
+
+function renderPlanningChat() {
+  $("planning-conversation-list").innerHTML = state.planningConversations.map((conversation) =>
+    '<button class="list-card planning-select" data-id="' + escapeHtml(conversation.id) +
+    '"><strong>' + escapeHtml(conversation.title) + "</strong><br>" +
+    escapeHtml(conversation.updated_at) + "</button>"
+  ).join("") || "<p>Planning Chat is disconnected or has no conversations.</p>";
+  document.querySelectorAll(".planning-select").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.planningConversation = state.planningConversations.find(
+        (item) => item.id === button.dataset.id) || null;
+      renderPlanningChat();
+    })
+  );
+  const current = state.planningConversation;
+  $("planning-current").hidden = !current;
+  if (current) $("planning-messages").innerHTML = current.messages.map((message) =>
+    '<article class="list-card"><strong>' + escapeHtml(message.role) + "</strong><p>" +
+    escapeHtml(message.content) + "</p></article>"
+  ).join("") || "<p>No turns yet.</p>";
+}
+
+$("planning-create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    state.planningConversation = await api("/v1/workbench/planning/conversations", {
+      method: "POST", body: json({ title: $("planning-title").value }),
+    });
+    event.target.reset(); await refreshPlanningChat();
+  } catch (error) { toast(error.message); }
+});
+
+$("planning-turn-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!state.planningConversation) return;
+  setBusy(true, "Running bounded tool-free Planning Chat…");
+  try {
+    const result = await api("/v1/workbench/planning/conversations/" +
+      encodeURIComponent(state.planningConversation.id) + "/turn", {
+        method: "POST", body: json({ message: $("planning-message").value }),
+      });
+    state.planningConversation = result.conversation;
+    $("planning-message").value = "";
+    $("planning-usage").textContent = json({ current_model: result.current_model,
+      requested_model: result.requested_model, reasoning_effort: result.reasoning_effort,
+      fallback_used: result.fallback_used, fallback_reason: result.fallback_reason,
+      usage: result.usage, tool_authority: result.tool_authority, execution: result.execution });
+    await refreshPlanningChat();
+  } catch (error) { toast(error.message); }
+  finally { setBusy(false); }
+});
 
 function renderRepositoryOptions() {
   const options = state.repositories.map((repositoryId) =>
@@ -233,6 +464,7 @@ function renderTask() {
   const map = {
     RECEIVED: ["inspect-button", "cancel-button"],
     ANALYZED: ["analyze-button", "cancel-button"],
+    PLAN_READY: ["cancel-button"],
     BLOCKED: ["inspect-button", "cancel-button"],
     AWAITING_APPROVAL: ["cancel-button"],
     ROLLED_BACK: [],
@@ -273,6 +505,8 @@ function renderTask() {
     state.task.state === "APPROVED" && state.health && !state.health.runner_connected ?
       "Start Execution is disabled: no independently qualified runner provider is connected." :
     state.task.state === "APPROVED" ? "Start Execution consumes the exact approval once." :
+    state.task.state === "PLAN_READY" ?
+      "Engineering plan is ready. No execution approval exists while the runner is disconnected." :
     state.task.state === "AWAITING_APPROVAL" ? "Approve or reject the exact digest in Approvals." :
     state.task.state === "FAILED" ? "Request and approve rollback before retrying." :
     state.task.state === "ROLLED_BACK" ?

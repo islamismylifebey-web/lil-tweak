@@ -350,6 +350,7 @@ class WorkbenchRepositoryRegistry:
         *,
         expected_source_fingerprint: str,
         destination: Path,
+        exclude_sensitive: bool = False,
     ) -> MaterializedRepository:
         if re.fullmatch(r"[0-9a-f]{64}", expected_source_fingerprint) is None:
             raise WorkbenchRepositoryError("expected source fingerprint is invalid")
@@ -380,16 +381,36 @@ class WorkbenchRepositoryRegistry:
         capture = self._stable_capture(repository)
         if capture.fingerprint != expected_source_fingerprint:
             raise WorkbenchRepositoryError("registered source changed after inspection")
-        if any(item.sensitive for item in capture.entries if not item.directory):
+        has_sensitive_files = any(item.sensitive for item in capture.entries if not item.directory)
+        if has_sensitive_files and not exclude_sensitive:
             raise WorkbenchRepositoryError(
                 "repository contains secret-like material and cannot be materialized"
             )
+        materialized_capture = (
+            _Capture(
+                entries=tuple(
+                    item for item in capture.entries if item.directory or not item.sensitive
+                ),
+                git=capture.git,
+                fingerprint=capture.fingerprint,
+                file_count=sum(
+                    1 for item in capture.entries if not item.directory and not item.sensitive
+                ),
+                total_bytes=sum(
+                    len(item.data)
+                    for item in capture.entries
+                    if not item.directory and not item.sensitive
+                ),
+            )
+            if has_sensitive_files
+            else capture
+        )
 
         staging = Path(tempfile.mkdtemp(prefix=".liltweak-source-", dir=resolved_parent))
         installed = False
         try:
-            self._write_capture(capture, staging)
-            if self._materialized_tree_digest(staging) != capture.tree_digest:
+            self._write_capture(materialized_capture, staging)
+            if self._materialized_tree_digest(staging) != materialized_capture.tree_digest:
                 raise WorkbenchRepositoryError("materialized source verification failed")
             repeated = self._stable_capture(repository)
             if repeated.fingerprint != capture.fingerprint:
@@ -405,9 +426,9 @@ class WorkbenchRepositoryRegistry:
         return MaterializedRepository(
             repository_id=repository_id,
             source_fingerprint=capture.fingerprint,
-            tree_digest=capture.tree_digest,
-            file_count=capture.file_count,
-            total_bytes=capture.total_bytes,
+            tree_digest=materialized_capture.tree_digest,
+            file_count=materialized_capture.file_count,
+            total_bytes=materialized_capture.total_bytes,
         )
 
     def _resolve(self, repository_id: str) -> Path:

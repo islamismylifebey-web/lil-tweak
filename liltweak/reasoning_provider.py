@@ -52,6 +52,7 @@ class ProviderFailureKind(StrEnum):
     USAGE_INVALID = "usage_invalid"
     SENSITIVE_INPUT = "sensitive_input"
     SERVICE = "service"
+    INVALID_REQUEST = "invalid_request"
     BLOCKED_PROFILE = "blocked_profile"
 
 
@@ -634,6 +635,12 @@ class OpenAIResponsesReasoningProvider:
             )
         elif isinstance(exc, (openai.APITimeoutError, openai.APIConnectionError)):
             kind = ProviderFailureKind.TIMEOUT
+        elif isinstance(exc, (openai.BadRequestError, openai.NotFoundError)):
+            # Request/model errors are not availability failures and must never
+            # become eligible for degraded fallback.
+            kind = ProviderFailureKind.INVALID_REQUEST
+        elif isinstance(exc, openai.APIStatusError) and exc.status_code < 500:
+            kind = ProviderFailureKind.INVALID_REQUEST
         else:
             kind = ProviderFailureKind.SERVICE
         return ReasoningProviderError(kind, "reasoning provider request failed closed")

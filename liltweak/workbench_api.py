@@ -17,6 +17,25 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from .config import Settings
+from .operational_status import OperationalStatus, build_operational_status
+from .planning_chat import (
+    PlanningChatError,
+    PlanningChatService,
+    PlanningConversation,
+    PlanningConversationCreate,
+    PlanningTurnRequest,
+    PlanningTurnResult,
+    PlanningUsageRecord,
+)
+from .project_workspace import (
+    AttachmentCreate,
+    ProjectCreate,
+    ProjectDocument,
+    ProjectExport,
+    ProjectUpdate,
+    ProjectWorkspaceError,
+    ProjectWorkspaceStore,
+)
 from .workbench import WorkbenchController, WorkbenchError
 from .workbench_agent import WorkbenchModelError
 from .workbench_contract import (
@@ -94,6 +113,8 @@ def mount_workbench(
     controller: WorkbenchController,
     settings: Settings,
     session_signing_key: bytes,
+    planning_chat: PlanningChatService | None = None,
+    project_workspace: ProjectWorkspaceStore | None = None,
 ) -> None:
     sessions = SessionManager(
         session_signing_key,
@@ -186,6 +207,122 @@ def mount_workbench(
     ) -> WorkbenchHealth:
         return controller.health(task_id)
 
+    @router.get("/operational-status", response_model=OperationalStatus)
+    async def operational_status(
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> OperationalStatus:
+        return build_operational_status(controller=controller, planning_chat=planning_chat)
+
+    def require_project_workspace() -> ProjectWorkspaceStore:
+        if project_workspace is None:
+            raise HTTPException(status_code=503, detail="Project Workspace is unavailable")
+        return project_workspace
+
+    @router.get("/projects", response_model=list[ProjectDocument])
+    async def list_projects(
+        _session: Annotated[Session, Depends(require_session)],
+        query: str = "",
+        status: str | None = None,
+    ) -> list[ProjectDocument]:
+        if len(query) > 256:
+            raise HTTPException(status_code=422, detail="project search is too long")
+        if status is not None and status not in {"planned", "active", "complete", "archived"}:
+            raise HTTPException(status_code=422, detail="project status filter is invalid")
+        return list(require_project_workspace().list(query=query, status=status))
+
+    @router.post("/projects", response_model=ProjectDocument, status_code=201)
+    async def create_project(
+        body: ProjectCreate,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> ProjectDocument:
+        return await run_in_threadpool(require_project_workspace().create, body)
+
+    @router.get("/projects/{project_id}", response_model=ProjectDocument)
+    async def get_project(
+        project_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> ProjectDocument:
+        return require_project_workspace().get(project_id)
+
+    @router.put("/projects/{project_id}", response_model=ProjectDocument)
+    async def update_project(
+        project_id: str,
+        body: ProjectUpdate,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> ProjectDocument:
+        return await run_in_threadpool(require_project_workspace().update, project_id, body)
+
+    @router.post("/projects/{project_id}/attachments", response_model=ProjectDocument)
+    async def add_attachment(
+        project_id: str,
+        body: AttachmentCreate,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> ProjectDocument:
+        return await run_in_threadpool(require_project_workspace().attach, project_id, body)
+
+    @router.get("/projects/{project_id}/export", response_model=ProjectExport)
+    async def export_project(
+        project_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> ProjectExport:
+        return require_project_workspace().export(project_id)
+
+    @router.post("/projects/import", response_model=ProjectDocument, status_code=201)
+    async def import_project(
+        body: dict[str, object],
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> ProjectDocument:
+        try:
+            exported = ProjectExport.model_validate(body, strict=False)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="project import is invalid") from exc
+        return await run_in_threadpool(require_project_workspace().import_project, exported)
+
+    def require_planning_chat() -> PlanningChatService:
+        if planning_chat is None:
+            raise HTTPException(status_code=503, detail="Planning Chat is disconnected")
+        return planning_chat
+
+    @router.get("/planning/conversations", response_model=list[PlanningConversation])
+    async def list_planning_conversations(
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> list[PlanningConversation]:
+        return list(require_planning_chat().store.list())
+
+    @router.post("/planning/conversations", response_model=PlanningConversation, status_code=201)
+    async def create_planning_conversation(
+        body: PlanningConversationCreate,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> PlanningConversation:
+        return await run_in_threadpool(require_planning_chat().store.create, body)
+
+    @router.get("/planning/conversations/{conversation_id}", response_model=PlanningConversation)
+    async def get_planning_conversation(
+        conversation_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> PlanningConversation:
+        return require_planning_chat().store.get(conversation_id)
+
+    @router.post(
+        "/planning/conversations/{conversation_id}/turn", response_model=PlanningTurnResult
+    )
+    async def planning_turn(
+        conversation_id: str,
+        body: PlanningTurnRequest,
+        _session: Annotated[Session, Depends(require_mutation)],
+    ) -> PlanningTurnResult:
+        return await require_planning_chat().turn(conversation_id, body)
+
+    @router.get(
+        "/planning/conversations/{conversation_id}/usage",
+        response_model=list[PlanningUsageRecord],
+    )
+    async def planning_usage(
+        conversation_id: str,
+        _session: Annotated[Session, Depends(require_session)],
+    ) -> list[PlanningUsageRecord]:
+        return list(require_planning_chat().store.list_usage(conversation_id))
+
     @router.get("/repositories")
     async def list_repositories(
         _session: Annotated[Session, Depends(require_session)],
@@ -266,7 +403,7 @@ def mount_workbench(
         task, approval = await controller.analyze(task_id)
         return {
             "task": task.model_dump(mode="json"),
-            "approval": approval.model_dump(mode="json"),
+            "approval": approval.model_dump(mode="json") if approval is not None else None,
         }
 
     @router.post("/tasks/{task_id}/decision", response_model=WorkbenchTask)
@@ -507,6 +644,16 @@ def mount_workbench(
 
     @app.exception_handler(WorkbenchError)
     async def workbench_error(_request: Request, exc: WorkbenchError) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(ProjectWorkspaceError)
+    async def project_workspace_error(
+        _request: Request, exc: ProjectWorkspaceError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(PlanningChatError)
+    async def planning_chat_error(_request: Request, exc: PlanningChatError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     for boundary_error in (

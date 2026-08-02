@@ -176,6 +176,7 @@ class WorkbenchController:
                 repository_id,
                 expected_source_fingerprint=inspection.source_fingerprint,
                 destination=destination,
+                exclude_sensitive=True,
             )
             source_digest = self.workspaces.tree_digest(destination)
             imported = TaskImport(
@@ -426,7 +427,7 @@ class WorkbenchController:
             content_digest(task.imported.acceptance_commands),
         )
 
-    async def analyze(self, task_id: str) -> tuple[WorkbenchTask, WorkbenchApproval]:
+    async def analyze(self, task_id: str) -> tuple[WorkbenchTask, WorkbenchApproval | None]:
         if self.store.is_emergency_stopped():
             raise WorkbenchError("emergency stop is active")
         task = self.store.get_task(task_id)
@@ -517,6 +518,19 @@ class WorkbenchController:
                 "tool_digests": [step.request_digest for step in result.plan.steps],
             },
         )
+        if not self.executor.connected:
+            self.store.append_evidence(
+                task_id,
+                kind=EvidenceKind.CONTROL,
+                event_type="execution_boundary_disconnected",
+                payload={
+                    "plan_digest": result.plan.plan_digest,
+                    "runner_connection": "disconnected",
+                    "approval_published": False,
+                    "execution_permitted": False,
+                },
+            )
+            return task, None
         task = self.store.transition(task_id, WorkbenchState.AWAITING_APPROVAL)
         approval = self._new_approval(task)
         self.store.publish_approval(approval)

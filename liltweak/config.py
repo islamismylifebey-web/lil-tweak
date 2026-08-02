@@ -148,7 +148,9 @@ class Settings:
     workbench_workspace_root: Path = Path("./workbench-tasks")
     workbench_session_ttl_seconds: int = 3_600
     workbench_rate_limit_per_minute: int = 120
-    workbench_cost_ceiling_usd: float = 0.10
+    workbench_input_token_limit: int = 12_000
+    workbench_output_token_limit: int = 4_096
+    workbench_cost_ceiling_usd: float = 0.20
     workbench_monthly_limit_usd: float = 5.0
 
     def __post_init__(self) -> None:
@@ -213,6 +215,10 @@ class Settings:
             or self.workbench_rate_limit_per_minute > 10_000
         ):
             raise ValueError("LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE is invalid")
+        if self.workbench_input_token_limit < 256 or self.workbench_input_token_limit > 200_000:
+            raise ValueError("LILTWEAK_WORKBENCH_INPUT_TOKEN_LIMIT is invalid")
+        if self.workbench_output_token_limit < 1_024 or self.workbench_output_token_limit > 32_000:
+            raise ValueError("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT is invalid")
         if (
             not math.isfinite(self.workbench_cost_ceiling_usd)
             or self.workbench_cost_ceiling_usd <= 0
@@ -362,6 +368,8 @@ class Settings:
             workbench_rate_limit_per_minute=_int_env(
                 "LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE", 120
             ),
-            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.10),
+            workbench_input_token_limit=_int_env("LILTWEAK_WORKBENCH_INPUT_TOKEN_LIMIT", 12_000),
+            workbench_output_token_limit=_int_env("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT", 4_096),
+            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.20),
             workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
         )

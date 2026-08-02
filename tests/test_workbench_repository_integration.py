@@ -233,9 +233,10 @@ async def test_planning_model_receives_relative_source_paths_and_screened_excerp
     )
     assert control.inspect(task.id).state == WorkbenchState.ANALYZED
 
-    planned, _approval = await control.analyze(task.id)
+    planned, approval = await control.analyze(task.id)
 
-    assert planned.state == WorkbenchState.AWAITING_APPROVAL
+    assert planned.state == WorkbenchState.PLAN_READY
+    assert approval is None
     assert len(model.inspection_summaries) == 1
     context = json.loads(model.inspection_summaries[0])
     assert context["schema_version"] == "workbench-planning-context-v2"

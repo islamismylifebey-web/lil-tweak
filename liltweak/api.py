@@ -79,6 +79,8 @@ from .models import (
     RepositoryInspection,
     TaskCreate,
 )
+from .planning_chat import PlanningChatService
+from .project_workspace import ProjectWorkspaceStore
 from .reasoning_policy import ReasoningProfileName
 from .reasoning_provider import OpenAIResponsesReasoningProvider
 from .recovery import RecoveryCapture, RecoveryError
@@ -239,6 +241,8 @@ def create_app(
     execution_controller: RepositoryExecutionController | None = None,
     workbench_controller: WorkbenchController | None = None,
     workbench_reasoning_provider: OpenAIResponsesReasoningProvider | None = None,
+    planning_chat_service: PlanningChatService | None = None,
+    project_workspace_store: ProjectWorkspaceStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -306,6 +310,8 @@ def create_app(
                 CanonicalWorkbenchModelAdapter(
                     provider=workbench_reasoning_provider,
                     profile_name=ReasoningProfileName(settings.workbench_reasoning_profile),
+                    input_token_ceiling=settings.workbench_input_token_limit,
+                    output_token_ceiling=settings.workbench_output_token_limit,
                     admission=PersistentModelCallAdmission(
                         store=workbench_store,
                         reservation_usd=settings.workbench_cost_ceiling_usd,
@@ -403,6 +409,10 @@ def create_app(
             controller=workbench_controller,
             settings=settings,
             session_signing_key=session_key,
+            planning_chat=planning_chat_service,
+            project_workspace=(
+                project_workspace_store or ProjectWorkspaceStore(settings.database_path)
+            ),
         )
 
     @app.middleware("http")

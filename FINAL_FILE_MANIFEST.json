@@ -9,18 +9,18 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "486db8b499ca1fefb7aa5ef5f4622cca416508b876029522f7e2a643f8a7004e",
+  "manifest_scope_digest": "4efc218b2159ee8d9f114c86fd5696545ce93f575097e2ee6bb866c7a300e3db",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 245,
+  "file_count_excluding_manifest": 261,
   "files": [
     {
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "8f68ec98db9b91844eccdb9711601670894ac22701ee6b7de1367de998e7d07a",
-      "git_blob_sha1": "72e8350ba5710254ba553d6e518e5cfbec0dde84",
-      "bytes": 1969
+      "sha256": "971e45159e9c53871c52029341de4aa4c0d2dceb0596df39d9def0c4562b9350",
+      "git_blob_sha1": "09e04ad5cfa269a0c2befeb6a703a7465d558286",
+      "bytes": 2055
     },
     {
       "relative_path": ".github/workflows/ci.yml",
@@ -98,8 +98,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "04766956064581184b228d7d5204df3b6a6f17d78ed692f1dfdda614d75a19e1",
-      "git_blob_sha1": "13a18ecb9915d7f52f9d5d8cdcb209f5a6e1a0c5",
+      "sha256": "dbd83d5cdc7d8a5e4df3fbf85a5412c5643e929615e3bbb66025faa3c18b8fcc",
+      "git_blob_sha1": "c5f681acea2d97e718e7208f3ce51aa17e4c6ac8",
       "bytes": 2471
     },
     {
@@ -154,8 +154,8 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ac2945ecc615fa5c31df102f0dee6a5adc443284911524a4ad169afa1096564a",
-      "git_blob_sha1": "87041a71cec50f3c70cb6ab8b73c6ed506c2f593",
+      "sha256": "b6c0d968cbc0d2a34a441c8750cfd7f24c3ff9ca432343abbc392ffa2c950ecd",
+      "git_blob_sha1": "5ffffb987459d1d54ebc7c1cc3be75c7f8f5e6f1",
       "bytes": 2261
     },
     {
@@ -215,6 +215,14 @@
       "bytes": 12928
     },
     {
+      "relative_path": "LIL_TWEAK_BROWSER_ACCEPTANCE.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "3b12f104d79bfd8714fc5df4db3908a42d1577fb41749053d567c6dce1c6d9fb",
+      "git_blob_sha1": "82ee6848bf08824e35b3d275f1c902d55180aeee",
+      "bytes": 1701
+    },
+    {
       "relative_path": "LIL_TWEAK_CAPABILITY_DISCOVERY_REPORT.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -231,12 +239,52 @@
       "bytes": 6802
     },
     {
+      "relative_path": "LIL_TWEAK_OPERATIONAL_ACTIVATION_REPORT.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "a40a2fca10fccf9d8c6ff5850850cc7fe7597264bf02de3de5da441452eef732",
+      "git_blob_sha1": "514b994b860f199c469ff62f5b883bbbee8ca045",
+      "bytes": 2294
+    },
+    {
+      "relative_path": "LIL_TWEAK_OPERATIONAL_STATUS.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "ea28ed3eb3e8899e63a2dbd7fb35d9e68a3e3c1a80772df36d5c75e92f2bcb56",
+      "git_blob_sha1": "528d77604200ba53447dac8e0814d9fdb2871cd7",
+      "bytes": 1793
+    },
+    {
+      "relative_path": "LIL_TWEAK_PROVIDER_QUALIFICATION.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "adfebd42dd7163cf6f5106d38d6c834b9589cf2f9c5cf3e5c4a9998cf05d97ac",
+      "git_blob_sha1": "10e70e1095f983c9ad2ba1b3426920f68ac64513",
+      "bytes": 2144
+    },
+    {
       "relative_path": "LIL_TWEAK_REMAINING_BLOCKERS.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
       "sha256": "a51dbf1c3a42f0d5ecccfc8c03ce79584b7734bd7830e1a62da085b19c353bd2",
       "git_blob_sha1": "752f057fc1a5fc72cef95f7e99f4ff13a5aa89b5",
       "bytes": 3650
+    },
+    {
+      "relative_path": "LIL_TWEAK_UPDATED_BLOCKERS.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b4c20fdaa662e5db7bd3ca7a76b03cd59773169953dfa9e6c5aba1c4f3621218",
+      "git_blob_sha1": "25b07368c7a00491ca74b80bc9869c5939f51df2",
+      "bytes": 1322
+    },
+    {
+      "relative_path": "LIL_TWEAK_UPDATED_CAPABILITY_REPORT.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "c6569707826300706d291cba43c94e37a12c58657766594146d5b307135eb800",
+      "git_blob_sha1": "446df3ef24426ba7755456c460e5e075844722e9",
+      "bytes": 1454
     },
     {
       "relative_path": "LIVE_ACCEPTANCE_TEST.md",
@@ -818,9 +866,9 @@
       "relative_path": "liltweak/api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ae7efaad6b33f8fe9ad6384132ea8770088d5c226150d691b1af20ccf56ca590",
-      "git_blob_sha1": "f76f21fdacba4d380ff32185a1d8fde7a4ee6c76",
-      "bytes": 36660
+      "sha256": "b4e030c3e6b6157abb2606f8bf2cfe4f3b3113d626ba22f434cfd3338d2ae001",
+      "git_blob_sha1": "179acecc30b7a2b4308d633fc548256331546668",
+      "bytes": 37231
     },
     {
       "relative_path": "liltweak/approvals.py",
@@ -874,9 +922,9 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "39461687d650f1524977ea1dff66860d1fcaa669a9b49b6d5431823445331a81",
-      "git_blob_sha1": "525de3a4a2f0a90dd1a13646d58ee5c6d16bb002",
-      "bytes": 16056
+      "sha256": "ccd0ac266354a592494d5c3d0e8bccdb900bbb186da98ea912e32273db694525",
+      "git_blob_sha1": "63e73d5dc43cb1722c627ff8a1ad7e2dbd8fb490",
+      "bytes": 16703
     },
     {
       "relative_path": "liltweak/context_manifest.py",
@@ -1023,12 +1071,44 @@
       "bytes": 15647
     },
     {
+      "relative_path": "liltweak/operational_qualification.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "f7cace48898e6b8891ce31be6f7af88af42925b6fa5e0db93093ef48c83ec90a",
+      "git_blob_sha1": "fd9cce25ab5e70d4ee564cd546da7fc8c73f74b3",
+      "bytes": 1974
+    },
+    {
+      "relative_path": "liltweak/operational_status.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "cd77b556e81fd720775154090e9c6404a6999cc7f935443e413a299af3844fd7",
+      "git_blob_sha1": "9efc814603323feb5c01c42319130180f86061e0",
+      "bytes": 2887
+    },
+    {
+      "relative_path": "liltweak/planning_chat.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "a1e3605bbce751a54b820017a0b2bfa02732043cd4de7f9f02a52c8a4166a2d9",
+      "git_blob_sha1": "f6fa7db83b2e609dd145e2001725644afeae7375",
+      "bytes": 16072
+    },
+    {
       "relative_path": "liltweak/policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
       "sha256": "5035000b0acd9ab7f606fbf3e8bf24e9866a3045e6674482f66dbae89de7fc04",
       "git_blob_sha1": "8663521aeb6afe1c1be97993d0317e45aab7cfca",
       "bytes": 2032
+    },
+    {
+      "relative_path": "liltweak/project_workspace.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "93cdb52f3513a80308e67c147289d888c2855cad558dca806c50dc1652149687",
+      "git_blob_sha1": "4918892a998ccf948f30a648d3e17adae5b596cf",
+      "bytes": 15793
     },
     {
       "relative_path": "liltweak/reasoning_contract.py",
@@ -1058,17 +1138,17 @@
       "relative_path": "liltweak/reasoning_prompts.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b711edd9b487ff80e43229f1eb310256b6642100769f34dac068d67985f590d0",
-      "git_blob_sha1": "5d1591a51e419d03eb862da6239703758a235a55",
-      "bytes": 13255
+      "sha256": "d28c71dc95beaa025e3e94421d69c8d8842c893cec5c7c034f21817474fa6a48",
+      "git_blob_sha1": "505222ddd22f594739e24eebc04e3320ed6ef1a3",
+      "bytes": 13490
     },
     {
       "relative_path": "liltweak/reasoning_provider.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f3666e7c4cd98d6dbc6ad2c807d81093b03f2b4fa29a90b2b853539f95be61b7",
-      "git_blob_sha1": "b773aedab0779ab6872cc8beed4d7aa77dcc6399",
-      "bytes": 25358
+      "sha256": "d9a9de32f2693732da0f1379821ebe3467f349ca41029dbd09afce1b70e39c20",
+      "git_blob_sha1": "973f99aa231e25482371175bff74014b38271ad0",
+      "bytes": 25798
     },
     {
       "relative_path": "liltweak/recovery.py",
@@ -1154,25 +1234,25 @@
       "relative_path": "liltweak/workbench.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2cccae6bb4bac4bebadb27d9d2def4256a67d101f8557190932a1af667e35849",
-      "git_blob_sha1": "cef0fc5950e5a468c42e2bc9207ae42d15b3d8b0",
-      "bytes": 56771
+      "sha256": "a61752fd2e8cc819680d16493f5767e6640ce7310ad1b812e028090106683178",
+      "git_blob_sha1": "5b20b7a44020c1013d5204730eedd16d6a3198a7",
+      "bytes": 57333
     },
     {
       "relative_path": "liltweak/workbench_agent.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f05eb9662a3a3127410f3db095390f484261d7017259770ba52e31b857f84959",
-      "git_blob_sha1": "ee30c6fdbd38f4ec8bcaf8f3b43a3835705383c8",
-      "bytes": 27728
+      "sha256": "5afc94572168b5c42a42156e42193457b8ce2149c8a3b890dbd3cd03e7638b09",
+      "git_blob_sha1": "ee171c1dcc8beb968491a2d02c83bc50a12ac0b5",
+      "bytes": 28692
     },
     {
       "relative_path": "liltweak/workbench_api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "5bab2b195f1e363dddfc82e341c6a3d5fdc12b95a433119e8b1b5cf725248d54",
-      "git_blob_sha1": "7c153f6c601f9d60fc8e054faaf576041654b01a",
-      "bytes": 20038
+      "sha256": "7faadb90a39b38d5ea88bbdd5154c7f2df9554a9ee062e42eddaa6824e558a79",
+      "git_blob_sha1": "0fb4f1d6e4314a462cd5ba5f670a79453260480b",
+      "bytes": 26339
     },
     {
       "relative_path": "liltweak/workbench_capabilities.py",
@@ -1210,9 +1290,9 @@
       "relative_path": "liltweak/workbench_repository.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "e3d68f358fd89fae7ddd4ba132609ab1e932cd3e823bc040f5ca9c83041aaec9",
-      "git_blob_sha1": "2d35c84b060f51f6fcf9a5e868c7410e1eb1bb75",
-      "bytes": 34763
+      "sha256": "31a7dd387e5edf33886e4cee0e48613a75d19f35f5ce9c62fcc6a1b5e273ec42",
+      "git_blob_sha1": "4bf0d877524833100148c3ef5827d2161622133c",
+      "bytes": 35655
     },
     {
       "relative_path": "liltweak/workbench_security.py",
@@ -1287,6 +1367,14 @@
       "bytes": 6518
     },
     {
+      "relative_path": "scripts/browser_acceptance_cdp.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "735f0080674dc1b5f2b4cebf8baf8097ff16767d136e616b2d02ab46d229ab05",
+      "git_blob_sha1": "e3077919ee98fae136ae9697ca63a82a509e4a9d",
+      "bytes": 15876
+    },
+    {
       "relative_path": "scripts/generate_diagrams.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1327,6 +1415,14 @@
       "bytes": 2545
     },
     {
+      "relative_path": "scripts/qualify_operational_provider.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "179c0eec21439dce1de72a571404e0ce94241f14faadbff8b40856885a58d5ad",
+      "git_blob_sha1": "970ba6b06474c971c73b88b7f1d538b802294194",
+      "bytes": 12175
+    },
+    {
       "relative_path": "scripts/qualify_reasoning_provider.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1341,6 +1437,14 @@
       "sha256": "32fe529c9c136c645a5cca227ee7e40117e555e707d62ba82536327063943f78",
       "git_blob_sha1": "2415cf0f4bafcb2e7f4319231b3cae55db892587",
       "bytes": 25644
+    },
+    {
+      "relative_path": "scripts/run_private_workbench.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "bc9ef386408b1226e71d483428ebfa59d31e48ab0ddad21b8b279a3b47001d14",
+      "git_blob_sha1": "904bee2113c0e722fab90bcf92b7373f049bb5da",
+      "bytes": 1968
     },
     {
       "relative_path": "scripts/verify_runner_qualification.py",
@@ -1418,9 +1522,9 @@
       "relative_path": "tests/test_config_reasoning_policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "61625261cab72768ff6c90b74172d5cebd3a04d3008a8bdca13277fba4411411",
-      "git_blob_sha1": "16eadf2802f7e98c3f1771646097eaa0afbb248c",
-      "bytes": 1737
+      "sha256": "ddecf9684acd9bf7fa19b66c0b4ba56f2645238a9d61749868098c92c80137bf",
+      "git_blob_sha1": "a15888230256266e65ee421634761dc01aa687b7",
+      "bytes": 1914
     },
     {
       "relative_path": "tests/test_context_manifest.py",
@@ -1583,6 +1687,22 @@
       "bytes": 4424
     },
     {
+      "relative_path": "tests/test_operational_activation.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b7eea168cb6aeb010b20d0b4daa232abd0adf79d204b37f0bce005b4e61b30a5",
+      "git_blob_sha1": "4d138476b645d0025bd52249c6b8083e35d8134b",
+      "bytes": 11397
+    },
+    {
+      "relative_path": "tests/test_operational_qualification.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "96c614a25f3216aa5c32861721966922798b6a0b83f2a48d19369145b0799271",
+      "git_blob_sha1": "b2559530ff1cf02df194ba69f99ced7ce4d8417c",
+      "bytes": 3573
+    },
+    {
       "relative_path": "tests/test_phase3_contract_invariants.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1637,6 +1757,14 @@
       "sha256": "edc1780a536a1d8bfdacf9afaa86fa8b93c11b3278a402f8fb1be99e9444b7e9",
       "git_blob_sha1": "987a0c6376e0289c21397ddb8ff6ec98f6b87539",
       "bytes": 1817
+    },
+    {
+      "relative_path": "tests/test_private_workbench_launcher.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b94fcac1615c3f016f0b83b7f558ab0ee6aa6be0ae3f3f89ad6d83bdb3be5f89",
+      "git_blob_sha1": "6636ee66f70508f2abebe6522772260a8fd70284",
+      "bytes": 968
     },
     {
       "relative_path": "tests/test_reasoning_contract.py",
@@ -1858,9 +1986,9 @@
       "relative_path": "tests/test_workbench_controller.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "393ee6762700497606ea7811e298f00bd511e307cf7c5d4d3389f2ca387401d0",
-      "git_blob_sha1": "7bebac17fe6f9a493b2166e68b23defd94747d6d",
-      "bytes": 23423
+      "sha256": "cc2379317ee9db7a64221d175da00bcafc21e4fcc90e684bc69fdd5b89cead3e",
+      "git_blob_sha1": "7dfc8bdbfd0e0073b24c11ea95c75c9e80c6403b",
+      "bytes": 24621
     },
     {
       "relative_path": "tests/test_workbench_executor.py",
@@ -1898,25 +2026,25 @@
       "relative_path": "tests/test_workbench_reasoning_bridge.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "3fbc11ce37c97696a0a34f17e9321c413675357d4585b53bb6acd845b8df6850",
-      "git_blob_sha1": "32b5cb4d4e583e95457b1be2f853cb0d7386b2c8",
-      "bytes": 16105
+      "sha256": "da182318fb8608ab25ed284f2b14b672dcd7407e363047f412076d6b056f2f77",
+      "git_blob_sha1": "16e27a9646cf2565ce852c679998587bf601c706",
+      "bytes": 17203
     },
     {
       "relative_path": "tests/test_workbench_repository.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "9cad122339e48cda3493487dc5a8caf3c538230c1837eced065cdf67c33ef2d6",
-      "git_blob_sha1": "d57d4a76cddfe644fcbd3d64c8c3dfd2dfdd3f73",
-      "bytes": 11074
+      "sha256": "d1b0127bfac88120fc9d8a2b7604d55fe8484bd89836fbad0f8967ceae7e3878",
+      "git_blob_sha1": "a33e337826e56ea0c0874b8b5d22538deb3c0569",
+      "bytes": 11770
     },
     {
       "relative_path": "tests/test_workbench_repository_integration.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "d0c73d3b456ce4c78818fbed3b1f9dd23eaed3e7ce4619230c1d2ee8abf7dbc1",
-      "git_blob_sha1": "8c9996d2875531c8cfec2e92867beab165ef62f4",
-      "bytes": 15772
+      "sha256": "e9da987dad172e21262476cd3a7b5ac6304beff361fbf66b0466593a5de8921f",
+      "git_blob_sha1": "a902c12969889f1138e5839df4d18646537e92d7",
+      "bytes": 15792
     },
     {
       "relative_path": "tests/test_workbench_security.py",
@@ -1954,17 +2082,17 @@
       "relative_path": "web/workbench/app.js",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "c0838616e3ae8d30ab412ab838746a8585d32e66faeb7fe12c6de88ed476b413",
-      "git_blob_sha1": "e34589262595b87bda83a3cbd5f467690e886c51",
-      "bytes": 19095
+      "sha256": "75f8c546ef3e3b387b054cfd27e1e268f7b011f70143c4f15ed1b43ebba633c1",
+      "git_blob_sha1": "b6bffe7ba78bf9c1f500d1f89569466c46b0dc01",
+      "bytes": 29572
     },
     {
       "relative_path": "web/workbench/index.html",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "6c1c675c04638b58488c96bd3d1d9701648721ad2df8d62b2c414d9d469d94fd",
-      "git_blob_sha1": "278d1259804756b4a30ff5c13b62bb4def8627a4",
-      "bytes": 9714
+      "sha256": "d80d4cb160933a299b599a2209e8c1adcf8cd8f7bd0db090b2767d57fde987fa",
+      "git_blob_sha1": "243ae51e5a01dc50f1cb4ea100522e1f528e39f0",
+      "bytes": 13600
     },
     {
       "relative_path": "web/workbench/styles.css",

@@ -25,7 +25,12 @@ from liltweak.reasoning_contract import (
 )
 from liltweak.reasoning_policy import ReasoningProfileName
 from liltweak.reasoning_prompts import PROMPT_DEFINITIONS, PromptName
-from liltweak.reasoning_provider import ProviderCallEvidence, ProviderCallResult
+from liltweak.reasoning_provider import (
+    ProviderCallEvidence,
+    ProviderCallResult,
+    ProviderFailureKind,
+    ReasoningProviderError,
+)
 from liltweak.workbench_agent import CanonicalWorkbenchModelAdapter, WorkbenchModelError
 from liltweak.workbench_contract import (
     CommandRequest,
@@ -215,6 +220,14 @@ class BlockingCanonicalProvider(FakeCanonicalProvider):
         return await super().call(**values)
 
 
+class TransientThenHealthyProvider(FakeCanonicalProvider):
+    async def call(self, **values: object) -> ProviderCallResult:
+        if not self.calls:
+            self.calls.append(values)
+            raise ReasoningProviderError(ProviderFailureKind.SERVICE, "synthetic transient")
+        return await super().call(**values)
+
+
 def imported_task(*, title: str = "Safe task") -> TaskImport:
     return TaskImport(
         title=title,
@@ -264,6 +277,28 @@ async def test_bridge_uses_canonical_prompt_profile_and_provider_evidence() -> N
             "response_id_hash": "b" * 64,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_bridge_retries_one_unbilled_transient_primary_failure() -> None:
+    provider = TransientThenHealthyProvider()
+    admission = SpyAdmission()
+    adapter = CanonicalWorkbenchModelAdapter(
+        provider=provider,  # type: ignore[arg-type]
+        admission=admission,
+    )
+
+    result = await adapter.plan(
+        task=imported_task(),
+        creator_brief_digest="d" * 64,
+        creator_route_digest="e" * 64,
+        inspection_summary="Controller-supplied inspection evidence.",
+    )
+
+    assert result.model == "gpt-5.6-sol"
+    assert len(provider.calls) == 2
+    assert len(admission.claims) == 1
+    assert admission.finishes[0]["succeeded"] is True
 
 
 @pytest.mark.asyncio

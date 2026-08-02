@@ -197,6 +197,22 @@ def test_secret_paths_and_content_never_enter_planning_context(tmp_path: Path) -
             destination=task_parent / "task-private",
         )
 
+    screened_destination = task_parent / "task-screened"
+    materialized = registry.materialize(
+        "repo_private",
+        expected_source_fingerprint=inspection.source_fingerprint,
+        destination=screened_destination,
+        exclude_sensitive=True,
+    )
+    assert materialized.source_fingerprint == inspection.source_fingerprint
+    assert materialized.file_count == inspection.file_count - inspection.screened_file_count
+    assert not (screened_destination / ".env").exists()
+    assert not (screened_destination / "src" / "leak.txt").exists()
+    assert all(
+        secret.encode() not in content
+        for content in _worktree_payload(screened_destination).values()
+    )
+
 
 def test_materialization_rejects_source_changed_after_inspection(tmp_path: Path) -> None:
     source_root = tmp_path / "registered"

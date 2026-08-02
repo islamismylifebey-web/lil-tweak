@@ -434,6 +434,42 @@ async def test_genuine_owner_decision_consumes_once_and_replay_fails(
 
 
 @pytest.mark.asyncio
+async def test_disconnected_runner_stops_at_plan_ready_without_approval(
+    tmp_path: Path,
+) -> None:
+    control = controller(tmp_path)
+    source = control.workspaces.task_root("placeholder")
+    source_digest = control.workspaces.tree_digest(source)
+    task = control.receive(
+        TaskImport(
+            title="plan only",
+            direction="produce a tool-free engineering plan",
+            source_snapshot_digest=source_digest,
+        )
+    )
+    control.workspaces.task_root(task.id)
+    source.rmdir()
+    control.inspect(task.id)
+    control.executor = BoundedToolExecutor(
+        control.workspaces,
+        DisconnectedProcessTransport(),
+    )
+
+    planned, approval = await control.analyze(task.id)
+
+    assert planned.state == WorkbenchState.PLAN_READY
+    assert approval is None
+    assert control.store.canonical.get_task(task.id).state == TaskState.PLAN_PROPOSED
+    boundary = next(
+        item
+        for item in control.store.list_evidence(task.id)
+        if item.event_type == "execution_boundary_disconnected"
+    )
+    assert boundary.payload["approval_published"] is False
+    assert boundary.payload["execution_permitted"] is False
+
+
+@pytest.mark.asyncio
 async def test_disconnected_runner_blocks_execution_before_consumption_or_snapshot(
     tmp_path: Path,
 ) -> None:
