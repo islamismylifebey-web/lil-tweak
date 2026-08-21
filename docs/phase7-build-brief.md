@@ -66,3 +66,4 @@ Phase 7's control-plane release is acceptable when:
 - source remains unchanged;
 - the API and health surface report execution disconnected on this host;
 - limitations are recorded without claiming production isolation.
+

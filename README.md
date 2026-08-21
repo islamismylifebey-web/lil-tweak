@@ -1,5 +1,29 @@
 # Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1
 
+## Unreleased Live Workbench code-authored extension
+
+The additive private Workbench is served at `/workbench` when enabled. It reuses Creator
+compilation and routing, then adds server-owned repository inspection, immutable Git-free task
+copies, a no-tools live planning adapter, exact one-time approval, typed workspace and command
+tools, authentic evidence, recovery snapshots, verified patch export, and candidate submission
+locking.
+
+The model is disabled by default. No independently qualified Workbench runner provider is
+implemented, so command and planned file execution remain disconnected and fail closed. The
+Workbench never treats candidate evidence as independent qualification. GCP is deferred and
+disabled. See `LOCAL_AGENT_ARCHITECTURE.md`, `LIL_TWEAK_LAUNCH_AND_OPERATIONS.md`,
+`LIL_TWEAK_CAPABILITY_DISCOVERY_REPORT.md`, and `LIL_TWEAK_REMAINING_BLOCKERS.md`.
+
+The current Sol High direct build is classified
+`FAILED — RELEASE GATES NOT MET`. Publication hardening found that the multi-role cognitive
+pipeline, relevance-based retrieval, durable memory/training authority, and server-owned tool
+registry are not integrated into the production Workbench path. The implemented surfaces remain
+preserved and fail closed while those directive gates are unresolved.
+Repository onboarding, private source capture, source-grounded planning context, approvals,
+evidence, recovery controls, and localhost operation are real. Live model planning and qualified
+command execution require the prerequisites documented in `LOCAL_AGENT_MODEL_ACTIVATION.md` and
+`LOCAL_AGENT_RUNNER_QUALIFICATION.md`.
+
 Lil Tweak the Super Geek is an independent, API-first software-engineering engine personally
 owned by Maurice Pennington-Bey. It does not depend on Terhuti, and a future Terhuti client will
 use the same bounded API without policy-bypass authority.
@@ -139,7 +163,7 @@ Phase 3 does not:
 - integrate with Terhuti;
 - activate Full Voice Access.
 
-The 0.6.0 live Creator path still does not:
+The 0.6.0 live Creator compatibility path still does not:
 
 - expose tools or repositories to the live model;
 - run, modify, or deploy source;
@@ -147,7 +171,9 @@ The 0.6.0 live Creator path still does not:
 - retry a failed paid call automatically;
 - mark a provider-hosted sandbox as verified;
 - reconcile token estimates to the provider invoice;
-- enable live calls unless the server has a durable signing key and explicitly enables them.
+- auto-connect from environment configuration. The default API factory never constructs this
+  provider; bounded tests or evaluations must inject the controller explicitly, and that does not
+  constitute canonical provider qualification.
 
 The 0.7.0 repository verification path still does not:
 
@@ -188,7 +214,7 @@ under a server-owned workspace:
 
 ```env
 LILTWEAK_WORKSPACE_ROOT=./repositories
-LILTWEAK_REPOSITORIES_JSON={"local:coverall-cie":"coverall","github:owner/project":"snapshots/project"}
+LILTWEAK_REPOSITORIES_JSON={"local:coverall-cie":"coverall","github:owner.project":"snapshots/project"}
 ```
 
 Configure recovery separately:
@@ -201,8 +227,9 @@ LILTWEAK_EVIDENCE_SIGNING_KEY=<URL-safe base64 for exactly 32 random bytes>
 LILTWEAK_PLANNING_RESERVATION_USD=1
 ```
 
-Live Creator calls are disabled by default. Enabling them requires a server-controlled signing
-key, an API key outside version control, and explicit spend limits:
+Legacy live-Creator settings are retained as inert operator intent and limits for compatibility.
+They do not connect a provider in the default API factory; a server-controlled key and
+`LILTWEAK_LIVE_MODEL_ENABLED=true` are insufficient to self-assert provider qualification:
 
 ```env
 LILTWEAK_LIVE_MODEL_ENABLED=false
@@ -305,6 +332,7 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_engineering_trial.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_creator_benchmark.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase6_offline.py
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python evals/run_phase7_offline.py
+UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python -m scripts.lil_tweak_capability_discovery
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run python main.py creator-smoke
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals/run_gauntlet.py --live
@@ -312,8 +340,10 @@ UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python evals
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file ../.env.local python main.py phase3-live-smoke
 ```
 
-The paid Phase 6 evaluation is never part of the default verification matrix. It requires an
-explicit, exact ceiling and creates a fresh digest-bound approval:
+The command below records the historical Phase 6 invocation only. It is not part of the current
+verification matrix or a current qualification path. Its original `$0.05` model ceiling predates
+the canonical Sol-only engineering policy and now fails closed before a provider call; do not
+rerun it as evidence for this candidate:
 
 ```bash
 UV_CACHE_DIR=/tmp/liltweak-uv-cache uv run --env-file .env.local \

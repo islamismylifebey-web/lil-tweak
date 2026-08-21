@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import json
 import math
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .reasoning_policy import (
+    PROFILE_REGISTRY,
+    REASONING_POLICY,
+    ReasoningProfileName,
+    ReasoningProfileUnavailable,
+    require_primary_engineering_model,
+)
+
+_ORDINARY_PROFILE = PROFILE_REGISTRY[ReasoningProfileName.ORDINARY]
 
 
 def _float_env(name: str, default: float) -> float:
@@ -42,8 +53,10 @@ def _repository_mappings_env() -> dict[str, str]:
     for key, value in payload.items():
         if not isinstance(key, str) or not isinstance(value, str):
             raise ValueError("repository mapping keys and values must be strings")
-        if not key.startswith(("local:", "github:")):
-            raise ValueError("repository mapping keys must start with local: or github:")
+        if re.fullmatch(r"(?:local|github):[A-Za-z0-9][A-Za-z0-9._:-]{0,120}", key) is None:
+            raise ValueError(
+                "repository mapping keys must be URL-safe opaque local: or github: identifiers"
+            )
         mappings[key] = value
     return mappings
 
@@ -91,6 +104,15 @@ def _owner_id_env() -> str:
     return value
 
 
+def _engineering_model_env() -> str:
+    try:
+        return require_primary_engineering_model(
+            os.getenv("LILTWEAK_MODEL", REASONING_POLICY.primary_model.value)
+        ).value
+    except ReasoningProfileUnavailable as exc:
+        raise ValueError("LILTWEAK_MODEL must name the canonical primary model") from exc
+
+
 @dataclass(frozen=True)
 class Settings:
     environment: str
@@ -116,6 +138,20 @@ class Settings:
     repository_execution_enabled: bool = False
     execution_runtime_root: Path = Path("./runtime-root")
     execution_image_ref: str | None = None
+    server_host: str = "127.0.0.1"
+    workbench_enabled: bool = False
+    workbench_model_enabled: bool = False
+    workbench_model: str = _ORDINARY_PROFILE.model.value
+    workbench_reasoning_tier: str = _ORDINARY_PROFILE.variant.effort.value
+    workbench_reasoning_mode: str = _ORDINARY_PROFILE.variant.request_mode.value
+    workbench_reasoning_profile: str = _ORDINARY_PROFILE.name.value
+    workbench_workspace_root: Path = Path("./workbench-tasks")
+    workbench_session_ttl_seconds: int = 3_600
+    workbench_rate_limit_per_minute: int = 120
+    workbench_input_token_limit: int = 12_000
+    workbench_output_token_limit: int = 4_096
+    workbench_cost_ceiling_usd: float = 0.20
+    workbench_monthly_limit_usd: float = 5.0
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -156,6 +192,63 @@ class Settings:
             raise ValueError("LILTWEAK_LIVE_INPUT_TOKEN_LIMIT is invalid")
         if self.live_output_token_limit < 1_024 or self.live_output_token_limit > 32_000:
             raise ValueError("LILTWEAK_LIVE_OUTPUT_TOKEN_LIMIT is invalid")
+        if self.workbench_reasoning_tier not in {"low", "medium", "high", "xhigh", "max"}:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_TIER is invalid")
+        if self.workbench_reasoning_mode not in {"standard", "pro"}:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_MODE is invalid")
+        try:
+            profile = PROFILE_REGISTRY[ReasoningProfileName(self.workbench_reasoning_profile)]
+        except (KeyError, ValueError) as exc:
+            raise ValueError("LILTWEAK_WORKBENCH_REASONING_PROFILE is invalid") from exc
+        if (
+            self.workbench_model != profile.model.value
+            or self.workbench_reasoning_tier != profile.variant.effort.value
+            or self.workbench_reasoning_mode != profile.variant.request_mode.value
+        ):
+            raise ValueError(
+                "Workbench model, mode, and effort must match the named reasoning profile"
+            )
+        if self.workbench_session_ttl_seconds < 300 or self.workbench_session_ttl_seconds > 86_400:
+            raise ValueError("LILTWEAK_WORKBENCH_SESSION_TTL_SECONDS is invalid")
+        if (
+            self.workbench_rate_limit_per_minute < 10
+            or self.workbench_rate_limit_per_minute > 10_000
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE is invalid")
+        if self.workbench_input_token_limit < 256 or self.workbench_input_token_limit > 200_000:
+            raise ValueError("LILTWEAK_WORKBENCH_INPUT_TOKEN_LIMIT is invalid")
+        if self.workbench_output_token_limit < 1_024 or self.workbench_output_token_limit > 32_000:
+            raise ValueError("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT is invalid")
+        if (
+            not math.isfinite(self.workbench_cost_ceiling_usd)
+            or self.workbench_cost_ceiling_usd <= 0
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_COST_CEILING_USD must be positive")
+        if (
+            not math.isfinite(self.workbench_monthly_limit_usd)
+            or self.workbench_monthly_limit_usd < self.workbench_cost_ceiling_usd
+        ):
+            raise ValueError("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD must cover one call ceiling")
+        if (
+            not isinstance(self.server_host, str)
+            or not self.server_host
+            or len(self.server_host) > 253
+            or any(ord(character) < 33 or ord(character) == 127 for character in self.server_host)
+        ):
+            raise ValueError("LILTWEAK_SERVER_HOST is invalid")
+        if self.workbench_enabled:
+            try:
+                bind_address = ipaddress.ip_address(self.server_host)
+            except ValueError as exc:
+                raise ValueError(
+                    "private Workbench requires LILTWEAK_SERVER_HOST to be a loopback IP literal"
+                ) from exc
+            if not bind_address.is_loopback:
+                raise ValueError(
+                    "private Workbench requires LILTWEAK_SERVER_HOST to be a loopback IP literal"
+                )
+        if self.workbench_enabled and not self.dev_api_key:
+            raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -217,7 +310,7 @@ class Settings:
             database_path=Path(os.getenv("LILTWEAK_DB_PATH", "./data/liltweak.db")),
             dev_api_key=os.getenv("LILTWEAK_DEV_API_KEY"),
             auth_disabled=auth_disabled,
-            model=os.getenv("LILTWEAK_MODEL", "gpt-5.6-luna"),
+            model=_engineering_model_env(),
             monthly_budget_usd=_float_env("LILTWEAK_MONTHLY_BUDGET_USD", 250.0),
             job_hard_limit_usd=_float_env("LILTWEAK_JOB_HARD_LIMIT_USD", 5.0),
             planning_reservation_usd=_float_env(
@@ -253,4 +346,30 @@ class Settings:
                 os.getenv("LILTWEAK_EXECUTION_RUNTIME_ROOT", "./runtime-root")
             ),
             execution_image_ref=os.getenv("LILTWEAK_EXECUTION_IMAGE_REF"),
+            server_host=os.getenv("LILTWEAK_SERVER_HOST", "127.0.0.1"),
+            workbench_enabled=_bool_env("LILTWEAK_WORKBENCH_ENABLED", False),
+            workbench_model_enabled=_bool_env("LILTWEAK_WORKBENCH_MODEL_ENABLED"),
+            workbench_model=os.getenv("LILTWEAK_WORKBENCH_MODEL", _ORDINARY_PROFILE.model.value),
+            workbench_reasoning_tier=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_TIER",
+                _ORDINARY_PROFILE.variant.effort.value,
+            ),
+            workbench_reasoning_mode=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_MODE",
+                _ORDINARY_PROFILE.variant.request_mode.value,
+            ),
+            workbench_reasoning_profile=os.getenv(
+                "LILTWEAK_WORKBENCH_REASONING_PROFILE", _ORDINARY_PROFILE.name.value
+            ),
+            workbench_workspace_root=Path(
+                os.getenv("LILTWEAK_WORKBENCH_WORKSPACE_ROOT", "./workbench-tasks")
+            ),
+            workbench_session_ttl_seconds=_int_env("LILTWEAK_WORKBENCH_SESSION_TTL_SECONDS", 3_600),
+            workbench_rate_limit_per_minute=_int_env(
+                "LILTWEAK_WORKBENCH_RATE_LIMIT_PER_MINUTE", 120
+            ),
+            workbench_input_token_limit=_int_env("LILTWEAK_WORKBENCH_INPUT_TOKEN_LIMIT", 12_000),
+            workbench_output_token_limit=_int_env("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT", 4_096),
+            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.20),
+            workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
         )

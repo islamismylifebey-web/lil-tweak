@@ -590,36 +590,49 @@ class AdaptiveRouter:
             max_turns = profile.max_turns
             cost = profile.synthetic_cost_units
 
-        values = {
-            "brief_digest": brief_digest,
-            "status": status,
-            "selected_tier": selected_tier,
-            "reasoning_effort": reasoning_effort,
-            "context_token_ceiling": context_tokens,
-            "max_turns": max_turns,
-            "complexity_score": complexity,
-            "required_capabilities": capabilities,
-            "suggested_tools": self._suggested_tools(brief),
-            "blocked_reasons": tuple(blocked_reasons),
-            "escalation_triggers": (
-                "a deterministic check falsifies the current hypothesis",
-                "required evidence cannot fit the selected context ceiling",
-                "the selected tier fails one validated attempt",
-                "new risk evidence raises the task classification",
-            ),
-            "deescalation_triggers": (
-                "the uncertainty has been resolved by deterministic evidence",
-                "remaining work is mechanical or schema-bound",
-                "verification can complete without further model reasoning",
-            ),
-            "synthetic_cost_units": cost,
-        }
+        suggested_tools = self._suggested_tools(brief)
+        resolved_blocked_reasons = tuple(blocked_reasons)
+        escalation_triggers = (
+            "a deterministic check falsifies the current hypothesis",
+            "required evidence cannot fit the selected context ceiling",
+            "the selected tier fails one validated attempt",
+            "new risk evidence raises the task classification",
+        )
+        deescalation_triggers = (
+            "the uncertainty has been resolved by deterministic evidence",
+            "remaining work is mechanical or schema-bound",
+            "verification can complete without further model reasoning",
+        )
         unsigned = RouteDecision.model_construct(
-            **values,
+            brief_digest=brief_digest,
+            status=status,
+            selected_tier=selected_tier,
+            reasoning_effort=reasoning_effort,
+            context_token_ceiling=context_tokens,
+            max_turns=max_turns,
+            complexity_score=complexity,
+            required_capabilities=capabilities,
+            suggested_tools=suggested_tools,
+            blocked_reasons=resolved_blocked_reasons,
+            escalation_triggers=escalation_triggers,
+            deescalation_triggers=deescalation_triggers,
+            synthetic_cost_units=cost,
             decision_digest="0" * 64,
         )
         return RouteDecision(
-            **values,
+            brief_digest=brief_digest,
+            status=status,
+            selected_tier=selected_tier,
+            reasoning_effort=reasoning_effort,
+            context_token_ceiling=context_tokens,
+            max_turns=max_turns,
+            complexity_score=complexity,
+            required_capabilities=capabilities,
+            suggested_tools=suggested_tools,
+            blocked_reasons=resolved_blocked_reasons,
+            escalation_triggers=escalation_triggers,
+            deescalation_triggers=deescalation_triggers,
+            synthetic_cost_units=cost,
             decision_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"decision_digest"})
             ),
@@ -760,6 +773,76 @@ class CreatorService:
         actor_id: str,
     ) -> CreatorBriefEnvelope:
         brief = self.compiler.compile(request, actor_id=actor_id)
+        return self._brief_envelope(brief)
+
+    def compile_for_trusted_harness(
+        self,
+        request: CreatorCompileRequest,
+        *,
+        actor_id: str,
+        enforced_risk_domains: tuple[RiskDomain, ...],
+    ) -> CreatorBriefEnvelope:
+        """Compile with server-owned risk context that public callers cannot assert."""
+        if not enforced_risk_domains:
+            raise CreatorEnvelopeError("trusted harness risk context cannot be empty")
+        brief = self.compiler.compile(request, actor_id=actor_id)
+        risk_domains = tuple(dict.fromkeys((*brief.risk_domains, *enforced_risk_domains)))
+        prerequisites = self.compiler._trusted_prerequisites(risk_domains)
+        acceptance = self.compiler._acceptance_criteria(
+            brief.work_kind,
+            brief.deliverables,
+            list(brief.quality_controls),
+            risk_domains,
+        )
+        brief = brief.model_copy(
+            update={
+                "risk_domains": risk_domains,
+                "trusted_prerequisites": prerequisites,
+                "acceptance_criteria": acceptance,
+            }
+        )
+        brief = CreatorBrief.model_validate(brief.model_dump(mode="python"))
+        return self._brief_envelope(brief)
+
+    def satisfy_trusted_prerequisites(
+        self,
+        envelope: CreatorBriefEnvelope,
+        *,
+        satisfied_prerequisites: tuple[str, ...],
+    ) -> CreatorBriefEnvelope:
+        """Issue a new envelope only for an exact, server-recorded prerequisite receipt."""
+        self._verify_brief_envelope(envelope)
+        expected = envelope.brief.trusted_prerequisites
+        if not expected:
+            raise CreatorEnvelopeError("creator brief has no trusted prerequisites")
+        if satisfied_prerequisites != expected:
+            raise CreatorEnvelopeError("trusted prerequisite receipt does not match the brief")
+        receipt_constraints = tuple(
+            f"Trusted harness receipt: {item}" for item in satisfied_prerequisites
+        )
+        acceptance = tuple(
+            (
+                "Trusted high-stakes prerequisites were satisfied by the trusted harness "
+                "before model routing."
+                if item == "Trusted high-stakes prerequisites are present before model routing."
+                else item
+            )
+            for item in envelope.brief.acceptance_criteria
+        )
+        brief = envelope.brief.model_copy(
+            update={
+                "constraints": _unique([*envelope.brief.constraints, *receipt_constraints]),
+                "acceptance_criteria": acceptance,
+                "trusted_prerequisites": (),
+            }
+        )
+        try:
+            brief = CreatorBrief.model_validate(brief.model_dump(mode="python"))
+        except Exception as exc:
+            raise CreatorEnvelopeError("trusted prerequisite receipt cannot be recorded") from exc
+        return self._brief_envelope(brief)
+
+    def _brief_envelope(self, brief: CreatorBrief) -> CreatorBriefEnvelope:
         brief_digest = brief.brief_digest
         signature = self._sign_digest(brief_digest, domain="creator-brief-v1")
         return CreatorBriefEnvelope(

@@ -1,0 +1,322 @@
+{
+  "schema_version": "master-builder-model-registry-v1",
+  "registry_id": "lil-tweak.master-builder-model-registry",
+  "as_of_date": "2026-08-02",
+  "repository_binding": {
+    "audited_remote_baseline": "373400cb2b459dbf8a37dacceb0d3d1186eef949",
+    "branch": "codex/lil-tweak-live-workbench-build",
+    "pull_request": 6,
+    "working_candidate_commit": null,
+    "working_candidate_commit_status": "pending"
+  },
+  "implementation_bindings": {
+    "model_catalog_schema_version": "2026-08-02.1",
+    "model_catalog_digest": "431fe8c7e70dc3d0413d88d419e8366a3b9643fdc98ad336e13d12ce9ab43a33",
+    "price_registry_version": "openai-standard-2026-08-02.1",
+    "reasoning_policy_version": "1.0.0",
+    "reasoning_policy_digest": "64d2d0fac757456832a1776f0614e0fc61216fec34a405efeaa3d5a148626c8f",
+    "prompt_registry_version": "1.1.0",
+    "prompt_registry_digest": "61975c9d336306afaafb3133f46e66e10fda4df026ac5bd2c219d7e8c2694f87"
+  },
+  "official_sources": [
+    {
+      "source_id": "openai-model-guidance-gpt-5.6",
+      "url": "https://developers.openai.com/api/docs/guides/latest-model",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "identity",
+        "reasoning",
+        "capabilities"
+      ]
+    },
+    {
+      "source_id": "openai-reasoning-guide",
+      "url": "https://developers.openai.com/api/docs/guides/reasoning",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "reasoning",
+        "capabilities"
+      ]
+    },
+    {
+      "source_id": "openai-model-gpt-5.6-sol",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "identity",
+        "limits",
+        "capabilities",
+        "pricing"
+      ]
+    },
+    {
+      "source_id": "openai-model-gpt-5.6-terra",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "identity",
+        "limits",
+        "capabilities",
+        "pricing"
+      ]
+    },
+    {
+      "source_id": "openai-model-gpt-5.6-luna",
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "identity",
+        "limits",
+        "capabilities",
+        "pricing"
+      ]
+    },
+    {
+      "source_id": "openai-api-pricing",
+      "url": "https://developers.openai.com/api/docs/pricing",
+      "accessed_on": "2026-08-02",
+      "scopes": [
+        "pricing"
+      ]
+    }
+  ],
+  "shared_family_capabilities": {
+    "knowledge_cutoff": "2026-02-16",
+    "context_window_tokens": 1050000,
+    "maximum_output_tokens": 128000,
+    "reasoning_efforts": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "reasoning_request_modes": [
+      "standard",
+      "pro"
+    ],
+    "reasoning_context_modes": [
+      "current_turn",
+      "all_turns"
+    ],
+    "default_reasoning_effort": "medium",
+    "default_reasoning_context": "all_turns",
+    "responses_api": true,
+    "chat_completions_api": true,
+    "structured_outputs": true,
+    "function_calling": true,
+    "streaming": true,
+    "text_input": true,
+    "text_output": true,
+    "image_input": true,
+    "audio_input": false,
+    "video_input": false,
+    "fine_tuning": false
+  },
+  "pricing_semantics": {
+    "currency": "USD",
+    "unit_tokens": 1000000,
+    "processing_tier": "standard",
+    "long_context_threshold_input_tokens": 272000,
+    "threshold_is_exclusive": true,
+    "regional_processing_uplift_included": false,
+    "pro_mode_price_not_asserted_by_this_registry": true
+  },
+  "models": [
+    {
+      "model_id": "gpt-5.6-sol",
+      "display_name": "GPT-5.6 Sol",
+      "family_role": "Frontier model for complex professional work.",
+      "policy_role": "primary_engineering_model",
+      "primary_engineering_model": true,
+      "degraded_fallback_only": false,
+      "low_risk_classification_only": false,
+      "allowed_roles": [
+        "intake",
+        "retriever",
+        "analyst",
+        "architect",
+        "planner",
+        "implementer",
+        "critic",
+        "verifier",
+        "finalizer"
+      ],
+      "standard_short_context_price_per_million_usd": {
+        "input": "5.00",
+        "cached_input": "0.50",
+        "cache_write": "6.25",
+        "output": "30.00"
+      },
+      "standard_long_context_price_per_million_usd": {
+        "input": "10.00",
+        "cached_input": "1.00",
+        "cache_write": "12.50",
+        "output": "45.00"
+      }
+    },
+    {
+      "model_id": "gpt-5.6-terra",
+      "display_name": "GPT-5.6 Terra",
+      "family_role": "Model that balances intelligence and cost.",
+      "policy_role": "explicit_degraded_read_only_fallback",
+      "primary_engineering_model": false,
+      "degraded_fallback_only": true,
+      "low_risk_classification_only": false,
+      "allowed_roles": [
+        "intake",
+        "retriever",
+        "analyst",
+        "architect",
+        "planner",
+        "critic",
+        "verifier",
+        "finalizer",
+        "diagnostic"
+      ],
+      "mutation_authority": false,
+      "candidate_generation_allowed": false,
+      "authoritative": false,
+      "standard_short_context_price_per_million_usd": {
+        "input": "2.00",
+        "cached_input": "0.20",
+        "cache_write": "2.50",
+        "output": "12.00"
+      },
+      "standard_long_context_price_per_million_usd": {
+        "input": "4.00",
+        "cached_input": "0.40",
+        "cache_write": "5.00",
+        "output": "18.00"
+      }
+    },
+    {
+      "model_id": "gpt-5.6-luna",
+      "display_name": "GPT-5.6 Luna",
+      "family_role": "Model optimized for cost-sensitive, high-volume workloads.",
+      "policy_role": "low_risk_classification_and_diagnostics_only",
+      "primary_engineering_model": false,
+      "degraded_fallback_only": false,
+      "low_risk_classification_only": true,
+      "allowed_roles": [
+        "classifier",
+        "diagnostic"
+      ],
+      "engineering_plan_authority": false,
+      "candidate_generation_allowed": false,
+      "standard_short_context_price_per_million_usd": {
+        "input": "0.20",
+        "cached_input": "0.02",
+        "cache_write": "0.25",
+        "output": "1.20"
+      },
+      "standard_long_context_price_per_million_usd": {
+        "input": "0.40",
+        "cached_input": "0.04",
+        "cache_write": "0.50",
+        "output": "1.80"
+      }
+    }
+  ],
+  "provider_qualification": {
+    "provider": "openai-responses",
+    "requested_model": "gpt-5.6-sol",
+    "qualification_state": "BLOCKED",
+    "full_live_provider_qualification": false,
+    "live_evidence_present": true,
+    "offline_contract_evidence_present": true,
+    "live_passed": {
+      "exact_standard_high_entitlement_probe": true,
+      "benchmark_variants": [
+        "standard/high",
+        "standard/xhigh",
+        "standard/max",
+        "pro/high",
+        "pro/xhigh",
+        "pro/max"
+      ],
+      "bounded_pro_max_cap_adjustment_required": true,
+      "encrypted_reasoning_continuation": {
+        "passed": true,
+        "input_tokens": 382,
+        "output_tokens": 201,
+        "reasoning_tokens": 127,
+        "items_replayed": 2
+      },
+      "concurrency": {
+        "passed": 2,
+        "total": 2
+      },
+      "label_blind_holdout_v2": {
+        "status": "PASSED_PARTIAL_EVIDENCE",
+        "passed": 15,
+        "total": 15,
+        "provider_calls": 1,
+        "retries": 0,
+        "source_suite_schema": "reasoning-holdout-v1",
+        "source_suite_digest": "6214b2ecaf182bd3947d1871d243525dcb7b55dc606df67e8423c073958700fd",
+        "request_schema": "reasoning-holdout-request-v2",
+        "request_digest": "1dcfb4d464286cb8152abd06e57a54400553872c6cfa3212623ad5accdec0f71",
+        "result_schema": "reasoning-holdout-result-v2",
+        "evaluation_schema": "reasoning-holdout-evaluation-v2",
+        "evaluation_contract_digest": "e17ea133b84cb0fffc7edf2895955b35cb480ed0bc4f391a57463640adccfdbc",
+        "provider_input_digest": "3c168eec30ef6d8b1f21c2a8f476f506bf08a4478c081d4917fa301dfa8d5a00",
+        "prompt_digest": "42b6bc6eb7d6c284d152681ed7245c7d2c165c297f77ad3b89bb0fa408cf3f5e",
+        "result_digest": "1d87e511d222d15322bdbe0bd9b96d02464268aec9897da84b7b044108067e70",
+        "parsed_output_digest": "1d87e511d222d15322bdbe0bd9b96d02464268aec9897da84b7b044108067e70",
+        "evidence_artifact_sha256": "f74c90f1cfbc24526ce10df4b17be9353a582f3bae7dd8d7ff3a3e9c73cfba65",
+        "model": "gpt-5.6-sol",
+        "profile": "ordinary",
+        "profile_version": "1.0.0",
+        "request_mode": "standard",
+        "reasoning_effort": "high",
+        "role": "analyst",
+        "tools_supplied": false,
+        "store_disabled": true,
+        "sensitive_tracing_disabled": true,
+        "usage": {
+          "provider_counted_input_tokens": 1805,
+          "input_tokens": 1805,
+          "output_tokens": 3011,
+          "reasoning_tokens": 1468,
+          "total_tokens": 4816,
+          "cached_input_tokens": 0
+        },
+        "valid_for_behavioral_holdout": true,
+        "valid_for_full_provider_qualification": false,
+        "final_candidate_bound": false,
+        "final_durable_bundle_present": false,
+        "attempt_policy": "one provider call, zero retries, preserve first result"
+      }
+    },
+    "historical_invalidated": {
+      "label_exposed_holdout_v1": {
+        "passed": 15,
+        "total": 15,
+        "suite_digest": "6214b2ecaf182bd3947d1871d243525dcb7b55dc606df67e8423c073958700fd",
+        "result_digest": "cc0da9762f2a2bd5ec9d68df2ec38ee31d8bd4b029f2db2b9f205a82286bb0fe",
+        "rendered_input_digest": "fc8faef449b59041991e1e5ef2d97068db4486c42e626af4a749edd691939e85",
+        "label_exposed": true,
+        "valid_for_qualification": false,
+        "reason": "Provider input exposed expected status, category, and descriptive source case identifiers.",
+        "usage": {
+          "provider_counted_input_tokens": 1734,
+          "input_tokens": 1734,
+          "output_tokens": 1969,
+          "reasoning_tokens": 504,
+          "cached_input_tokens": 0
+        }
+      }
+    },
+    "not_live_qualified": {
+      "explicit_compaction": "BLOCKED",
+      "timeout": "OFFLINE_CONTRACT_ONLY",
+      "cancellation": "OFFLINE_CONTRACT_ONLY",
+      "refusal": "OFFLINE_CONTRACT_ONLY",
+      "incomplete_response": "OFFLINE_CONTRACT_ONLY",
+      "caching_telemetry": "NO_CACHE_HIT_OBSERVED"
+    },
+    "prohibited_claim": "Do not represent this evidence as full LIVE_QUALIFIED provider status."
+  }
+}

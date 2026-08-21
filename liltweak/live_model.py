@@ -9,19 +9,22 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from agents import Agent, ModelSettings, RunConfig, Runner
+from openai.types.shared.reasoning import Reasoning
 
 from .costs import BudgetExceededError
 from .creator import CreatorEnvelopeError, CreatorService
 from .creator_contract import (
     CreatorBriefEnvelope,
-    ModelTier,
     RouteDecision,
     RoutePreviewRequest,
     RouteStatus,
     content_digest,
+)
+from .creator_contract import (
+    ReasoningEffort as CreatorReasoningEffort,
 )
 from .live_contract import (
     CreatorWorkOrder,
@@ -33,6 +36,13 @@ from .live_contract import (
     LiveRunApproval,
     LiveRunProposal,
     LiveRunResult,
+)
+from .model_catalog import MODEL_CATALOG
+from .reasoning_contract import ReasoningRole
+from .reasoning_policy import (
+    REASONING_POLICY,
+    ReasoningRequestMode,
+    profile_for_role,
 )
 from .store import SQLiteStore, StoreStateConflictError
 
@@ -60,23 +70,39 @@ class ModelPrice:
     output_per_million_usd: float
 
 
-MODEL_PRICES: Final[dict[ModelTier, ModelPrice]] = {
-    ModelTier.ECONOMY: ModelPrice(
-        model="gpt-5.6-luna",
-        input_per_million_usd=1.0,
-        output_per_million_usd=6.0,
-    ),
-    ModelTier.STANDARD: ModelPrice(
-        model="gpt-5.6-terra",
-        input_per_million_usd=2.5,
-        output_per_million_usd=15.0,
-    ),
-    ModelTier.FRONTIER: ModelPrice(
-        model="gpt-5.6-sol",
-        input_per_million_usd=5.0,
-        output_per_million_usd=30.0,
-    ),
-}
+_CREATOR_PROFILE: Final = profile_for_role(ReasoningRole.PLANNER)
+_CREATOR_MODEL: Final = REASONING_POLICY.primary_model
+_CREATOR_PRICE_BAND: Final = MODEL_CATALOG.price_band(_CREATOR_MODEL, input_tokens=0)
+CREATOR_MODEL_PRICE: Final = ModelPrice(
+    model=_CREATOR_MODEL.value,
+    input_per_million_usd=float(_CREATOR_PRICE_BAND.input_per_million_usd),
+    output_per_million_usd=float(_CREATOR_PRICE_BAND.output_per_million_usd),
+)
+CREATOR_REASONING_EFFORT: Final = CreatorReasoningEffort(_CREATOR_PROFILE.variant.effort.value)
+
+
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported Creator reasoning mode")
+
+
+def _provider_reasoning_effort(
+    effort: CreatorReasoningEffort,
+) -> Literal["low", "medium", "high", "xhigh"]:
+    if effort == CreatorReasoningEffort.LOW:
+        return "low"
+    if effort == CreatorReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == CreatorReasoningEffort.HIGH:
+        return "high"
+    if effort == CreatorReasoningEffort.XHIGH:
+        return "xhigh"
+    raise AssertionError("unsupported Creator reasoning effort")
 
 
 @dataclass(frozen=True)
@@ -110,7 +136,12 @@ class OpenAICreatorModelProvider:
             model=proposal.model,
             model_settings=ModelSettings(
                 max_tokens=proposal.output_token_ceiling,
-                reasoning={"effort": proposal.reasoning_effort.value},
+                reasoning=Reasoning(
+                    mode=_provider_reasoning_mode(_CREATOR_PROFILE.variant.request_mode),
+                    effort=_provider_reasoning_effort(proposal.reasoning_effort),
+                    context="all_turns",
+                    summary="auto",
+                ),
                 include_usage=True,
                 store=False,
                 parallel_tool_calls=False,
@@ -211,7 +242,7 @@ class LiveCreatorController:
         if verified_route.selected_tier is None or verified_route.reasoning_effort is None:
             raise LiveModelApprovalError("live route does not select a model")
 
-        price = MODEL_PRICES[verified_route.selected_tier]
+        price = CREATOR_MODEL_PRICE
         input_ceiling = min(
             verified_route.context_token_ceiling,
             self.input_token_limit,
@@ -226,27 +257,38 @@ class LiveCreatorController:
             raise LiveModelApprovalError("live proposal exceeds the configured per-call limit")
 
         created_at = datetime.now(UTC)
-        values = {
-            "id": f"live_proposal_{uuid.uuid4().hex}",
-            "brief_digest": request.envelope.brief_digest,
-            "route_digest": verified_route.decision_digest,
-            "model": price.model,
-            "reasoning_effort": verified_route.reasoning_effort,
-            "input_token_ceiling": input_ceiling,
-            "output_token_ceiling": output_ceiling,
-            "input_price_per_million_usd": price.input_per_million_usd,
-            "output_price_per_million_usd": price.output_per_million_usd,
-            "cost_ceiling_usd": cost_ceiling,
-            "requested_by": self.owner_id,
-            "created_at": created_at,
-            "expires_at": created_at + timedelta(minutes=15),
-        }
+        proposal_id = f"live_proposal_{uuid.uuid4().hex}"
+        expires_at = created_at + timedelta(minutes=15)
         unsigned = LiveRunProposal.model_construct(
-            **values,
+            id=proposal_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            model=price.model,
+            reasoning_effort=CREATOR_REASONING_EFFORT,
+            input_token_ceiling=input_ceiling,
+            output_token_ceiling=output_ceiling,
+            input_price_per_million_usd=price.input_per_million_usd,
+            output_price_per_million_usd=price.output_per_million_usd,
+            cost_ceiling_usd=cost_ceiling,
+            requested_by=self.owner_id,
+            created_at=created_at,
+            expires_at=expires_at,
             proposal_digest="0" * 64,
         )
         proposal = LiveRunProposal(
-            **values,
+            id=proposal_id,
+            brief_digest=request.envelope.brief_digest,
+            route_digest=verified_route.decision_digest,
+            model=price.model,
+            reasoning_effort=CREATOR_REASONING_EFFORT,
+            input_token_ceiling=input_ceiling,
+            output_token_ceiling=output_ceiling,
+            input_price_per_million_usd=price.input_per_million_usd,
+            output_price_per_million_usd=price.output_per_million_usd,
+            cost_ceiling_usd=cost_ceiling,
+            requested_by=self.owner_id,
+            created_at=created_at,
+            expires_at=expires_at,
             proposal_digest=content_digest(
                 unsigned.model_dump(mode="json", exclude={"proposal_digest"})
             ),
@@ -387,9 +429,16 @@ class LiveCreatorController:
             raise LiveModelApprovalError("live run inputs are not bound to the proposal")
         if verified_route.selected_tier is None:
             raise LiveModelApprovalError("live route no longer selects a model")
-        expected_price = MODEL_PRICES[verified_route.selected_tier]
-        if proposal.model != expected_price.model:
-            raise LiveModelApprovalError("live proposal model no longer matches its route")
+        expected_price = CREATOR_MODEL_PRICE
+        if (
+            proposal.model != expected_price.model
+            or proposal.reasoning_effort != CREATOR_REASONING_EFFORT
+            or proposal.input_price_per_million_usd != expected_price.input_per_million_usd
+            or proposal.output_price_per_million_usd != expected_price.output_per_million_usd
+        ):
+            raise LiveModelApprovalError(
+                "live proposal no longer matches the canonical model policy and price catalog"
+            )
         if datetime.now(UTC) >= proposal.expires_at:
             raise LiveModelApprovalError("live proposal has expired")
 

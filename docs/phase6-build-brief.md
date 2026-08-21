@@ -129,3 +129,4 @@ offline concurrency/adversarial tests. Add a provider-hosted network-disabled sy
 probe, but do not upload or mutate real source and do not mark repository execution connected.
 Every success claim must be backed by deterministic checks or provider observations. Never expose,
 log, return, or commit credentials.
+

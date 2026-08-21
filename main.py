@@ -23,6 +23,10 @@ from liltweak.models import (
     RepositoryRef,
     TaskCreate,
 )
+from liltweak.reasoning_policy import (
+    REASONING_POLICY,
+    require_primary_engineering_model,
+)
 from liltweak.recovery import RecoveryCapture
 from liltweak.repository import RepositoryInspector
 from liltweak.service import LilTweakService
@@ -123,12 +127,18 @@ def _create_smoke_repository(workspace_root: Path) -> None:
     )
 
 
+def _live_smoke_model_id() -> str:
+    return require_primary_engineering_model(
+        os.getenv("LILTWEAK_MODEL", REASONING_POLICY.primary_model.value)
+    ).value
+
+
 async def run_smoke(live: bool) -> None:
     with tempfile.TemporaryDirectory(prefix="liltweak-smoke-") as directory:
         workspace_root = Path(directory) / "workspace"
         workspace_root.mkdir()
         _create_smoke_repository(workspace_root)
-        planner = OpenAIPlanner(os.getenv("LILTWEAK_MODEL", "gpt-5.6-luna"))
+        planner: DeterministicPlanner | OpenAIPlanner = OpenAIPlanner(_live_smoke_model_id())
         if not live:
             planner = DeterministicPlanner()
         service = _service(planner, Path(directory) / "smoke.db", workspace_root)
@@ -258,7 +268,7 @@ def main() -> None:
         settings = Settings.from_env()
         uvicorn.run(
             create_app(settings=settings),
-            host="0.0.0.0",
+            host=settings.server_host,
             port=int(port),
             log_level="info",
         )

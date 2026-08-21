@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import subprocess
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -11,15 +12,27 @@ from pydantic import ValidationError
 
 from liltweak.creator_contract import content_digest
 from liltweak.runner_qualification import (
+    LOCAL_RUNNER_PROBE_GATES,
     QUALIFICATION_SUITE_DIGEST,
     REQUIRED_QUALIFICATION_CHECKS,
+    LocalCommandProbeObservation,
+    LocalExecutableObservation,
+    LocalKernelObservation,
+    LocalRunnerCapabilityReport,
+    LocalRunnerConnectionAuthorization,
+    LocalRunnerExecutionBindings,
+    LocalRunnerProbeExpectations,
+    LocalRunnerQualificationProbe,
+    LocalRuntimeRootObservation,
     QualificationObservation,
     RunnerQualificationChallenge,
+    RunnerQualificationDecision,
     RunnerQualificationExpectations,
     RunnerQualificationVerifier,
     SignedRunnerQualificationAttestation,
     build_runner_qualification_challenge,
     encode_runner_signature,
+    local_runner_authorization_signature_message,
     runner_key_id,
     runner_qualification_challenge_signature_message,
     runner_qualification_signature_message,
@@ -621,3 +634,385 @@ def test_naive_times_and_long_lifetimes_are_rejected() -> None:
             issued_at=NOW,
             lifetime_seconds=601,
         )
+
+
+def local_bindings() -> LocalRunnerExecutionBindings:
+    return LocalRunnerExecutionBindings(
+        repository_id=REPOSITORY_ID,
+        repository_commit=COMMIT,
+        repository_tree=TREE,
+        source_snapshot_digest="7" * 64,
+        task_id="task:local-runner",
+        plan_digest="8" * 64,
+        execution_attempt=1,
+        sandbox_profile_digest=PROFILE,
+        resource_profile_digest="9" * 64,
+    )
+
+
+def passing_local_report(
+    probe: LocalRunnerQualificationProbe,
+) -> LocalRunnerCapabilityReport:
+    executables = tuple(
+        LocalExecutableObservation(
+            role=role,
+            path=f"/trusted/{role}",
+            present=True,
+            trusted=True,
+            sha256=str(index) * 64,
+            expected_sha256=str(index) * 64,
+            version="trusted 1.0" if role in {"runtime", "limiter"} else None,
+            version_probe="passed" if role in {"runtime", "limiter"} else "not_run",
+            version_output_digest=(str(index + 4) * 64 if role in {"runtime", "limiter"} else None),
+        )
+        for index, role in enumerate(("runtime", "limiter", "qualifier", "destroyer"), 1)
+    )
+    runtime_root = LocalRuntimeRootObservation(
+        path="/trusted/rootfs",
+        present=True,
+        trusted=True,
+        manifest_path="/trusted/rootfs/.liltweak-rootfs-manifest.json",
+        manifest_sha256="5" * 64,
+        expected_manifest_sha256="5" * 64,
+    )
+    kernel = LocalKernelObservation(
+        system="Linux",
+        no_new_privileges=True,
+        seccomp_mode=2,
+        cap_sys_admin_effective=False,
+        cgroup_v2_present=True,
+        cgroup_v2_delegated=True,
+    )
+    namespace_probe = LocalCommandProbeObservation(
+        command_digest="6" * 64,
+        exit_code=0,
+        timed_out=False,
+        stdout_digest="7" * 64,
+        stderr_digest=hashlib.sha256(b"").hexdigest(),
+        stdout_bytes=5,
+        stderr_bytes=0,
+        result_code="passed",
+    )
+    gates = tuple(probe._gate(gate_id, True, "unused") for gate_id in LOCAL_RUNNER_PROBE_GATES)
+    values = {
+        "provider_id": probe.expectations.provider_id,
+        "expectations_digest": content_digest(probe.expectations.model_dump(mode="json")),
+        "executables": executables,
+        "runtime_root": runtime_root,
+        "kernel": kernel,
+        "namespace_probe": namespace_probe,
+        "gates": gates,
+        "blockers": (),
+        "host_qualified": True,
+    }
+    draft = LocalRunnerCapabilityReport.model_construct(**values, report_digest="0" * 64)
+    return LocalRunnerCapabilityReport(
+        **values,
+        report_digest=content_digest(draft.model_dump(mode="json", exclude={"report_digest"})),
+    )
+
+
+def signed_local_authorization(
+    *,
+    owner_key: Ed25519PrivateKey,
+    report: LocalRunnerCapabilityReport,
+    qualification: RunnerQualificationDecision,
+    bindings: LocalRunnerExecutionBindings,
+) -> LocalRunnerConnectionAuthorization:
+    owner_public = public_bytes(owner_key)
+    values = {
+        "authorization_id": "lra_" + ("a" * 32),
+        "owner_key_id": runner_key_id(owner_public),
+        "provider_id": report.provider_id,
+        "report_digest": report.report_digest,
+        "qualification_id": qualification.qualification_id,
+        "qualification_evidence_digest": qualification.evidence_digest,
+        "bindings": bindings,
+        "bindings_digest": bindings.bindings_digest,
+        "nonce": "b" * 64,
+        "generation": 1,
+        "issued_at": NOW,
+        "expires_at": NOW + timedelta(minutes=5),
+    }
+    draft = LocalRunnerConnectionAuthorization.model_construct(
+        **values,
+        authorization_digest="0" * 64,
+        signature="A" * 86,
+    )
+    digest = content_digest(
+        draft.model_dump(
+            mode="json",
+            exclude={"authorization_digest", "signature"},
+        )
+    )
+    unsigned = LocalRunnerConnectionAuthorization.model_construct(
+        **values,
+        authorization_digest=digest,
+        signature="A" * 86,
+    )
+    return LocalRunnerConnectionAuthorization(
+        **values,
+        authorization_digest=digest,
+        signature=encode_runner_signature(
+            owner_key.sign(local_runner_authorization_signature_message(unsigned))
+        ),
+    )
+
+
+def test_local_probe_report_is_deterministic_and_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing = "/definitely-missing-liltweak-runner"
+    expectations = LocalRunnerProbeExpectations(
+        provider_id="bubblewrap-local-v1",
+        runtime_path=f"{missing}/bwrap",
+        limiter_path=f"{missing}/prlimit",
+        qualifier_path=f"{missing}/collect",
+        destroyer_path=f"{missing}/destroy",
+        runtime_root=f"{missing}/rootfs",
+        runtime_sha256="1" * 64,
+        limiter_sha256="2" * 64,
+        qualifier_sha256="3" * 64,
+        destroyer_sha256="4" * 64,
+        runtime_manifest_sha256="5" * 64,
+    )
+    probe = LocalRunnerQualificationProbe(expectations)
+    kernel = LocalKernelObservation(
+        system="Linux",
+        no_new_privileges=True,
+        seccomp_mode=2,
+        cap_sys_admin_effective=False,
+        cgroup_v2_present=True,
+        cgroup_v2_delegated=False,
+    )
+    monkeypatch.setattr(probe, "_observe_kernel", lambda: kernel)
+
+    first = probe.collect()
+    second = probe.collect()
+
+    assert first == second
+    assert first.report_digest == second.report_digest
+    assert first.host_qualified is False
+    assert first.blockers == (
+        "runtime_executable_missing",
+        "runtime_sha256_unavailable",
+        "runtime_version_probe_not_run",
+        "limiter_executable_missing",
+        "limiter_sha256_unavailable",
+        "limiter_version_probe_not_run",
+        "qualifier_executable_missing",
+        "qualifier_sha256_unavailable",
+        "destroyer_executable_missing",
+        "destroyer_sha256_unavailable",
+        "runtime_root_missing",
+        "runtime_manifest_missing_or_untrusted",
+        "cgroup_v2_not_delegated",
+        "bubblewrap_namespace_probe_not_run_untrusted",
+    )
+
+
+def test_local_probe_never_qualifies_host_with_effective_cap_sys_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expectations = LocalRunnerProbeExpectations(
+        provider_id="bubblewrap-local-v1",
+        runtime_sha256="1" * 64,
+        limiter_sha256="2" * 64,
+        qualifier_sha256="3" * 64,
+        destroyer_sha256="4" * 64,
+        runtime_manifest_sha256="5" * 64,
+    )
+    probe = LocalRunnerQualificationProbe(expectations)
+    role_hashes = {
+        "runtime": expectations.runtime_sha256,
+        "limiter": expectations.limiter_sha256,
+        "qualifier": expectations.qualifier_sha256,
+        "destroyer": expectations.destroyer_sha256,
+    }
+
+    def passing_executable(role, path, expected_sha256, *, observe_version):
+        assert expected_sha256 == role_hashes[role]
+        return LocalExecutableObservation(
+            role=role,
+            path=path,
+            present=True,
+            trusted=True,
+            sha256=expected_sha256,
+            expected_sha256=expected_sha256,
+            version="trusted 1.0" if observe_version else None,
+            version_probe="passed" if observe_version else "not_run",
+            version_output_digest="6" * 64 if observe_version else None,
+        )
+
+    monkeypatch.setattr(probe, "_observe_executable", passing_executable)
+    monkeypatch.setattr(
+        probe,
+        "_observe_runtime_root",
+        lambda: LocalRuntimeRootObservation(
+            path=expectations.runtime_root,
+            present=True,
+            trusted=True,
+            manifest_path=(f"{expectations.runtime_root}/{expectations.runtime_manifest_name}"),
+            manifest_sha256=expectations.runtime_manifest_sha256,
+            expected_manifest_sha256=expectations.runtime_manifest_sha256,
+        ),
+    )
+    monkeypatch.setattr(
+        probe,
+        "_observe_kernel",
+        lambda: LocalKernelObservation(
+            system="Linux",
+            no_new_privileges=True,
+            seccomp_mode=2,
+            cap_sys_admin_effective=True,
+            cgroup_v2_present=True,
+            cgroup_v2_delegated=True,
+        ),
+    )
+    monkeypatch.setattr(
+        probe,
+        "_namespace_probe",
+        lambda _observed: LocalCommandProbeObservation(
+            command_digest="7" * 64,
+            exit_code=0,
+            timed_out=False,
+            stdout_digest="8" * 64,
+            stderr_digest=hashlib.sha256(b"").hexdigest(),
+            stdout_bytes=5,
+            stderr_bytes=0,
+            result_code="passed",
+        ),
+    )
+
+    report = probe.collect()
+
+    assert report.host_qualified is False
+    assert report.blockers == ("kernel_cap_sys_admin_effective",)
+    cap_gate = next(gate for gate in report.gates if gate.gate_id == "kernel.cap_sys_admin_absent")
+    assert cap_gate.passed is False
+    assert cap_gate.failure_code == "kernel_cap_sys_admin_effective"
+
+
+def test_local_probe_subprocess_never_uses_a_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    probe = LocalRunnerQualificationProbe(
+        LocalRunnerProbeExpectations(provider_id="bubblewrap-local-v1")
+    )
+    observed: dict[str, object] = {}
+
+    class FakeProcess:
+        pid = 12_345
+        returncode = 0
+
+        @staticmethod
+        def communicate(*, timeout: int) -> tuple[bytes, bytes]:
+            observed["timeout"] = timeout
+            return b"probe 1.0\n", b""
+
+    def fake_popen(command: tuple[str, ...], **kwargs: object) -> FakeProcess:
+        observed["command"] = command
+        observed["shell"] = kwargs.get("shell")
+        observed["start_new_session"] = kwargs.get("start_new_session")
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    result = probe._run_bounded(("/trusted/probe", "--version"))
+
+    assert observed == {
+        "command": ("/trusted/probe", "--version"),
+        "shell": False,
+        "start_new_session": True,
+        "timeout": 3,
+    }
+    assert result.exit_code == 0
+    assert result.timed_out is False
+
+
+def test_local_connection_requires_all_gates_and_independent_owner_signature() -> None:
+    probe = LocalRunnerQualificationProbe(
+        LocalRunnerProbeExpectations(provider_id="bubblewrap-local-v1")
+    )
+    report = passing_local_report(probe)
+    qualification = RunnerQualificationDecision(
+        qualification_id="rq_" + ("c" * 32),
+        evidence_digest="d" * 64,
+        qualified=True,
+        connection_authorized=False,
+        failure_codes=(),
+        verified_at=NOW,
+    )
+    bindings = local_bindings()
+    owner_key = Ed25519PrivateKey.from_private_bytes(b"\x44" * 32)
+    owner_public = public_bytes(owner_key)
+    authorization = signed_local_authorization(
+        owner_key=owner_key,
+        report=report,
+        qualification=qualification,
+        bindings=bindings,
+    )
+
+    first = probe.decide(
+        report=report,
+        qualification=qualification,
+        authorization=authorization,
+        expected_bindings=bindings,
+        trusted_owner_public_keys={runner_key_id(owner_public): owner_public},
+        now=NOW + timedelta(minutes=1),
+    )
+    second = probe.decide(
+        report=report,
+        qualification=qualification,
+        authorization=authorization,
+        expected_bindings=bindings,
+        trusted_owner_public_keys={runner_key_id(owner_public): owner_public},
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert first == second
+    assert first.connection_authorized is True
+    assert first.qualification_verified is True
+    assert first.authorization_verified is True
+    assert first.failure_codes == ()
+
+    self_authorized = probe.decide(
+        report=report,
+        qualification=qualification,
+        authorization=authorization,
+        expected_bindings=bindings,
+        trusted_owner_public_keys={runner_key_id(owner_public): owner_public},
+        forbidden_owner_key_ids={runner_key_id(owner_public)},
+        now=NOW + timedelta(minutes=1),
+    )
+    assert self_authorized.connection_authorized is False
+    assert "candidate_or_runner_self_authorization" in self_authorized.failure_codes
+
+    replayed = probe.decide(
+        report=report,
+        qualification=qualification,
+        authorization=authorization,
+        expected_bindings=bindings,
+        trusted_owner_public_keys={runner_key_id(owner_public): owner_public},
+        used_authorization_ids={authorization.authorization_id},
+        now=NOW + timedelta(minutes=1),
+    )
+    assert replayed.connection_authorized is False
+    assert "authorization_replayed" in replayed.failure_codes
+
+
+def test_real_local_probe_cannot_connect_without_external_evidence() -> None:
+    probe = LocalRunnerQualificationProbe(
+        LocalRunnerProbeExpectations(provider_id="bubblewrap-local-v1")
+    )
+    report = probe.collect()
+    decision = probe.decide(
+        report=report,
+        qualification=None,
+        authorization=None,
+        expected_bindings=local_bindings(),
+        trusted_owner_public_keys={},
+        now=NOW,
+    )
+
+    assert decision.connection_authorized is False
+    assert "independent_qualification_missing" in decision.failure_codes
+    assert "signed_connection_authorization_missing" in decision.failure_codes
+    assert report.report_digest

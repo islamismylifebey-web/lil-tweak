@@ -32,3 +32,4 @@ Be compact enough to complete the schema inside the harness limit. Keep the func
 precise falsifying check over several overlapping checks.
 
 The authority statement is fixed by the schema and must remain unchanged.
+

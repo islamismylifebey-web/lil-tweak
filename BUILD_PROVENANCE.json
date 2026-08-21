@@ -1,0 +1,79 @@
+{
+  "baseline_commit": "373400cb2b459dbf8a37dacceb0d3d1186eef949",
+  "branch": "codex/lil-tweak-live-workbench-build",
+  "build_system": {
+    "backend_path": [
+      "."
+    ],
+    "build_backend": "build_backend",
+    "requires": [
+      "setuptools==82.0.1",
+      "wheel==0.47.0"
+    ]
+  },
+  "builder": "Lil Tweak Master Builder local private workspace",
+  "candidate_commit": "recorded_externally_after_freeze",
+  "candidate_commit_recorded_externally": false,
+  "environment": {
+    "SOURCE_DATE_EPOCH": "1735689600",
+    "platform": "linux-x86_64",
+    "python": "3.12.13",
+    "uv": "uv 0.11.33 (x86_64-unknown-linux-gnu)"
+  },
+  "evidence_artifacts": [
+    {
+      "byte_count": 2261,
+      "path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
+      "sha256": "b6c0d968cbc0d2a34a441c8750cfd7f24c3ff9ca432343abbc392ffa2c950ecd"
+    },
+    {
+      "byte_count": 12928,
+      "path": "LICENSE_INVENTORY.json",
+      "sha256": "ff8c73785f64cd07471546e4b0d97f9a81ba40a67980bb06312840794ea9ec19"
+    },
+    {
+      "byte_count": 152666,
+      "path": "SUPPLY_CHAIN_SBOM.json",
+      "sha256": "0eb45379e4d65d7e483582f6072f9d34e3c033d0cc986deb6ff7516020ee194a"
+    }
+  ],
+  "gcp_access_performed": false,
+  "materials": [
+    {
+      "path": "MANIFEST.in",
+      "sha256": "5afbe4dd86296fdb2c26a80f3d8f0e8545c10beef91c4f235e1e7c10ba81ca94"
+    },
+    {
+      "path": "build_backend.py",
+      "sha256": "0bb3c129c559b59730d1c4930eafbfbdc40f8091bafaf0b90dc89e44bb0e12e9"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "55db52a8e0d99dc180f62e9c485fb5a849abdce8fbe82a1739243900635d5b9a"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "45c86942e8d52408bbae05feb5a7c16d6851c118b47fa790bfefc0921e3c25a3"
+    }
+  ],
+  "observation_time": "recorded externally with exact-commit verification",
+  "public_deployment_performed": false,
+  "repository": "github:islamismylifebey-web/lil-tweak",
+  "reproducible_build_epoch": "2025-01-01T00:00:00+00:00",
+  "runner_image_built": false,
+  "schema_version": "build-provenance-v1",
+  "subjects": [
+    {
+      "artifact_type": "wheel",
+      "byte_count": 320534,
+      "path": "lil_tweak_engine-0.7.1-py3-none-any.whl",
+      "sha256": "73bdd89c96890d4de2216f6f819e829c0adf1ad0303f70c519e60798d980faf9"
+    },
+    {
+      "artifact_type": "sdist",
+      "byte_count": 421204,
+      "path": "lil_tweak_engine-0.7.1.tar.gz",
+      "sha256": "6f94876e6d493de51535d73b5a3b8a064c3d585a533ca369ae10f3f2d6ae945d"
+    }
+  ]
+}

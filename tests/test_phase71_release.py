@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -58,11 +59,51 @@ def test_phase71_release_versions_are_consistent() -> None:
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification — 0.7.1\n"
     )
     assert changelog.startswith(
-        "# Changelog\n\n## 0.7.1 — Automatic Verification and Dormant Runner Qualification\n"
+        "# Changelog\n\n## Unreleased — Live Workbench and Bounded Execution Bridge\n"
     )
+    assert "## 0.7.1 — Automatic Verification and Dormant Runner Qualification\n" in changelog
     assert execution_manifest.startswith(
         "# Lil Tweak Automatic Verification and Dormant Runner Qualification 0.7.1\n"
     )
+    assert "`FAILED — RELEASE GATES NOT MET`." in readme
+
+
+def test_distribution_declares_complete_runtime_payload_and_locked_build_tools() -> None:
+    configuration = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    build_system = configuration["build-system"]
+    setuptools = configuration["tool"]["setuptools"]
+    discovery = setuptools["packages"]["find"]
+    package_data = setuptools["package-data"]
+    dev_dependencies = set(configuration["dependency-groups"]["dev"])
+
+    assert set(discovery["include"]) == {"docs*", "liltweak*", "migrations*", "web*"}
+    assert set(discovery["exclude"]) == {"evals*", "scripts*", "tests*"}
+    assert set(package_data["docs"]) == {
+        "creator-live-prompt.md",
+        "engineering-prompt.md",
+        "prompt.md",
+        "workbench-agent-prompt.md",
+    }
+    assert package_data["migrations"] == ["*.sql"]
+    assert set(package_data["web.workbench"]) == {"*.css", "*.html", "*.js"}
+    assert build_system["build-backend"] == "build_backend"
+    assert build_system["backend-path"] == ["."]
+    assert {
+        "mypy==2.3.0",
+        "setuptools==82.0.1",
+        "types-setuptools==82.0.0.20260518",
+        "wheel==0.47.0",
+    } <= dev_dependencies
+    assert configuration["tool"]["mypy"] == {
+        "python_version": "3.12",
+        "files": ["liltweak", "scripts", "main.py", "build_backend.py"],
+        "plugins": ["pydantic.mypy"],
+        "strict": True,
+        "show_error_codes": True,
+        "pretty": False,
+        "warn_unused_configs": True,
+        "incremental": False,
+    }
 
 
 def test_phase71_preserves_schema_v2() -> None:
@@ -108,6 +149,9 @@ def test_phase71_preserves_all_phase7_http_operations(tmp_path: Path) -> None:
 
 def test_standard_ci_is_read_only_secretless_and_offline() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    wheel_required_match = re.search(r"(?ms)^          required = \{\n.*?^          \}", workflow)
+    assert wheel_required_match is not None
+    wheel_required = wheel_required_match.group(0)
 
     assert "pull_request_target" not in workflow
     assert "permissions:\n  contents: read" in workflow
@@ -115,12 +159,44 @@ def test_standard_ci_is_read_only_secretless_and_offline() -> None:
     assert 'OPENAI_API_KEY: ""' in workflow
     assert 'LILTWEAK_LIVE_MODEL_ENABLED: "false"' in workflow
     assert 'LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"' in workflow
+    assert 'SOURCE_DATE_EPOCH: "1735689600"' in workflow
+    assert 'version: "0.11.33"' in workflow
+    assert 'test "$(uv --version)" = "uv 0.11.33"' in workflow
     assert "--live" not in workflow
     assert "run_phase6_live.py" not in workflow
     assert "run_phase7_snapshot_benchmark.py" not in workflow
     assert "persist-credentials: false" in workflow
     assert "uv lock --check --offline" in workflow
     assert "uv run --no-sync --offline pytest" in workflow
+    assert "uv run --no-sync --offline mypy" in workflow
+    for required_path in (
+        "docs/creator-live-prompt.md",
+        "docs/engineering-prompt.md",
+        "docs/prompt.md",
+        "docs/workbench-agent-prompt.md",
+        "migrations/0008_workbench.sql",
+        "migrations/0009_canonical_control_plane.sql",
+        "migrations/0010_workbench_canonical_authority.sql",
+        "migrations/0011_canonical_active_cancellation.sql",
+        "web/workbench/app.js",
+        "web/workbench/index.html",
+        "web/workbench/styles.css",
+    ):
+        assert f'"{required_path}"' in workflow
+    assert 'name.startswith(("evals/", "scripts/", "tests/"))' in workflow
+    assert '"migrations/", "scripts/"' not in workflow
+    assert 'PYTHONPATH="$RUNNER_TEMP/wheel-target"' in workflow
+    assert 'WorkbenchStore(database, signing_key=b"w" * 32)' in workflow
+    assert '--wheel-artifact "$wheel_artifact"' in workflow
+    assert '--sdist-artifact "$sdist_artifact"' in workflow
+    assert 'cmp --silent "$first_wheel" "$repeat_wheel"' in workflow
+    assert 'cmp --silent "$first_sdist" "$repeat_sdist"' in workflow
+    assert 'cmp --silent "$wheel_artifact" "$rebuilt_wheel"' in workflow
+    assert '"MANIFEST.in"' not in wheel_required
+    assert '"build_backend.py"' not in wheel_required
+    assert "package_artifact_subjects(wheel, sdist)" in workflow
+    assert 'capability["counts"] == {"PASS": 10, "BLOCKED": 10, "FAIL": 0}' in workflow
+    assert 'capability["summary"]' not in workflow
     assert "git diff --exit-code" in workflow
     uses = [
         line.strip().removeprefix("uses: ")

@@ -108,3 +108,4 @@ Creator Model.
 The next paid model or sandbox probe requires a new digest-bound proposal and exact Founder spend
 approval. Real repository execution requires a later, separately proven isolation and execution
 phase.
+

@@ -48,3 +48,4 @@ control, live cancellation, remote attestation, or sandbox destruction on a capa
 
 The deterministic 120-case Phase 7 suite uses fixture evidence to test control-plane verification;
 it is not represented as operating-system isolation evidence.
+

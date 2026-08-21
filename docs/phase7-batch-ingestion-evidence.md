@@ -74,3 +74,4 @@ These timings describe local filesystem and Git process behavior, not production
 model, network, or sandbox latency. Performance wall-clock thresholds are intentionally excluded
 from the test suite because host load is variable; deterministic process topology and protocol
 invariants are tested instead. Deadline enforcement retains focused bounded-time regressions.
+

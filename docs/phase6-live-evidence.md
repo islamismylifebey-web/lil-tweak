@@ -34,3 +34,4 @@ requires a new digest-bound proposal and Founder approval; none was attempted fo
 The adapter is implemented with network disabled and synthetic inputs only. The probe was not run:
 the hosted container has a $0.03 minimum charge, which did not fit the remaining announced spend
 ceiling. Real repository execution remains disconnected and unproven.
+

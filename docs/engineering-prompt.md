@@ -50,3 +50,4 @@ Rules:
   statements are not proof.
 - The proof tests must collectively cover every `required_invariant` identifier in the packet.
 - Return only the structured output required by the application.
+

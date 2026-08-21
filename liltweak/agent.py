@@ -2,11 +2,49 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from agents import Agent, ModelSettings, RunConfig, Runner
+from openai.types.shared.reasoning import Reasoning
 
 from .models import PlanResult, TaskCreate
+from .reasoning_contract import ReasoningRole
+from .reasoning_policy import (
+    ReasoningEffort,
+    ReasoningRequestMode,
+    profile_for_role,
+    require_primary_engineering_model,
+)
+
+_PLANNING_PROFILE = profile_for_role(ReasoningRole.PLANNER)
+
+
+def _provider_reasoning_mode(
+    mode: ReasoningRequestMode,
+) -> Literal["standard", "pro"]:
+    if mode == ReasoningRequestMode.STANDARD:
+        return "standard"
+    if mode == ReasoningRequestMode.PRO:
+        return "pro"
+    raise AssertionError("unsupported planning reasoning mode")
+
+
+def _provider_reasoning_effort(
+    effort: ReasoningEffort,
+) -> Literal["none", "low", "medium", "high", "xhigh", "max"]:
+    if effort == ReasoningEffort.NONE:
+        return "none"
+    if effort == ReasoningEffort.LOW:
+        return "low"
+    if effort == ReasoningEffort.MEDIUM:
+        return "medium"
+    if effort == ReasoningEffort.HIGH:
+        return "high"
+    if effort == ReasoningEffort.XHIGH:
+        return "xhigh"
+    if effort == ReasoningEffort.MAX:
+        return "max"
+    raise AssertionError("unsupported planning reasoning effort")
 
 
 class PlanningProviderError(RuntimeError):
@@ -91,17 +129,26 @@ class OpenAIPlanner:
     paid_provider = True
 
     def __init__(self, model: str, prompt_path: Path | None = None) -> None:
+        self.model_id = require_primary_engineering_model(model).value
         prompt_path = prompt_path or Path(__file__).parents[1] / "docs" / "prompt.md"
         instructions = prompt_path.read_text(encoding="utf-8")
         self._agent: Agent = Agent(
             name="Lil Tweak",
             instructions=instructions,
-            model=model,
+            model=self.model_id,
             model_settings=ModelSettings(
                 max_tokens=4_000,
+                reasoning=Reasoning(
+                    mode=_provider_reasoning_mode(_PLANNING_PROFILE.variant.request_mode),
+                    effort=_provider_reasoning_effort(_PLANNING_PROFILE.variant.effort),
+                    context="all_turns",
+                    summary="auto",
+                ),
                 include_usage=True,
                 store=False,
             ),
+            tools=[],
+            handoffs=[],
             output_type=PlanResult,
         )
 

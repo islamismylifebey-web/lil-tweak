@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import secrets
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -11,10 +13,13 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
-from .agent import OpenAIPlanner, PlanningProviderError
+from .agent import DeterministicPlanner, PlanningProviderError
 from .approvals import ApprovalError
 from .artifacts import ArtifactIntegrityError, EncryptedArtifactStore
+from .canonical_lifecycle import CapabilityName, CapabilityStatus
 from .config import Settings
 from .costs import BudgetExceededError, CostGuard
 from .creator import (
@@ -62,7 +67,6 @@ from .live_model import (
     LiveModelApprovalError,
     LiveModelDisabledError,
     LiveModelProviderError,
-    OpenAICreatorModelProvider,
 )
 from .models import (
     ApprovalDecisionRequest,
@@ -75,6 +79,10 @@ from .models import (
     RepositoryInspection,
     TaskCreate,
 )
+from .planning_chat import PlanningChatService
+from .project_workspace import ProjectWorkspaceStore
+from .reasoning_policy import ReasoningProfileName
+from .reasoning_provider import OpenAIResponsesReasoningProvider
 from .recovery import RecoveryCapture, RecoveryError
 from .repository import RepositoryAccessError, RepositoryInspectionError, RepositoryInspector
 from .service import (
@@ -90,6 +98,21 @@ from .store import (
     SQLiteStore,
     StoreStateConflictError,
 )
+from .workbench import WorkbenchController
+from .workbench_agent import (
+    CanonicalWorkbenchModelAdapter,
+    DisconnectedWorkbenchModelAdapter,
+    PersistentModelCallAdmission,
+)
+from .workbench_api import mount_workbench
+from .workbench_executor import (
+    BoundedToolExecutor,
+    DisconnectedProcessTransport,
+    TaskWorkspaceManager,
+)
+from .workbench_policy import ToolPolicyBroker
+from .workbench_repository import WorkbenchRepositoryRegistry
+from .workbench_store import WorkbenchStore
 
 
 class ApiModel(BaseModel):
@@ -112,6 +135,64 @@ def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, ob
             raise _DuplicateJsonKeyError
         result[key] = value
     return result
+
+
+def _private_request_host_allowed(host_header: str, settings: Settings) -> bool:
+    """Accept only the configured loopback name (and testserver in test fixtures)."""
+    try:
+        parsed = urlsplit(f"//{host_header}", allow_fragments=False)
+        hostname = parsed.hostname
+        if (
+            not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+        ):
+            return False
+        if parsed.port is not None and not 1 <= parsed.port <= 65_535:
+            return False
+    except ValueError:
+        return False
+    configured = settings.server_host.casefold().strip("[]")
+    observed = hostname.casefold().strip("[]")
+    allowed = {configured}
+    try:
+        if ipaddress.ip_address(configured).is_loopback:
+            allowed.add("localhost")
+    except ValueError:
+        pass
+    if settings.environment == "test":
+        allowed.add("testserver")
+    return observed in allowed
+
+
+def _private_request_origin_allowed(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if origin is None:
+        return True
+    try:
+        parsed = urlsplit(origin)
+        request_host = urlsplit(f"//{request.headers.get('host', '')}", allow_fragments=False)
+        origin_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        request_port = request_host.port or (443 if request.url.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or not parsed.hostname
+    ):
+        return False
+    return (
+        parsed.scheme == request.url.scheme
+        and parsed.hostname.casefold() == (request_host.hostname or "").casefold()
+        and origin_port == request_port
+    )
 
 
 def _safe_match(actual: str, expected: str) -> bool:
@@ -139,7 +220,7 @@ def build_default_service(settings: Settings) -> LilTweakService:
         )
     return LilTweakService(
         store=store,
-        planner=OpenAIPlanner(settings.model),
+        planner=DeterministicPlanner(),
         cost_guard=CostGuard(
             monthly_limit_usd=settings.monthly_budget_usd,
             job_default_limit_usd=settings.job_hard_limit_usd,
@@ -158,6 +239,10 @@ def create_app(
     creator_service: CreatorService | None = None,
     live_controller: LiveCreatorController | None = None,
     execution_controller: RepositoryExecutionController | None = None,
+    workbench_controller: WorkbenchController | None = None,
+    workbench_reasoning_provider: OpenAIResponsesReasoningProvider | None = None,
+    planning_chat_service: PlanningChatService | None = None,
+    project_workspace_store: ProjectWorkspaceStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     service = service or build_default_service(settings)
@@ -171,19 +256,6 @@ def create_app(
         signing_key=creator_key,
         durable_signatures=creator_key is not None,
     )
-    if live_controller is None and creator_key is not None:
-        live_controller = LiveCreatorController(
-            creator=creator_service,
-            store=service.store,
-            signing_key=creator_key,
-            provider=OpenAICreatorModelProvider(),
-            enabled=settings.live_model_enabled,
-            owner_id=settings.owner_id,
-            monthly_limit_usd=settings.live_monthly_limit_usd,
-            per_call_limit_usd=settings.live_call_limit_usd,
-            input_token_limit=settings.live_input_token_limit,
-            output_token_limit=settings.live_output_token_limit,
-        )
     bearer = HTTPBearer(auto_error=False)
 
     async def require_auth(
@@ -216,10 +288,160 @@ def create_app(
             "learning, and a disabled-by-default read-only repository execution plane."
         ),
     )
+    if settings.workbench_enabled:
+        if workbench_controller is None:
+            if creator_key is not None:
+                workbench_root_key = creator_key
+            else:
+                dev_api_key = settings.dev_api_key
+                if dev_api_key is None:
+                    raise RuntimeError("private Workbench authentication is not configured")
+                workbench_root_key = hashlib.sha256(
+                    dev_api_key.encode("utf-8") + b"LilTweakWorkbenchRootV1"
+                ).digest()
+            workbench_store = WorkbenchStore(
+                settings.database_path,
+                signing_key=hashlib.sha256(
+                    workbench_root_key + b"LilTweakWorkbenchEvidenceV1"
+                ).digest(),
+            )
+            workbench_workspaces = TaskWorkspaceManager(settings.workbench_workspace_root)
+            workbench_model = (
+                CanonicalWorkbenchModelAdapter(
+                    provider=workbench_reasoning_provider,
+                    profile_name=ReasoningProfileName(settings.workbench_reasoning_profile),
+                    input_token_ceiling=settings.workbench_input_token_limit,
+                    output_token_ceiling=settings.workbench_output_token_limit,
+                    admission=PersistentModelCallAdmission(
+                        store=workbench_store,
+                        reservation_usd=settings.workbench_cost_ceiling_usd,
+                        monthly_limit_usd=settings.workbench_monthly_limit_usd,
+                    ),
+                )
+                if settings.workbench_model_enabled and workbench_reasoning_provider is not None
+                else DisconnectedWorkbenchModelAdapter()
+            )
+            model_connected = bool(workbench_model.connected)
+            model_authorized = bool(getattr(workbench_model, "authorization_verified", False))
+            model_healthy = bool(getattr(workbench_model, "health_verified", False))
+            model_qualified = bool(getattr(workbench_model, "qualification_verified", False))
+            model_operational = bool(
+                model_connected and model_authorized and model_healthy and model_qualified
+            )
+            current_model_gate = workbench_store.canonical.capability(CapabilityName.MODEL)
+            model_status = (
+                CapabilityStatus.OPERATIONAL
+                if model_operational
+                else CapabilityStatus.BLOCKED
+                if settings.workbench_model_enabled
+                else CapabilityStatus.DISABLED_BY_POLICY
+            )
+            provider_installed = workbench_reasoning_provider is not None
+            model_detail_code = (
+                "qualified_provider_injected"
+                if model_operational
+                else "provider_not_qualified"
+                if settings.workbench_model_enabled
+                else "model_disabled_by_policy"
+            )
+            model_gate_values: dict[str, object] = {
+                "status": model_status,
+                "feature_enabled": settings.workbench_model_enabled,
+                "installed": provider_installed,
+                "configured": provider_installed,
+                "connected": model_connected,
+                "healthy": model_healthy,
+                "qualified": model_qualified,
+                "authorized": model_authorized,
+                "operational": model_operational,
+                "detail_code": model_detail_code,
+            }
+            if any(
+                getattr(current_model_gate, name) != value
+                for name, value in model_gate_values.items()
+            ):
+                workbench_store.canonical.update_capability(
+                    CapabilityName.MODEL,
+                    expected_version=current_model_gate.version,
+                    status=model_status,
+                    feature_enabled=settings.workbench_model_enabled,
+                    installed=provider_installed,
+                    configured=provider_installed,
+                    connected=model_connected,
+                    healthy=model_healthy,
+                    qualified=model_qualified,
+                    authorized=model_authorized,
+                    operational=model_operational,
+                    detail_code=model_detail_code,
+                    actor_id="factory:model_capability_sync",
+                )
+            workbench_controller = WorkbenchController(
+                creator=creator_service,
+                store=workbench_store,
+                model=workbench_model,
+                executor=BoundedToolExecutor(
+                    workbench_workspaces,
+                    DisconnectedProcessTransport(),
+                ),
+                workspaces=workbench_workspaces,
+                policy=ToolPolicyBroker(),
+                owner_id=settings.owner_id,
+                cost_ceiling_usd=settings.workbench_cost_ceiling_usd,
+                authorized_repositories=frozenset(settings.repository_mappings),
+                repository_registry=(
+                    WorkbenchRepositoryRegistry(
+                        settings.workspace_root,
+                        settings.repository_mappings,
+                    )
+                    if settings.repository_mappings
+                    else None
+                ),
+            )
+        session_key = creator_key
+        if session_key is None and settings.dev_api_key:
+            session_key = hashlib.sha256(
+                settings.dev_api_key.encode("utf-8") + b"LilTweakWorkbenchSessionV1"
+            ).digest()
+        if session_key is None:
+            session_key = secrets.token_bytes(32)
+        mount_workbench(
+            app,
+            controller=workbench_controller,
+            settings=settings,
+            session_signing_key=session_key,
+            planning_chat=planning_chat_service,
+            project_workspace=(
+                project_workspace_store or ProjectWorkspaceStore(settings.database_path)
+            ),
+        )
 
     @app.middleware("http")
-    async def private_api_headers(request: Request, call_next):
-        if request.url.path.startswith("/v1/creator/") and request.method in {
+    async def private_api_headers(
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        is_workbench_surface = request.url.path == "/workbench" or request.url.path.startswith(
+            ("/workbench/", "/v1/workbench")
+        )
+        if is_workbench_surface and not _private_request_host_allowed(
+            request.headers.get("host", ""), settings
+        ):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Private Workbench Host header is not permitted."},
+                headers={"Cache-Control": "no-store"},
+            )
+        if (
+            is_workbench_surface
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and not _private_request_origin_allowed(request)
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Private Workbench Origin is not permitted."},
+                headers={"Cache-Control": "no-store"},
+            )
+        if request.url.path.startswith(("/v1/creator/", "/v1/workbench/")) and request.method in {
             "POST",
             "PUT",
             "PATCH",
@@ -228,20 +450,36 @@ def create_app(
             if len(body) > MAX_CREATOR_REQUEST_BYTES:
                 return JSONResponse(
                     status_code=413,
-                    content={"detail": "Creator request is too large."},
+                    content={"detail": "Private API request is too large."},
                 )
-            try:
-                json.loads(body, object_pairs_hook=_reject_duplicate_json_keys)
-            except (_DuplicateJsonKeyError, json.JSONDecodeError, UnicodeDecodeError):
-                return JSONResponse(
-                    status_code=400,
-                    content={"detail": "Creator request JSON is invalid."},
-                )
+            if body:
+                try:
+                    json.loads(body, object_pairs_hook=_reject_duplicate_json_keys)
+                except (_DuplicateJsonKeyError, json.JSONDecodeError, UnicodeDecodeError):
+                    surface = (
+                        "Creator" if request.url.path.startswith("/v1/creator/") else "Workbench"
+                    )
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": f"{surface} request JSON is invalid."},
+                    )
         response = await call_next(request)
-        if request.url.path.startswith("/v1/"):
+        if request.url.path.startswith(("/v1/", "/workbench")):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Pragma"] = "no-cache"
             response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self'; "
+                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+                "base-uri 'none'; form-action 'self'"
+            )
+            if request.url.scheme == "https":
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
         return response
 
     @app.exception_handler(NotFoundError)
@@ -405,7 +643,7 @@ def create_app(
         )
 
     @app.get("/health")
-    async def health() -> dict:
+    async def health() -> dict[str, object]:
         return service.health().model_dump(mode="json")
 
     @app.get(

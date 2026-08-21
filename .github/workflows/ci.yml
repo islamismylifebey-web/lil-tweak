@@ -1,4 +1,4 @@
-name: Phase 7.1 deterministic verification
+name: Lil Tweak Master Builder deterministic verification
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   deterministic-offline:
-    name: Deterministic offline gates
+    name: Deterministic gates after locked dependency bootstrap
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -29,6 +29,7 @@ jobs:
       LC_ALL: C.UTF-8
       NO_COLOR: "1"
       GIT_TERMINAL_PROMPT: "0"
+      SOURCE_DATE_EPOCH: "1735689600"
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
@@ -52,7 +53,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.29"
+          version: "0.11.33"
           enable-cache: "false"
           download-from-astral-mirror: "false"
           add-problem-matchers: "false"
@@ -62,10 +63,113 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$(python -c 'import platform; print(platform.python_version())')" = "3.12.13"
-          test "$(uv --version)" = "uv 0.11.29"
+          test "$(uv --version)" = "uv 0.11.33"
           uv lock --check --offline
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
+          uv build --offline --out-dir "$RUNNER_TEMP/build"
+          uv build --offline --out-dir "$RUNNER_TEMP/build-repeat"
+          first_wheel="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          first_sdist="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          repeat_wheel="$(find "$RUNNER_TEMP/build-repeat" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          repeat_sdist="$(find "$RUNNER_TEMP/build-repeat" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$first_wheel"
+          test -n "$first_sdist"
+          test -n "$repeat_wheel"
+          test -n "$repeat_sdist"
+          cmp --silent "$first_wheel" "$repeat_wheel"
+          cmp --silent "$first_sdist" "$repeat_sdist"
+          uv run --no-sync --offline python - <<'PY'
+          import os
+          import shutil
+          import zipfile
+          from pathlib import Path
+
+          from scripts.generate_supply_chain_artifacts import package_artifact_subjects
+
+          build_root = Path(os.environ["RUNNER_TEMP"]) / "build"
+          wheel = next(build_root.glob("*.whl"))
+          sdist = next(build_root.glob("*.tar.gz"))
+          package_artifact_subjects(wheel, sdist)
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+              target = Path(os.environ["RUNNER_TEMP"]) / "wheel-target"
+              shutil.rmtree(target, ignore_errors=True)
+              archive.extractall(target)
+          required = {
+              "docs/creator-live-prompt.md",
+              "docs/engineering-prompt.md",
+              "docs/prompt.md",
+              "docs/workbench-agent-prompt.md",
+              "liltweak/workbench_api.py",
+              "migrations/0008_workbench.sql",
+              "migrations/0009_canonical_control_plane.sql",
+              "migrations/0010_workbench_canonical_authority.sql",
+              "migrations/0011_canonical_active_cancellation.sql",
+              "web/workbench/app.js",
+              "web/workbench/index.html",
+              "web/workbench/styles.css",
+          }
+          assert required <= names
+          assert not any(
+              name.startswith(("evals/", "scripts/", "tests/"))
+              for name in names
+          )
+          assert wheel.is_file() and sdist.is_file()
+          PY
+          repository_root="$PWD"
+          cd "$RUNNER_TEMP"
+          PYTHONPATH="$RUNNER_TEMP/wheel-target" \
+            "$repository_root/.venv/bin/python" - <<'PY'
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          import liltweak
+          from liltweak.canonical_store import MIGRATION_PATH
+          from liltweak.workbench_store import (
+              CANONICAL_BRIDGE_MIGRATION_PATH,
+              CANONICAL_CANCELLATION_MIGRATION_PATH,
+              WorkbenchStore,
+          )
+
+          package_root = Path(liltweak.__file__).resolve().parent.parent
+          expected_root = (Path(os.environ["RUNNER_TEMP"]) / "wheel-target").resolve()
+          assert package_root == expected_root
+          runtime_files = {
+              "docs/creator-live-prompt.md",
+              "docs/engineering-prompt.md",
+              "docs/prompt.md",
+              "docs/workbench-agent-prompt.md",
+              "web/workbench/app.js",
+              "web/workbench/index.html",
+              "web/workbench/styles.css",
+          }
+          assert all((package_root / relative).is_file() for relative in runtime_files)
+          assert MIGRATION_PATH == package_root / "migrations/0009_canonical_control_plane.sql"
+          assert CANONICAL_BRIDGE_MIGRATION_PATH == (
+              package_root / "migrations/0010_workbench_canonical_authority.sql"
+          )
+          assert CANONICAL_CANCELLATION_MIGRATION_PATH == (
+              package_root / "migrations/0011_canonical_active_cancellation.sql"
+          )
+
+          database = Path(os.environ["RUNNER_TEMP"]) / "wheel-workbench-smoke.db"
+          store = WorkbenchStore(database, signing_key=b"w" * 32)
+          store.close()
+          with sqlite3.connect(database) as connection:
+              migrations = {
+                  row[0]
+                  for row in connection.execute(
+                      "SELECT migration_id FROM canonical_schema_migrations"
+                  )
+              }
+          assert {
+              "0009_canonical_control_plane",
+              "0010_workbench_canonical_authority",
+              "0011_canonical_active_cancellation",
+          } <= migrations
+          PY
 
       - name: Lint and format
         shell: bash
@@ -73,6 +177,31 @@ jobs:
           set -Eeuo pipefail
           uv run --no-sync --offline ruff check .
           uv run --no-sync --offline ruff format --check .
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" \
+            uv run --no-sync --offline python -m compileall -q liltweak scripts
+          node --check web/workbench/app.js
+          node --check scripts/run_browser_acceptance.mjs
+          uv run --no-sync --offline python - <<'PY'
+          import json
+          from pathlib import Path
+
+          import yaml
+
+          for path in sorted(Path(".").rglob("*.json")):
+              if any(part in {".git", ".venv"} for part in path.parts):
+                  continue
+              json.loads(path.read_text(encoding="utf-8"))
+          for path in sorted((Path(".github") / "workflows").glob("*.y*ml")):
+              yaml.safe_load(path.read_text(encoding="utf-8"))
+          PY
+          uv run --no-sync --offline python scripts/generate_final_manifest.py \
+            --check --commit HEAD
+
+      - name: Static type check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline mypy
 
       - name: Tests
         shell: bash
@@ -94,16 +223,41 @@ jobs:
               return 1
             fi
           }
-          capture local uv run --no-sync --offline python evals/run_local.py
+          capture local env LILTWEAK_EVAL_OUTPUT="$RESULTS/local-persisted.json" \
+            uv run --no-sync --offline python evals/run_local.py
           capture gauntlet uv run --no-sync --offline python evals/run_gauntlet.py
           capture engineering uv run --no-sync --offline python \
             evals/run_engineering_trial.py --output "$RESULTS/engineering-record.json"
           capture creator uv run --no-sync --offline python \
             evals/run_creator_benchmark.py --output "$RESULTS/creator-record.json"
-          capture phase6 uv run --no-sync --offline python evals/run_phase6_offline.py
+          capture phase6 env LILTWEAK_EVAL_OUTPUT="$RESULTS/phase6-persisted.json" \
+            uv run --no-sync --offline python evals/run_phase6_offline.py
           capture phase7 uv run --no-sync --offline python evals/run_phase7_offline.py
+          capture capability uv run --no-sync --offline python \
+            scripts/lil_tweak_capability_discovery.py
           capture smoke uv run --no-sync --offline python main.py smoke
           capture creator-smoke uv run --no-sync --offline python main.py creator-smoke
+          wheel_artifact="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          sdist_artifact="$(find "$RUNNER_TEMP/build" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$wheel_artifact"
+          test -n "$sdist_artifact"
+          uv run --no-sync --offline python scripts/generate_supply_chain_artifacts.py \
+            --output-directory "$RESULTS/supply-chain" \
+            --wheel-artifact "$wheel_artifact" \
+            --sdist-artifact "$sdist_artifact" > "$RESULTS/supply-chain.json"
+          uv build --offline --wheel "$sdist_artifact" \
+            --out-dir "$RESULTS/from-sdist"
+          rebuilt_wheel="$(find "$RESULTS/from-sdist" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "$rebuilt_wheel"
+          cmp --silent "$wheel_artifact" "$rebuilt_wheel"
+          uv run --no-sync --offline python - "$rebuilt_wheel" "$sdist_artifact" <<'PY'
+          import sys
+          from pathlib import Path
+
+          from scripts.generate_supply_chain_artifacts import package_artifact_subjects
+
+          package_artifact_subjects(Path(sys.argv[1]), Path(sys.argv[2]))
+          PY
           python - <<'PY'
           import json
           import os
@@ -120,6 +274,7 @@ jobs:
           creator = load("creator")
           phase6 = load("phase6")
           phase7 = load("phase7")
+          capability = load("capability")
           smoke = load("smoke")
           creator_smoke = load("creator-smoke")
 
@@ -142,6 +297,7 @@ jobs:
           assert phase7["provider_calls"] == 0
           assert phase7["paid_calls"] == 0
           assert phase7["executions"] == 0
+          assert capability["counts"] == {"PASS": 10, "BLOCKED": 10, "FAIL": 0}
           assert smoke["execution_connected"] is False
           assert smoke["inspection_read_only"] is True
           assert smoke["recovery_source_unchanged"] is True
@@ -156,6 +312,26 @@ jobs:
           ):
               assert creator_smoke[field] is False
           print("All deterministic gates passed with zero paid/provider calls.")
+
+          security = json.loads(
+              (root / "supply-chain" / "DEPENDENCY_SECURITY_SCAN_REPORT.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert security["secret_scan"]["status"] == "PASSED"
+          assert security["secret_scan"]["release_findings"] == []
+          assert security["workflow_action_pin_scan"]["status"] == "PASSED"
+          assert security["known_vulnerability_database_scan"]["status"] == "BLOCKED"
+          assert security["runner_image_scan"]["status"] == "BLOCKED"
+          for name in (
+              "BUILD_PROVENANCE.json",
+              "SUPPLY_CHAIN_SBOM.json",
+              "LICENSE_INVENTORY.json",
+              "DEPENDENCY_SECURITY_SCAN_REPORT.json",
+          ):
+              assert (root / "supply-chain" / name).read_bytes() == Path(name).read_bytes(), (
+                  f"committed supply-chain artifact is stale: {name}"
+              )
           PY
 
       - name: Source tree remained unchanged
@@ -165,3 +341,7 @@ jobs:
           git diff --check
           git diff --exit-code
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test -z "$(find liltweak scripts evals -type d -name __pycache__ -print -quit)"
+          test -z "$(find liltweak scripts evals -type f -name '*.py[co]' -print -quit)"
+          test ! -e evals/results/latest.json
+          test ! -e evals/results/phase6-offline-latest.json

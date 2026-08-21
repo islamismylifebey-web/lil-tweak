@@ -95,3 +95,4 @@ aggregate tenant quotas, an external anti-rollback evidence checkpoint, rate lim
 sandboxed execution runner, directory-descriptor-pinned artifact publication, durable artifact
 metadata, enforced expiry, aggregate resource ceilings, defense-in-depth secret scanning, and
 deployment hardening. Terhuti integration and Full Voice Access remain disconnected.
+

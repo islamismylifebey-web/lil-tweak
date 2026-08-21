@@ -10,6 +10,7 @@ from typing import Protocol
 from .creator import CreatorEnvelopeError, CreatorService
 from .creator_contract import (
     CommandObservation,
+    CreatorBriefEnvelope,
     ExecutionApproval,
     ExecutionPlan,
     RouteDecision,
@@ -174,7 +175,7 @@ class CreatorRuntimeController:
     def prepare_plan(
         self,
         *,
-        envelope,
+        envelope: CreatorBriefEnvelope,
         route: RouteDecision,
         repository_fingerprint: str,
         workspace_mount_digest: str,

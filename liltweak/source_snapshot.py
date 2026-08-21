@@ -12,8 +12,10 @@ import subprocess
 import tarfile
 import time
 import unicodedata
+from collections.abc import Buffer
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from types import TracebackType
 
 from .creator_contract import canonical_json
 from .execution_contract import SourceSnapshotManifest
@@ -51,18 +53,22 @@ class _AdmittedEntry:
     size: int
 
 
-class _HashWriter:
+class _HashWriter(io.RawIOBase):
     def __init__(self) -> None:
         self._digest = hashlib.sha256()
         self._position = 0
 
-    def write(self, data: bytes) -> int:
-        self._digest.update(data)
-        self._position += len(data)
-        return len(data)
+    def write(self, data: Buffer, /) -> int:
+        view = memoryview(data)
+        self._digest.update(view)
+        self._position += view.nbytes
+        return view.nbytes
 
     def tell(self) -> int:
         return self._position
+
+    def writable(self) -> bool:
+        return True
 
     def flush(self) -> None:
         return None
@@ -108,7 +114,12 @@ class _GitBatchReader:
     def __enter__(self) -> _GitBatchReader:
         return self
 
-    def __exit__(self, exception_type, _exception, _traceback) -> None:
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        _exception: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
         self.close(failed=exception_type is not None)
 
     def check(self, object_id: str) -> int:
@@ -449,20 +460,23 @@ class RepositorySnapshotBuilder:
             "--batch",
             deadline=deadline,
         ) as content_reader:
-            for item in admitted:
+            for admitted_entry in admitted:
                 data = content_reader.read_blob(
-                    item.inventory.object_id,
-                    expected_size=item.size,
+                    admitted_entry.inventory.object_id,
+                    expected_size=admitted_entry.size,
                 )
-                if self._git_object_id(data, item.inventory.object_id) != item.inventory.object_id:
+                if (
+                    self._git_object_id(data, admitted_entry.inventory.object_id)
+                    != admitted_entry.inventory.object_id
+                ):
                     raise SourceSnapshotError("Git blob content does not match its object id")
                 if secret_rule_ids(data):
                     raise SourceSnapshotError("committed tree contains credential-shaped material")
                 entries.append(
                     _TreeEntry(
-                        path=item.inventory.path,
-                        mode=item.inventory.mode,
-                        object_id=item.inventory.object_id,
+                        path=admitted_entry.inventory.path,
+                        mode=admitted_entry.inventory.mode,
+                        object_id=admitted_entry.inventory.object_id,
                         data=data,
                         sha256=hashlib.sha256(data).hexdigest(),
                     )
