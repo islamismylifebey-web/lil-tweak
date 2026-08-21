@@ -47,15 +47,22 @@ def build_operational_status(
     controller: WorkbenchController,
     planning_chat: PlanningChatService | None,
 ) -> OperationalStatus:
-    primary = bool(planning_chat and planning_chat.primary_connected and controller.model.connected)
-    fallback = bool(planning_chat and planning_chat.fallback_connected)
+    planning_primary = bool(planning_chat and planning_chat.primary_connected)
+    planning_fallback = bool(planning_chat and planning_chat.fallback_connected)
+    engineering_adapter = bool(controller.model.connected)
     repositories = bool(controller.repository_ids)
     return OperationalStatus(
         backend=_state(True, "Authenticated private FastAPI request completed on loopback."),
-        provider=_state(primary, "OpenAI Responses qualification is required before connection."),
-        primary_model=_state(primary, f"{FoundationModel.SOL.value} standard/high"),
+        provider=_state(
+            planning_primary,
+            "OpenAI Responses Planning Chat qualification controls planning connectivity.",
+        ),
+        primary_model=_state(
+            planning_primary,
+            f"{FoundationModel.SOL.value} standard/high planning profile",
+        ),
         fallback_model=_state(
-            fallback,
+            planning_fallback,
             f"{FoundationModel.TERRA.value} read-only transient-failure fallback only",
         ),
         runner=_state(False, "No qualified process transport is injected."),
@@ -68,9 +75,12 @@ def build_operational_status(
         project_workspace=_state(
             True, "Local project records use zero model calls and zero tokens."
         ),
-        planning_chat=_state(primary, "Tool-free bounded planning with recorded usage and cost."),
+        planning_chat=_state(
+            planning_primary,
+            "Tool-free bounded planning with recorded usage and cost.",
+        ),
         engineering_mode=_state(
-            controller.model.connected,
+            engineering_adapter,
             "Sol high repository reasoning is tool-free; execution remains disconnected.",
         ),
     )

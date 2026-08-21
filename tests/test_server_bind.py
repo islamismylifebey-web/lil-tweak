@@ -26,6 +26,17 @@ def test_server_bind_defaults_to_explicit_ipv4_loopback() -> None:
     assert _settings().server_host == "127.0.0.1"
 
 
+def test_documented_server_host_default_matches_loopback_behavior() -> None:
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    env_example = (root / ".env.example").read_text(encoding="utf-8")
+
+    assert "LILTWEAK_SERVER_HOST=127.0.0.1" in readme
+    assert "LILTWEAK_SERVER_HOST=127.0.0.1" in env_example
+    assert "loopback" in readme.casefold()
+    assert "private Workbench local" in env_example
+
+
 @pytest.mark.parametrize("server_host", ["127.0.0.1", "127.42.0.7", "::1"])
 def test_private_workbench_accepts_only_literal_loopback_addresses(server_host: str) -> None:
     assert _settings(server_host=server_host, workbench_enabled=True).server_host == server_host

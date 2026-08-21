@@ -209,6 +209,15 @@ same path, type, size, and credential checks.
 
 ## Configuration
 
+The built-in server bind defaults to loopback. Leave this default for the private Workbench; when
+Workbench is enabled, settings validation accepts only loopback IP literals such as `127.0.0.1` or
+`::1`, so the API is not reachable remotely unless a non-Workbench deployment path explicitly
+configures a different host:
+
+```env
+LILTWEAK_SERVER_HOST=127.0.0.1
+```
+
 The API never accepts a filesystem path or clone URL. Map an opaque identity to a relative path
 under a server-owned workspace:
 
