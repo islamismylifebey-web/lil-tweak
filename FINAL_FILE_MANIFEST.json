@@ -9,18 +9,18 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "4efc218b2159ee8d9f114c86fd5696545ce93f575097e2ee6bb866c7a300e3db",
+  "manifest_scope_digest": "a7e3e2649ea03c161559ea89115bfbf2909da4455cb43e96a2a9e0e5b5ed82df",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 261,
+  "file_count_excluding_manifest": 265,
   "files": [
     {
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "971e45159e9c53871c52029341de4aa4c0d2dceb0596df39d9def0c4562b9350",
-      "git_blob_sha1": "09e04ad5cfa269a0c2befeb6a703a7465d558286",
-      "bytes": 2055
+      "sha256": "4dd9caeaed8a48aaad845a7e3b767387c9aa5894b20577744ebb37d5d804bc50",
+      "git_blob_sha1": "c436462176b28d334f00395a44d662c90a1f1d0f",
+      "bytes": 2779
     },
     {
       "relative_path": ".github/workflows/ci.yml",
@@ -418,9 +418,9 @@
       "relative_path": "README.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "e243554c1cb38608904332780133d075a42c27e1cc2d0acf23630ffc319fe613",
-      "git_blob_sha1": "13a3b3de8712f918102b920b672838814e831888",
-      "bytes": 21622
+      "sha256": "71f1fbf07bb37c02f3ca952210e9ce1153c28125ffbe0abe88a7b105ce82c7bc",
+      "git_blob_sha1": "a6d3fd992ca1d4fcda1ed7ee7762a01074104e70",
+      "bytes": 21986
     },
     {
       "relative_path": "REASONING_PROFILE_MATRIX.json",
@@ -866,9 +866,9 @@
       "relative_path": "liltweak/api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b4e030c3e6b6157abb2606f8bf2cfe4f3b3113d626ba22f434cfd3338d2ae001",
-      "git_blob_sha1": "179acecc30b7a2b4308d633fc548256331546668",
-      "bytes": 37231
+      "sha256": "c856241f404c9daed637eda2f2333c48a37913274b6f0bf3435c5e6bfe04a3ad",
+      "git_blob_sha1": "0131e1339b76b32512a9fb661690ad19a663805c",
+      "bytes": 39682
     },
     {
       "relative_path": "liltweak/approvals.py",
@@ -922,9 +922,9 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ccd0ac266354a592494d5c3d0e8bccdb900bbb186da98ea912e32273db694525",
-      "git_blob_sha1": "63e73d5dc43cb1722c627ff8a1ad7e2dbd8fb490",
-      "bytes": 16703
+      "sha256": "4bcbc36ac974bc318947427ae6011c6393441c122795582e76d32ea5da30e0bd",
+      "git_blob_sha1": "00ac23e70e5444a6c70335ca8d90291d987e2c48",
+      "bytes": 22333
     },
     {
       "relative_path": "liltweak/context_manifest.py",
@@ -1015,6 +1015,14 @@
       "bytes": 8208
     },
     {
+      "relative_path": "liltweak/galor_runner_v2.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "5c964be7756d403f5db59ebeb53e51735cf2efbedef01ba5738a91654a0cd386",
+      "git_blob_sha1": "1d4e5ce7f812e217493cd1d957eb8740252b7fe4",
+      "bytes": 16293
+    },
+    {
       "relative_path": "liltweak/hosted_sandbox.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1082,9 +1090,9 @@
       "relative_path": "liltweak/operational_status.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "cd77b556e81fd720775154090e9c6404a6999cc7f935443e413a299af3844fd7",
-      "git_blob_sha1": "9efc814603323feb5c01c42319130180f86061e0",
-      "bytes": 2887
+      "sha256": "b32d2e1414d2f61ae20e94880513b007dc9d0ea78c2ce873735cf576f7e53386",
+      "git_blob_sha1": "780992f22b647bf990938bc739c53175fd4a041e",
+      "bytes": 3842
     },
     {
       "relative_path": "liltweak/planning_chat.py",
@@ -1234,9 +1242,9 @@
       "relative_path": "liltweak/workbench.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a61752fd2e8cc819680d16493f5767e6640ce7310ad1b812e028090106683178",
-      "git_blob_sha1": "5b20b7a44020c1013d5204730eedd16d6a3198a7",
-      "bytes": 57333
+      "sha256": "4ce93d8e38ac7b108de641924b0df8ca6a855452dfe268bbfb9df7922c0b2aec",
+      "git_blob_sha1": "8efc79b7b90fb84e2d38d22dee53067541f4ee7a",
+      "bytes": 57314
     },
     {
       "relative_path": "liltweak/workbench_agent.py",
@@ -1274,9 +1282,9 @@
       "relative_path": "liltweak/workbench_executor.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "42dc25e5299a857cbafaa4b2ac3c4a77e2a81cdceb28a18bff17acffd262e1de",
-      "git_blob_sha1": "d4cc8ddc3bb04f38879ecff9f6aeec50aab9d050",
-      "bytes": 28377
+      "sha256": "8b8b13d35bffef826cff3faf54d09c66e40554899b0273402a512e55f5c1676f",
+      "git_blob_sha1": "33f8cc585a115662dc494ab785b0cffa3fd2c7c1",
+      "bytes": 32713
     },
     {
       "relative_path": "liltweak/workbench_policy.py",
@@ -1471,6 +1479,14 @@
       "bytes": 1115
     },
     {
+      "relative_path": "tests/fixtures/galor-runner-contract.v2.json",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "4e65b14a7d1045b25ed7f769a2f5aedbada964bcbf80f1cbfc0c020b722a9c49",
+      "git_blob_sha1": "b5c82d7ea4869dced81a54602d0a03c59463d3e2",
+      "bytes": 10348
+    },
+    {
       "relative_path": "tests/repository_helpers.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1522,9 +1538,9 @@
       "relative_path": "tests/test_config_reasoning_policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ddecf9684acd9bf7fa19b66c0b4ba56f2645238a9d61749868098c92c80137bf",
-      "git_blob_sha1": "a15888230256266e65ee421634761dc01aa687b7",
-      "bytes": 1914
+      "sha256": "96e9d56cad49285b7aab16b8f682aafb05da7291a9f108d749a5166d28d69954",
+      "git_blob_sha1": "ca0026c6344eaff2ad9c54dbcff9443d7f7daf86",
+      "bytes": 2571
     },
     {
       "relative_path": "tests/test_context_manifest.py",
@@ -1615,6 +1631,14 @@
       "bytes": 8042
     },
     {
+      "relative_path": "tests/test_galor_runner_v2.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "afa1a07f656cf1615ef60050cdf039fa2b39fff340d2b6d5cb40bcdddc0693df",
+      "git_blob_sha1": "13e73676249f3b2b6eb1598485a3efc8b98d9f84",
+      "bytes": 7477
+    },
+    {
       "relative_path": "tests/test_gauntlet_concurrency.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1701,6 +1725,14 @@
       "sha256": "96c614a25f3216aa5c32861721966922798b6a0b83f2a48d19369145b0799271",
       "git_blob_sha1": "b2559530ff1cf02df194ba69f99ced7ce4d8417c",
       "bytes": 3573
+    },
+    {
+      "relative_path": "tests/test_operational_status.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "1bc90a908b715ecd288cac938902d62cfbcb2464dba0ed7055a042b5b06d1cfc",
+      "git_blob_sha1": "ef87a5d3582782ec3f485f21b99002c2ff4af89e",
+      "bytes": 2385
     },
     {
       "relative_path": "tests/test_phase3_contract_invariants.py",
@@ -1898,9 +1930,9 @@
       "relative_path": "tests/test_server_bind.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2de7b10e3726d335d179e211f0400e536a7c859229a9a7dd71d5317bd0be6f03",
-      "git_blob_sha1": "e19bf4ef6a503fb82c2e998aac672fd44d93d694",
-      "bytes": 3199
+      "sha256": "3106b685028b4294ccad740e52a3704242eb65006903823e41a5a8b089d14c7a",
+      "git_blob_sha1": "d7daaf84320a56f3df1b4ad0f83b905963438aa4",
+      "bytes": 3666
     },
     {
       "relative_path": "tests/test_states.py",
@@ -1994,9 +2026,9 @@
       "relative_path": "tests/test_workbench_executor.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f381da4aa95ac20cd7dc3cb1fad26a10eb0a43e6d44618f48f45050bfba9561d",
-      "git_blob_sha1": "bac1e436491d09f17feca1700eefd1a8aadc8a3f",
-      "bytes": 6781
+      "sha256": "cb57cc163a7c228b0710b078e50ad1f22f875e2415104c1388a3a35cf4d9c8e1",
+      "git_blob_sha1": "b8e12f03f8dc0444f1ba5766b1042da454224327",
+      "bytes": 8699
     },
     {
       "relative_path": "tests/test_workbench_frontend.py",
