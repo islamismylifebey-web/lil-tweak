@@ -90,6 +90,10 @@ SYNTHETIC_SECRET_FIXTURE_ALLOWLIST: dict[str, SecretFixtureExpectation] = {
         "content_sha256": "13b6139b1e9a29c07bdd7e4290b4d6d165476ebc9642e0b26ede04839b5a20cd",
         "rule_ids": ("openai-api-key",),
     },
+    "tests/test_galor_runner_v2.py": {
+        "content_sha256": "afa1a07f656cf1615ef60050cdf039fa2b39fff340d2b6d5cb40bcdddc0693df",
+        "rule_ids": ("credential-assignment",),
+    },
     "tests/test_reasoning_provider.py": {
         "content_sha256": "ea86c8e9009a9ed8651d5f59cd337840a06c803728e81189a0eef45212bcbaa4",
         "rule_ids": ("credential-assignment", "openai-api-key"),

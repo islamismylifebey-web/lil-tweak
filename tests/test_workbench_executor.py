@@ -47,6 +47,24 @@ class FailedTransport:
         return self.result
 
 
+class RemoteActionTransport(FakeTransport):
+    server_authorized = True
+
+    def __init__(self) -> None:
+        self.submitted: dict[str, object] | None = None
+
+    def action_for_request(self, request: ToolRequest) -> str:
+        assert request.kind == ToolKind.APPLY_PATCH
+        return "runner.applyPatch"
+
+    async def run(self, **_: object) -> ProcessResult:
+        raise AssertionError("file mutations must not use the command transport")
+
+    async def run_action(self, **kwargs: object) -> ProcessResult:
+        self.submitted = dict(kwargs)
+        return ProcessResult(0, b"src/example.py | 2 +-", b"", False, False)
+
+
 def test_qualified_transport_rejects_unpinned_or_shell_prefix() -> None:
     with pytest.raises(ValueError, match="pinned"):
         QualifiedProcessTransport(
@@ -124,6 +142,42 @@ async def test_candidate_transport_cannot_self_authorize_or_mutate_files(tmp_pat
     assert run.success is False
     assert "disconnected" in run.redacted_output
     assert not (workspaces.task_root("task:dormant") / "blocked.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_server_runner_receives_patch_without_local_file_mutation(tmp_path: Path) -> None:
+    workspaces = TaskWorkspaceManager(tmp_path / "tasks")
+    transport = RemoteActionTransport()
+    executor = BoundedToolExecutor(workspaces, transport)
+    task_id = "task:remote"
+    target = workspaces.task_root(task_id) / "src/example.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("old\n", encoding="utf-8")
+    request = ToolRequest(
+        tool_id="patch-remote",
+        kind=ToolKind.APPLY_PATCH,
+        phase=StepPhase.MUTATION,
+        purpose="replace through GALOR",
+        file=FileRequest(
+            path="src/example.py",
+            content="new\n",
+            expected_sha256=hashlib.sha256(b"old\n").hexdigest(),
+        ),
+    )
+
+    run = await executor.execute(
+        task_id=task_id,
+        attempt=1,
+        request=request,
+        evidence_id="evidence:remote",
+    )
+
+    assert run.success is True
+    assert target.read_text(encoding="utf-8") == "old\n"
+    assert transport.submitted is not None
+    assert transport.submitted["action"] == "runner.applyPatch"
+    assert "--- a/src/example.py" in str(transport.submitted["input"])
+    assert "+++ b/src/example.py" in str(transport.submitted["input"])
 
 
 @pytest.mark.asyncio

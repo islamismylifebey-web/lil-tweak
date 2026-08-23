@@ -19,8 +19,8 @@
   },
   "schema_version": "dependency-security-scan-v1",
   "secret_scan": {
-    "files_considered": 262,
-    "files_scanned": 262,
+    "files_considered": 266,
+    "files_scanned": 266,
     "fixture_policy": "A synthetic credential-rejection fixture is allowlisted only when its path, complete-file SHA-256 digest, and exact rule-id tuple all match this generator's reviewed fixture registry. Any content change becomes a release finding.",
     "release_findings": [],
     "scan_blockers": [],
@@ -31,6 +31,13 @@
         "path": "tests/test_context_manifest.py",
         "rule_ids": [
           "openai-api-key"
+        ]
+      },
+      {
+        "content_sha256": "afa1a07f656cf1615ef60050cdf039fa2b39fff340d2b6d5cb40bcdddc0693df",
+        "path": "tests/test_galor_runner_v2.py",
+        "rule_ids": [
+          "credential-assignment"
         ]
       },
       {

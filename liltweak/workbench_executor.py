@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import hashlib
 import hmac
 import os
@@ -60,6 +61,9 @@ class ProcessTransport(Protocol):
     @property
     def authorization_digest(self) -> str | None: ...
 
+    @property
+    def server_authorized(self) -> bool: ...
+
     async def run(
         self,
         *,
@@ -70,6 +74,7 @@ class ProcessTransport(Protocol):
         output_byte_limit: int,
         network: NetworkMode,
         cancel_event: asyncio.Event,
+        approval_digest: str,
     ) -> ProcessResult: ...
 
 
@@ -78,6 +83,8 @@ class DisconnectedProcessTransport:
     provider_name = "none"
     qualification_status = "unavailable"
     authorization_digest = None
+    server_authorized = False
+    disconnect_reason = "No qualified bounded command runner is configured."
 
     async def run(self, **_: object) -> ProcessResult:
         raise ExecutorUnavailableError("qualified command runner is not connected")
@@ -130,6 +137,11 @@ class QualifiedProcessTransport:
     provider_name = "dormant-qualified-descriptor"
     qualification_status = "unqualified"
     authorization_digest = None
+    server_authorized = False
+    disconnect_reason = (
+        "No independently qualified Workbench runner provider is implemented; the runner remains "
+        "disconnected."
+    )
 
     @property
     def connected(self) -> bool:
@@ -549,9 +561,15 @@ class BoundedToolExecutor:
         self._cancel_events: dict[str, asyncio.Event] = {}
 
     @property
+    def _transport_enabled(self) -> bool:
+        return bool(
+            self._allow_test_transport or getattr(self.transport, "server_authorized", False)
+        )
+
+    @property
     def connected(self) -> bool:
         return bool(
-            self._allow_test_transport
+            self._transport_enabled
             and self.transport.connected
             and self.qualification_status == "qualified"
             and self.authorization_digest is not None
@@ -563,7 +581,7 @@ class BoundedToolExecutor:
 
     @property
     def qualification_status(self) -> str:
-        if not self._allow_test_transport:
+        if not self._transport_enabled:
             if isinstance(self.transport, DisconnectedProcessTransport):
                 return "unavailable"
             return "unqualified"
@@ -572,7 +590,7 @@ class BoundedToolExecutor:
 
     @property
     def authorization_digest(self) -> str | None:
-        if not self._allow_test_transport:
+        if not self._transport_enabled:
             return None
         value = getattr(self.transport, "authorization_digest", None)
         return (
@@ -580,6 +598,13 @@ class BoundedToolExecutor:
             if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
             else None
         )
+
+    @property
+    def disconnect_reason(self) -> str:
+        value = getattr(self.transport, "disconnect_reason", None)
+        if isinstance(value, str) and value.strip():
+            return value
+        return "qualified bounded command runner is disconnected"
 
     def cancel(self, task_id: str) -> None:
         self._cancel_events.setdefault(task_id, asyncio.Event()).set()
@@ -608,7 +633,9 @@ class BoundedToolExecutor:
             if canceled:
                 raise ToolExecutionError("task was canceled before tool execution")
             if not self.connected:
-                raise ExecutorUnavailableError("qualified command runner is disconnected")
+                raise ExecutorUnavailableError(self.disconnect_reason)
+            action_for_request = getattr(self.transport, "action_for_request", None)
+            action = action_for_request(request) if callable(action_for_request) else None
             if request.kind == ToolKind.COMMAND:
                 if request.command is None:
                     raise ToolExecutionError("command payload is missing")
@@ -628,6 +655,7 @@ class BoundedToolExecutor:
                     output_byte_limit=command.output_byte_limit,
                     network=command.network,
                     cancel_event=cancel_event,
+                    approval_digest=request.request_digest,
                 )
                 exit_code = process.exit_code
                 timed_out = process.timed_out
@@ -640,8 +668,39 @@ class BoundedToolExecutor:
                 )
                 success = exit_code == 0 and not timed_out and not canceled
             else:
-                output = self._file_operation(guard, request)
-                success = True
+                run_action = getattr(self.transport, "run_action", None)
+                if callable(run_action):
+                    if not isinstance(action, str) or not action:
+                        raise ExecutorUnavailableError(
+                            "qualified runner did not resolve a canonical action"
+                        )
+                    process = await run_action(
+                        action=action,
+                        input=self._file_action_input(guard, request),
+                        cwd=guard.root,
+                        timeout_seconds=300,
+                        output_byte_limit=1_000_000,
+                        network=NetworkMode.DENIED,
+                        cancel_event=cancel_event,
+                        approval_digest=request.request_digest,
+                    )
+                    exit_code = process.exit_code
+                    timed_out = process.timed_out
+                    canceled = process.canceled
+                    output = (
+                        "STDOUT\n"
+                        + process.stdout.decode("utf-8", errors="replace")
+                        + "\nSTDERR\n"
+                        + process.stderr.decode("utf-8", errors="replace")
+                    )
+                    success = exit_code == 0 and not timed_out and not canceled
+                elif getattr(self.transport, "server_authorized", False):
+                    raise ExecutorUnavailableError(
+                        "qualified runner does not support canonical file actions"
+                    )
+                else:
+                    output = self._file_operation(guard, request)
+                    success = True
             guard.inventory()
         except Exception as exc:
             output = f"{type(exc).__name__}: {exc}"
@@ -669,6 +728,42 @@ class BoundedToolExecutor:
             evidence_id=evidence_id,
             success=success,
         )
+
+    @staticmethod
+    def _file_action_input(
+        guard: WorkspacePathGuard,
+        request: ToolRequest,
+    ) -> dict[str, object]:
+        if request.file is None:
+            raise ToolExecutionError("file payload is missing")
+        if request.kind in {ToolKind.LIST_FILES, ToolKind.READ_FILE}:
+            return {"path": request.file.path}
+        if request.file.content is None:
+            raise ToolExecutionError("write operation requires content")
+        target = guard.resolve(request.file.path, allow_missing=True)
+        before = target.read_bytes() if target.exists() else b""
+        if request.file.expected_sha256 is not None:
+            actual = hashlib.sha256(before).hexdigest()
+            if actual != request.file.expected_sha256:
+                raise ToolExecutionError("target changed since the approved plan")
+        elif request.kind == ToolKind.APPLY_PATCH:
+            raise ToolExecutionError("conditional patch requires the expected source digest")
+        try:
+            before_text = before.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ToolExecutionError("runner patch source must be UTF-8 text") from exc
+        from_name = f"a/{request.file.path}" if target.exists() else "/dev/null"
+        patch = "".join(
+            difflib.unified_diff(
+                before_text.splitlines(keepends=True),
+                request.file.content.splitlines(keepends=True),
+                fromfile=from_name,
+                tofile=f"b/{request.file.path}",
+            )
+        )
+        if not patch:
+            raise ToolExecutionError("runner patch does not change the target")
+        return {"patch": patch}
 
     @staticmethod
     def _file_operation(guard: WorkspacePathGuard, request: ToolRequest) -> str:
