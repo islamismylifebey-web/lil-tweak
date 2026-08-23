@@ -261,16 +261,23 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
             qualification_status="unavailable",
         )
     try:
-        contract = GalorRunnerV2Contract.model_validate_json(settings.workbench_runner_contract_json)
-        signing_keys = parse_signing_keys(settings.workbench_runner_signing_keys_json)
+        contract_json = str(settings.workbench_runner_contract_json)
+        signing_keys_json = str(settings.workbench_runner_signing_keys_json)
+        gateway_url = str(settings.workbench_runner_gateway_url)
+        auth_token = str(settings.workbench_runner_auth_token)
+        expected_digest = str(settings.workbench_runner_expected_contract_digest)
+        qualification_digest = str(settings.workbench_runner_qualification_digest)
+        authorization_digest = str(settings.workbench_runner_authorization_digest)
+        contract = GalorRunnerV2Contract.model_validate_json(contract_json)
+        signing_keys = parse_signing_keys(signing_keys_json)
         return GalorRunnerV2Transport(
             GalorRunnerV2Config(
-                gateway_url=str(settings.workbench_runner_gateway_url),
-                auth_token=str(settings.workbench_runner_auth_token),
+                gateway_url=gateway_url,
+                auth_token=auth_token,
                 contract=contract,
-                expected_contract_digest=str(settings.workbench_runner_expected_contract_digest),
-                qualification_evidence_digest=str(settings.workbench_runner_qualification_digest),
-                authorization_digest=str(settings.workbench_runner_authorization_digest),
+                expected_contract_digest=expected_digest,
+                qualification_evidence_digest=qualification_digest,
+                authorization_digest=authorization_digest,
                 signing_keys=signing_keys,
                 workspace_root=settings.workbench_workspace_root,
             )

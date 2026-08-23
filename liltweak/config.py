@@ -269,42 +269,56 @@ class Settings:
         if self.workbench_enabled and not self.dev_api_key:
             raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
         if self.workbench_runner_enabled:
-            for name, value in {
-                "LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL": self.workbench_runner_gateway_url,
-                "LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON": self.workbench_runner_contract_json,
-                "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST": (
-                    self.workbench_runner_expected_contract_digest
+            runner_values: tuple[tuple[str, str | None], ...] = (
+                ("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL", self.workbench_runner_gateway_url),
+                ("LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON", self.workbench_runner_contract_json),
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST",
+                    self.workbench_runner_expected_contract_digest,
                 ),
-                "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST": (
-                    self.workbench_runner_qualification_digest
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST",
+                    self.workbench_runner_qualification_digest,
                 ),
-                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST": (
-                    self.workbench_runner_authorization_digest
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST",
+                    self.workbench_runner_authorization_digest,
                 ),
-                "LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN": self.workbench_runner_auth_token,
-                "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON": (
-                    self.workbench_runner_signing_keys_json
+                ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON",
+                    self.workbench_runner_signing_keys_json,
                 ),
-            }.items():
-                if value in {None, ""}:
-                    raise ValueError(f"{name} is required when the GALOR Runner V2 is enabled")
+            )
+            for runner_name, runner_value in runner_values:
+                if runner_value in {None, ""}:
+                    raise ValueError(
+                        f"{runner_name} is required when the GALOR Runner V2 is enabled"
+                    )
             if self.workbench_runner_gateway_url is not None:
-                parsed = re.fullmatch(r"https?://[^/\s?#]+(?:/[^?#\s]*)?", self.workbench_runner_gateway_url)
+                parsed = re.fullmatch(
+                    r"https?://[^/\s?#]+(?:/[^?#\s]*)?",
+                    self.workbench_runner_gateway_url,
+                )
                 if parsed is None:
                     raise ValueError("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL is invalid")
-            for name, value in {
-                "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST": (
-                    self.workbench_runner_expected_contract_digest
+            digest_values: tuple[tuple[str, str | None], ...] = (
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST",
+                    self.workbench_runner_expected_contract_digest,
                 ),
-                "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST": (
-                    self.workbench_runner_qualification_digest
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST",
+                    self.workbench_runner_qualification_digest,
                 ),
-                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST": (
-                    self.workbench_runner_authorization_digest
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST",
+                    self.workbench_runner_authorization_digest,
                 ),
-            }.items():
-                if value is None or re.fullmatch(r"[0-9a-f]{64}", value) is None:
-                    raise ValueError(f"{name} must be a lowercase SHA-256 digest")
+            )
+            for digest_name, digest_value in digest_values:
+                if digest_value is None or re.fullmatch(r"[0-9a-f]{64}", digest_value) is None:
+                    raise ValueError(f"{digest_name} must be a lowercase SHA-256 digest")
             if (
                 self.workbench_runner_auth_token is not None
                 and (

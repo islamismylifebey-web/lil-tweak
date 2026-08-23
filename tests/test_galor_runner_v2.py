@@ -128,7 +128,9 @@ def _receipt(
         evidence_digest="0" * 64,
         signature="A" * 86,
     )
-    exact_digest = content_digest(unsigned.model_dump(mode="json", exclude={"evidence_digest", "signature"}))
+    exact_digest = content_digest(
+        unsigned.model_dump(mode="json", exclude={"evidence_digest", "signature"})
+    )
     signed = GalorRunnerV2Receipt.model_construct(
         **values,
         evidence_digest=exact_digest,
@@ -216,7 +218,10 @@ def test_factory_reports_exact_runner_blocker_without_host_fallback(tmp_path: Pa
     health = client.get("/v1/workbench/health").json()
     assert health["runner_provider"] == "galor-runner-v2"
     assert health["runner_connected"] is False
-    assert any("qualification evidence is missing" in item for item in health["missing_prerequisites"])
+    assert any(
+        "qualification evidence is missing" in item
+        for item in health["missing_prerequisites"]
+    )
 
 
 def test_action_mapping_covers_required_engineering_tools() -> None:
@@ -385,6 +390,6 @@ async def test_transport_handles_timeout_and_cancellation(tmp_path: Path) -> Non
 def test_parse_signing_keys_requires_matching_key_ids() -> None:
     runner_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
     public_key = _public_bytes(runner_key)
-    payload = '{"bad":"%s"}' % _signature(public_key)
+    payload = f'{{"bad":"{_signature(public_key)}"}}'
     with pytest.raises(ValueError, match="does not match"):
         parse_signing_keys(payload)

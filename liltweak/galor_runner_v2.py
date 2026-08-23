@@ -5,13 +5,12 @@ import base64
 import binascii
 import hashlib
 import json
-import secrets
 import uuid
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -140,7 +139,9 @@ class GalorRunnerV2Contract(CreatorSchema):
 
 
 def galor_runner_contract_signature_message(contract: GalorRunnerV2Contract) -> bytes:
-    payload = canonical_json(contract.model_dump(mode="json", exclude={"signature"})).encode("utf-8")
+    payload = canonical_json(
+        contract.model_dump(mode="json", exclude={"signature"})
+    ).encode("utf-8")
     return _CONTRACT_DOMAIN + payload
 
 
@@ -193,7 +194,9 @@ class GalorRunnerV2Receipt(CreatorSchema):
         if not (self.started_at <= self.heartbeat_at <= self.completed_at):
             raise ValueError("runner receipt timestamps are inconsistent")
         if (self.timed_out or self.canceled) and self.exit_code == 0:
-            raise ValueError("runner receipt cannot claim a successful exit after timeout or cancel")
+            raise ValueError(
+                "runner receipt cannot claim a successful exit after timeout or cancel"
+            )
         expected = content_digest(
             self.model_dump(mode="json", exclude={"evidence_digest", "signature"})
         )
@@ -256,50 +259,37 @@ class HttpGalorWorkGatewayClient:
         self._auth_token = auth_token
         self._client = client
 
+    def _http_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+        return self._client
+
     async def submit_dispatch(self, payload: Mapping[str, object]) -> Mapping[str, object]:
-        client = self._client or httpx.AsyncClient()
-        owns_client = self._client is None
-        try:
-            response = await client.post(
-                f"{self._base_url}/v2/dispatches",
-                json=payload,
-                headers={"Authorization": f"******"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-        finally:
-            if owns_client:
-                await client.aclose()
+        response = await self._http_client().post(
+            f"{self._base_url}/v2/dispatches",
+            json=payload,
+            headers={"Authorization": "Bearer " + self._auth_token},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return cast(Mapping[str, object], response.json())
 
     async def poll_dispatch(self, dispatch_id: str) -> Mapping[str, object]:
-        client = self._client or httpx.AsyncClient()
-        owns_client = self._client is None
-        try:
-            response = await client.get(
-                f"{self._base_url}/v2/dispatches/{dispatch_id}",
-                headers={"Authorization": f"******"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-        finally:
-            if owns_client:
-                await client.aclose()
+        response = await self._http_client().get(
+            f"{self._base_url}/v2/dispatches/{dispatch_id}",
+            headers={"Authorization": "Bearer " + self._auth_token},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return cast(Mapping[str, object], response.json())
 
     async def cancel_dispatch(self, dispatch_id: str) -> None:
-        client = self._client or httpx.AsyncClient()
-        owns_client = self._client is None
-        try:
-            response = await client.post(
-                f"{self._base_url}/v2/dispatches/{dispatch_id}/cancel",
-                headers={"Authorization": f"******"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-        finally:
-            if owns_client:
-                await client.aclose()
+        response = await self._http_client().post(
+            f"{self._base_url}/v2/dispatches/{dispatch_id}/cancel",
+            headers={"Authorization": "Bearer " + self._auth_token},
+            timeout=30.0,
+        )
+        response.raise_for_status()
 
 
 @dataclass(frozen=True)
@@ -342,22 +332,27 @@ class GalorRunnerV2Transport:
         config: GalorRunnerV2Config,
         *,
         gateway: GalorWorkGatewayClient | None = None,
-        now: callable | None = None,
+        now: Callable[[], datetime] | None = None,
         poll_interval_seconds: float = 0.25,
     ) -> None:
-        if config.contract.schema_version != "galor-runner-contract-v2":
-            raise ValueError("GALOR Runner V1 downgrade is rejected")
         if config.contract.contract_digest != config.expected_contract_digest:
             raise ValueError("GALOR Runner V2 contract digest mismatch")
         parsed = urlparse(config.gateway_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.params or parsed.query:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.params
+            or parsed.query
+        ):
             raise ValueError("GALOR Runner V2 gateway URL is invalid")
         if parsed.username is not None or parsed.password is not None or parsed.fragment:
             raise ValueError("GALOR Runner V2 gateway URL is invalid")
         if (
             not config.authorization_digest
             or len(config.authorization_digest) != 64
-            or any(character not in "0123456789abcdef" for character in config.authorization_digest)
+            or any(
+                character not in "0123456789abcdef" for character in config.authorization_digest
+            )
         ):
             raise ValueError("GALOR Runner V2 authorization digest is invalid")
         self._config = config
@@ -438,11 +433,14 @@ class GalorRunnerV2Transport:
             action_id=action_id,
         )
         deadline = self._now() + timedelta(seconds=max(timeout_seconds, 1))
+        cancel_sent = False
         while True:
-            if cancel_event.is_set():
+            if cancel_event.is_set() and not cancel_sent:
                 await self._gateway.cancel_dispatch(dispatch_id)
+                cancel_sent = True
             if self._now() >= deadline:
-                await self._gateway.cancel_dispatch(dispatch_id)
+                if not cancel_sent:
+                    await self._gateway.cancel_dispatch(dispatch_id)
                 return ProcessResult(None, b"", b"", True, False)
             status = self._validate_dispatch_status(
                 await self._gateway.poll_dispatch(dispatch_id),
@@ -476,9 +474,11 @@ class GalorRunnerV2Transport:
         root = self._config.workspace_root.resolve()
         resolved = cwd.resolve()
         if not resolved.is_relative_to(root):
-            raise ExecutorUnavailableError("GALOR Runner V2 source binding rejected the workspace path")
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 source binding rejected the workspace path"
+            )
         relative = resolved.relative_to(root).as_posix()
-        return "." if not relative else relative
+        return relative if relative else "."
 
     def _verify_contract(self) -> None:
         public_key = self._config.signing_keys.get(self._config.contract.signer_key_id)
@@ -561,9 +561,14 @@ class GalorRunnerV2Transport:
             raise ValueError("GALOR Runner V2 runner identity is invalid")
         if receipt.source_binding_digest != source_binding_digest:
             raise ValueError("GALOR Runner V2 source binding is invalid")
-        if receipt.receipt_id in self._seen_receipts or receipt.evidence_digest in self._seen_receipts:
+        if (
+            receipt.receipt_id in self._seen_receipts
+            or receipt.evidence_digest in self._seen_receipts
+        ):
             raise ValueError("GALOR Runner V2 receipt replay is rejected")
-        if self._now() - receipt.completed_at > timedelta(seconds=self._config.max_receipt_age_seconds):
+        if self._now() - receipt.completed_at > timedelta(
+            seconds=self._config.max_receipt_age_seconds
+        ):
             raise ValueError("GALOR Runner V2 receipt is stale")
         public_key = self._config.signing_keys.get(receipt.signer_key_id)
         if public_key is None:
@@ -606,7 +611,7 @@ def sign_contract(
     tenant_id: str,
     supported_actions: tuple[str, ...],
     public_key: bytes,
-    private_key_signer: callable,
+    private_key_signer: Callable[[bytes], bytes],
 ) -> GalorRunnerV2Contract:
     signer_key_id = _key_id(public_key)
     unsigned = GalorRunnerV2Contract.model_construct(
@@ -617,7 +622,9 @@ def sign_contract(
         contract_digest="0" * 64,
         signature="A" * 86,
     )
-    digest = content_digest(unsigned.model_dump(mode="json", exclude={"contract_digest", "signature"}))
+    digest = content_digest(
+        unsigned.model_dump(mode="json", exclude={"contract_digest", "signature"})
+    )
     draft = GalorRunnerV2Contract.model_construct(
         runner_id=runner_id,
         tenant_id=tenant_id,
@@ -626,7 +633,9 @@ def sign_contract(
         contract_digest=digest,
         signature="A" * 86,
     )
-    signature = _encode_signature(private_key_signer(galor_runner_contract_signature_message(draft)))
+    signature = _encode_signature(
+        private_key_signer(galor_runner_contract_signature_message(draft))
+    )
     return GalorRunnerV2Contract(
         runner_id=runner_id,
         tenant_id=tenant_id,

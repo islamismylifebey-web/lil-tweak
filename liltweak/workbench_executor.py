@@ -560,7 +560,9 @@ class BoundedToolExecutor:
 
     @property
     def _transport_enabled(self) -> bool:
-        return bool(self._allow_test_transport or getattr(self.transport, "server_authorized", False))
+        return bool(
+            self._allow_test_transport or getattr(self.transport, "server_authorized", False)
+        )
 
     @property
     def connected(self) -> bool:
