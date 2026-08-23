@@ -63,7 +63,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$(python -c 'import platform; print(platform.python_version())')" = "3.12.13"
-          test "$(uv --version)" = "uv 0.11.33"
+          uv --version | grep -Eq '^uv 0\.11\.33([[:space:]]|$)'
           uv lock --check --offline
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13

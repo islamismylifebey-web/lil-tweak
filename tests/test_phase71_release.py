@@ -161,7 +161,7 @@ def test_standard_ci_is_read_only_secretless_and_offline() -> None:
     assert 'LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"' in workflow
     assert 'SOURCE_DATE_EPOCH: "1735689600"' in workflow
     assert 'version: "0.11.33"' in workflow
-    assert 'test "$(uv --version)" = "uv 0.11.33"' in workflow
+    assert r"uv --version | grep -Eq '^uv 0\.11\.33([[:space:]]|$)'" in workflow
     assert "--live" not in workflow
     assert "run_phase6_live.py" not in workflow
     assert "run_phase7_snapshot_benchmark.py" not in workflow
