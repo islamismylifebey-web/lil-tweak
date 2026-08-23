@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "333f67c81c1d398aa6f4ddf1fc022a860fab9a635acaad2978388ab6b6278bd7",
+  "manifest_scope_digest": "07ad059e26932645f7f0768681ced4e5803634f41929e3e0d7232ea853f42c7c",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 265,
@@ -1402,8 +1402,8 @@
       "relative_path": "scripts/generate_supply_chain_artifacts.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "fec29b0c529bd701934089c5dc3c5d103301fcdff71332530329e55592a2310d",
-      "git_blob_sha1": "c9b3d29f050984b1bd1b3d16f845bb9767fbf6c5",
+      "sha256": "c31f88a7ceb6f6b7fee02078f657c6f763eb20573f09408056c0ea8b1c547161",
+      "git_blob_sha1": "01c03ce07b70854c6ff44306347869314549b5ec",
       "bytes": 33253
     },
     {
@@ -1946,9 +1946,9 @@
       "relative_path": "tests/test_supply_chain_artifacts.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a12583d190ed6cb28cdd2b2da8ef79c06dc4761cc8dfc3e4c4fbf99b54fd8e46",
-      "git_blob_sha1": "ca552e721703959ae28de4a5a34b1dfaddf31d1c",
-      "bytes": 12310
+      "sha256": "b1be469fae572385918c83554d7a79a7b2a2db2292c51f49fb7d5e916aa05d0e",
+      "git_blob_sha1": "c9ba9ca766a05ae80b1ee52197b486ae58a1158a",
+      "bytes": 12455
     },
     {
       "relative_path": "tests/test_tool_registry.py",

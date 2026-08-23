@@ -87,23 +87,23 @@ class SecretFinding(TypedDict):
 
 SYNTHETIC_SECRET_FIXTURE_ALLOWLIST: dict[str, SecretFixtureExpectation] = {
     "tests/test_context_manifest.py": {
-        "content_sha256": "caf36b2708ec1d417fbfe701c48733da78afc73ebe4c97351071afeb852137cf",
+        "content_sha256": "13b6139b1e9a29c07bdd7e4290b4d6d165476ebc9642e0b26ede04839b5a20cd",
         "rule_ids": ("openai-api-key",),
     },
     "tests/test_galor_runner_v2.py": {
-        "content_sha256": "3284f5983f98b5aa10a5f9ec26f427b3e8b72feea2d438966db39a3392c8aa8c",
+        "content_sha256": "afa1a07f656cf1615ef60050cdf039fa2b39fff340d2b6d5cb40bcdddc0693df",
         "rule_ids": ("credential-assignment",),
     },
     "tests/test_reasoning_provider.py": {
-        "content_sha256": "d00e564117afe3d09ba973a7ce43f3606e840533cd99890eff7474d49c294476",
+        "content_sha256": "ea86c8e9009a9ed8651d5f59cd337840a06c803728e81189a0eef45212bcbaa4",
         "rule_ids": ("credential-assignment", "openai-api-key"),
     },
     "tests/test_runner_qualification_cli.py": {
-        "content_sha256": "8f5cf24a1fe734265bb5ac9d7b1f6b1ad7b85b8df79727bab1d27d2583498484",
+        "content_sha256": "e749657e1aa21d3503b6264a00e437236e9da16e8ef222bdeffb31b1a8fd8eab",
         "rule_ids": ("credential-assignment",),
     },
     "tests/test_training_readiness.py": {
-        "content_sha256": "998f511b21b9a74bb912e67d67cbe6e30e69f243d95a29ec9113fef24eb1d0fd",
+        "content_sha256": "f9471490bf48d6a3f026de6a2c81589b8cd9a4711ab070a2dba83effd6e64ea6",
         "rule_ids": ("openai-api-key",),
     },
 }

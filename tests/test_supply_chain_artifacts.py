@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import io
+import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
@@ -269,7 +270,13 @@ def test_secret_fixture_requires_exact_full_file_digest_and_rules(tmp_path: Path
     relative = "tests/test_context_manifest.py"
     destination = root / relative
     destination.parent.mkdir(parents=True)
-    exact_fixture = (APP_ROOT / relative).read_bytes()
+    exact_fixture = subprocess.run(
+        ("git", "show", f":{relative}"),
+        cwd=APP_ROOT,
+        check=True,
+        capture_output=True,
+        shell=False,
+    ).stdout
     destination.write_bytes(exact_fixture)
 
     report = security_report([], root=root, files=(relative,))
