@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "3aa924cf808fb98c39de69db4470b0c7f55af59e2cfc042b17a5f75a2ccb96d1",
+  "manifest_scope_digest": "65b466ac866babc74a0cc46966735e04244572fd6b59819ff56b3f5b34726bbf",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 265,
@@ -26,9 +26,9 @@
       "relative_path": ".github/workflows/ci.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "6c3072d61e33aa928bea0642b6d9fb40d908f9db3d1a690e3177647804a5ba7c",
-      "git_blob_sha1": "1d3c7843856629193c828394eddbf64a705e45c4",
-      "bytes": 14280
+      "sha256": "73eff2459fcb55f9be7fe352a5fad8696627b97ce7655c338f1830c2dd203234",
+      "git_blob_sha1": "f24065618ba03f6d25594d195c3af5e37b00e421",
+      "bytes": 14351
     },
     {
       "relative_path": ".github/workflows/runner-qualification.yml",
@@ -1746,9 +1746,9 @@
       "relative_path": "tests/test_phase71_release.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "60dbcfb2a7f712403e3983a7410a5538f4a9b1e718066f43203f12ffc3dec661",
-      "git_blob_sha1": "c06d70478267e1f6cb02de38dda014304ffce3d2",
-      "bytes": 12475
+      "sha256": "580d20cfc02cb663e3a27926661068ea1320857fa0b1a8646c34f1ed86d481b4",
+      "git_blob_sha1": "becbbf2772d8d2f85020fa0e75d4d3a784b5ce15",
+      "bytes": 12561
     },
     {
       "relative_path": "tests/test_phase7_execution.py",

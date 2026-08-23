@@ -166,6 +166,7 @@ def test_standard_ci_is_read_only_secretless_and_offline() -> None:
     assert "run_phase6_live.py" not in workflow
     assert "run_phase7_snapshot_benchmark.py" not in workflow
     assert "persist-credentials: false" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "uv lock --check --offline" in workflow
     assert "uv run --no-sync --offline pytest" in workflow
     assert "uv run --no-sync --offline mypy" in workflow

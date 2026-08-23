@@ -40,6 +40,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           clean: true
           lfs: false
           submodules: false
