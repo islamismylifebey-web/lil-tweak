@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
 import hashlib
 import json
 import uuid
@@ -10,253 +8,164 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Protocol, cast
 from urllib.parse import urlparse
 
 import httpx
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from pydantic import ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
-from .creator_contract import CreatorSchema, canonical_json, content_digest
 from .workbench_contract import NetworkMode, ToolKind, ToolRequest
 from .workbench_executor import ExecutorUnavailableError, ProcessResult
 
-_SHA256 = r"^[0-9a-f]{64}$"
-_SAFE_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-_SIGNATURE = r"^[A-Za-z0-9_-]{86}$"
-_RECEIPT_DOMAIN = b"liltweak:galor-runner-v2-receipt\0"
-_CONTRACT_DOMAIN = b"liltweak:galor-runner-v2-contract\0"
-_REQUIRED_ACTIONS = frozenset(
+_CONTRACT_FIELDS = frozenset(
     {
-        "repository.list",
-        "repository.read",
-        "workspace.write",
-        "workspace.apply_patch",
-        "git.status",
-        "git.diff",
-        "verification.pytest",
-        "verification.mypy",
-        "verification.ruff.check",
-        "verification.ruff.format_check",
-        "verification.build",
-        "git.prepare_local_commit",
+        "contract",
+        "version",
+        "owner",
+        "consumers",
+        "executionHost",
+        "summary",
+        "signing",
+        "operations",
+        "actions",
+        "approvedScripts",
+        "jobLifecycle",
+        "errorCodes",
+        "resourceLimits",
+        "environment",
+        "verification",
     }
 )
+_REQUIRED_ACTIONS = frozenset(
+    {
+        "runner.inspectRepository",
+        "runner.readRepositoryFile",
+        "runner.applyPatch",
+        "runner.gitStatus",
+        "runner.gitDiff",
+        "runner.verifyTests",
+        "runner.verifyTypecheck",
+        "runner.verifyLint",
+        "runner.verifyBuild",
+        "runner.prepareLocalCommit",
+    }
+)
+_HEX = frozenset("0123456789abcdef")
 
 
-def _aware(value: datetime) -> bool:
-    return value.tzinfo is not None and value.utcoffset() is not None
+@dataclass(frozen=True)
+class CanonicalGalorRunnerContract:
+    owner: str
+    execution_host: str
+    version: str
+    signing_algorithm: str
+    action_ids: tuple[str, ...]
+    digest: str
+    document: Mapping[str, object]
 
-
-def _decode_signature(value: str) -> bytes:
-    padded = value + ("=" * (-len(value) % 4))
-    return base64.urlsafe_b64decode(padded.encode("ascii"))
-
-
-def _encode_signature(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
-
-
-def _decode_b64(value: str) -> bytes:
-    padded = value + ("=" * (-len(value) % 4))
-    try:
-        return base64.urlsafe_b64decode(padded.encode("ascii"))
-    except (ValueError, UnicodeEncodeError, binascii.Error) as exc:
-        raise ValueError("runner receipt payload is not valid base64url") from exc
-
-
-def _key_id(public_key: bytes) -> str:
-    if len(public_key) != 32:
-        raise ValueError("GALOR Runner V2 public keys must be exactly 32 bytes")
-    return hashlib.sha256(public_key).hexdigest()
+    @classmethod
+    def from_json(cls, payload: str, *, expected_digest: str) -> CanonicalGalorRunnerContract:
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        if digest != expected_digest:
+            raise ValueError("GALOR Runner V2 contract digest mismatch")
+        try:
+            document = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ValueError("GALOR Runner V2 contract must be valid JSON") from exc
+        if not isinstance(document, dict) or set(document) != _CONTRACT_FIELDS:
+            raise ValueError("GALOR Runner V2 contract fields are invalid")
+        version, signing, actions = (
+            document.get("version"),
+            document.get("signing"),
+            document.get("actions"),
+        )
+        if document.get("contract") != "galor-runner":
+            raise ValueError("GALOR Runner V2 contract identity is invalid")
+        if not isinstance(version, str) or version.split(".", 1)[0] != "2":
+            raise ValueError("GALOR Runner V1 downgrade is rejected")
+        if (
+            document.get("owner") != "islamismylifebey-web/galor-hub"
+            or document.get("executionHost") != "galor-private-cloud-01"
+        ):
+            raise ValueError("GALOR Runner V2 authority is invalid")
+        if not isinstance(signing, dict) or signing.get("algorithm") != "HMAC-SHA256":
+            raise ValueError("GALOR Runner V2 signing algorithm is invalid")
+        if not isinstance(actions, list) or not actions:
+            raise ValueError("GALOR Runner V2 contract actions are missing")
+        raw_actions = tuple(
+            entry.get("action") if isinstance(entry, dict) else None for entry in actions
+        )
+        if any(not isinstance(action, str) for action in raw_actions):
+            raise ValueError("GALOR Runner V2 contract action entry is invalid")
+        action_ids = cast(tuple[str, ...], raw_actions)
+        if len(set(action_ids)) != len(action_ids) or not _REQUIRED_ACTIONS.issubset(action_ids):
+            raise ValueError("GALOR Runner V2 contract actions are invalid")
+        return cls(
+            str(document["owner"]),
+            str(document["executionHost"]),
+            version,
+            str(signing["algorithm"]),
+            action_ids,
+            digest,
+            document,
+        )
 
 
 def tool_request_action_id(request: ToolRequest) -> str:
     if request.kind == ToolKind.LIST_FILES:
-        return "repository.list"
+        return "runner.inspectRepository"
     if request.kind == ToolKind.READ_FILE:
-        return "repository.read"
-    if request.kind == ToolKind.WRITE_FILE:
-        return "workspace.write"
-    if request.kind == ToolKind.APPLY_PATCH:
-        return "workspace.apply_patch"
+        return "runner.readRepositoryFile"
+    if request.kind in {ToolKind.WRITE_FILE, ToolKind.APPLY_PATCH}:
+        return "runner.applyPatch"
     if request.command is None:
         raise ValueError("tool request command payload is missing")
     return command_action_id(request.command.executable, request.command.args)
 
 
 def command_action_id(executable: str, args: tuple[str, ...]) -> str:
-    normalized = executable.casefold()
-    first = args[0].casefold() if args else ""
-    if normalized == "pytest":
-        return "verification.pytest"
-    if normalized == "mypy":
-        return "verification.mypy"
-    if normalized == "ruff":
-        if first == "check":
-            return "verification.ruff.check"
-        if first == "format" and "--check" in args[1:]:
-            return "verification.ruff.format_check"
-    if normalized == "git":
-        if first == "status":
-            return "git.status"
-        if first == "diff":
-            return "git.diff"
-        if first == "commit":
-            return "git.prepare_local_commit"
-    if normalized == "uv" and first == "build":
-        return "verification.build"
-    if normalized.startswith("python") and args[:2] == ("-m", "build"):
-        return "verification.build"
+    command, first = executable.casefold(), args[0].casefold() if args else ""
+    if command == "pytest":
+        return "runner.verifyTests"
+    if command == "mypy":
+        return "runner.verifyTypecheck"
+    if command == "ruff" and (first == "check" or (first == "format" and "--check" in args[1:])):
+        return "runner.verifyLint"
+    if command == "git" and first in {"status", "diff", "commit"}:
+        return {
+            "status": "runner.gitStatus",
+            "diff": "runner.gitDiff",
+            "commit": "runner.prepareLocalCommit",
+        }[first]
+    if (command == "uv" and first == "build") or (
+        command.startswith("python") and args[:2] == ("-m", "build")
+    ):
+        return "runner.verifyBuild"
     raise ValueError("runner does not support this structured command")
 
 
-class GalorRunnerV2Contract(CreatorSchema):
-    schema_version: Literal["galor-runner-contract-v2"] = "galor-runner-contract-v2"
-    contract_id: Literal["galor.runner.v2"] = "galor.runner.v2"
-    runner_id: StrictStr = Field(pattern=_SAFE_ID)
-    tenant_id: StrictStr = Field(pattern=_SAFE_ID)
-    supported_actions: tuple[StrictStr, ...] = Field(min_length=1, max_length=128)
-    signer_key_id: StrictStr = Field(pattern=_SHA256)
-    contract_digest: StrictStr = Field(pattern=_SHA256)
-    signature: StrictStr = Field(pattern=_SIGNATURE)
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    @model_validator(mode="after")
-    def validate_contract(self) -> GalorRunnerV2Contract:
-        if len(set(self.supported_actions)) != len(self.supported_actions):
-            raise ValueError("runner contract actions must be unique")
-        if not _REQUIRED_ACTIONS.issubset(self.supported_actions):
-            raise ValueError("runner contract does not support the required Lil Tweak actions")
-        expected = content_digest(
-            self.model_dump(mode="json", exclude={"contract_digest", "signature"})
-        )
-        if self.contract_digest != expected:
-            raise ValueError("runner contract digest mismatch")
-        return self
-
-
-def galor_runner_contract_signature_message(contract: GalorRunnerV2Contract) -> bytes:
-    payload = canonical_json(
-        contract.model_dump(mode="json", exclude={"signature"})
-    ).encode("utf-8")
-    return _CONTRACT_DOMAIN + payload
-
-
-class GalorRunnerV2DispatchAccepted(CreatorSchema):
-    schema_version: Literal["galor-dispatch-accepted-v2"] = "galor-dispatch-accepted-v2"
-    dispatch_id: StrictStr = Field(pattern=_SAFE_ID)
-    tenant_id: StrictStr = Field(pattern=_SAFE_ID)
-    runner_id: StrictStr = Field(pattern=_SAFE_ID)
-    job_id: StrictStr = Field(pattern=_SAFE_ID)
-    action_id: StrictStr = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
-    accepted_at: datetime
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    @model_validator(mode="after")
-    def validate_times(self) -> GalorRunnerV2DispatchAccepted:
-        if not _aware(self.accepted_at):
-            raise ValueError("dispatch acceptance time must be timezone-aware")
-        return self
-
-
-class GalorRunnerV2Receipt(CreatorSchema):
-    schema_version: Literal["galor-runner-receipt-v2"] = "galor-runner-receipt-v2"
-    receipt_id: StrictStr = Field(pattern=_SAFE_ID)
-    tenant_id: StrictStr = Field(pattern=_SAFE_ID)
-    runner_id: StrictStr = Field(pattern=_SAFE_ID)
-    job_id: StrictStr = Field(pattern=_SAFE_ID)
-    dispatch_id: StrictStr = Field(pattern=_SAFE_ID)
-    action_id: StrictStr = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
-    source_binding_digest: StrictStr = Field(pattern=_SHA256)
-    exit_code: StrictInt | None = Field(default=None, ge=0, le=255)
-    timed_out: StrictBool = False
-    canceled: StrictBool = False
-    stdout_b64: StrictStr
-    stderr_b64: StrictStr
-    started_at: datetime
-    heartbeat_at: datetime
-    completed_at: datetime
-    evidence_digest: StrictStr = Field(pattern=_SHA256)
-    signer_key_id: StrictStr = Field(pattern=_SHA256)
-    signature: StrictStr = Field(pattern=_SIGNATURE)
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    @model_validator(mode="after")
-    def validate_receipt(self) -> GalorRunnerV2Receipt:
-        for value in (self.started_at, self.heartbeat_at, self.completed_at):
-            if not _aware(value):
-                raise ValueError("runner receipt timestamps must be timezone-aware")
-        if not (self.started_at <= self.heartbeat_at <= self.completed_at):
-            raise ValueError("runner receipt timestamps are inconsistent")
-        if (self.timed_out or self.canceled) and self.exit_code == 0:
-            raise ValueError(
-                "runner receipt cannot claim a successful exit after timeout or cancel"
-            )
-        expected = content_digest(
-            self.model_dump(mode="json", exclude={"evidence_digest", "signature"})
-        )
-        if self.evidence_digest != expected:
-            raise ValueError("runner receipt evidence digest mismatch")
-        return self
-
-
-def galor_runner_receipt_signature_message(receipt: GalorRunnerV2Receipt) -> bytes:
-    payload = canonical_json(receipt.model_dump(mode="json", exclude={"signature"})).encode("utf-8")
-    return _RECEIPT_DOMAIN + payload
-
-
-class GalorRunnerV2Status(CreatorSchema):
-    schema_version: Literal["galor-dispatch-status-v2"] = "galor-dispatch-status-v2"
-    dispatch_id: StrictStr = Field(pattern=_SAFE_ID)
-    tenant_id: StrictStr = Field(pattern=_SAFE_ID)
-    runner_id: StrictStr = Field(pattern=_SAFE_ID)
-    job_id: StrictStr = Field(pattern=_SAFE_ID)
-    action_id: StrictStr = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
-    status: Literal["running", "succeeded", "failed", "canceled", "timed_out"]
-    heartbeat_at: datetime
-    completed_at: datetime | None = None
-    receipt: GalorRunnerV2Receipt | None = None
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    @model_validator(mode="after")
-    def validate_status(self) -> GalorRunnerV2Status:
-        if not _aware(self.heartbeat_at):
-            raise ValueError("runner heartbeat time must be timezone-aware")
-        if self.status == "running":
-            if self.receipt is not None or self.completed_at is not None:
-                raise ValueError("running dispatch status cannot include a terminal receipt")
-            return self
-        if self.receipt is None or self.completed_at is None:
-            raise ValueError("terminal dispatch status requires a signed receipt")
-        if not _aware(self.completed_at):
-            raise ValueError("dispatch completion time must be timezone-aware")
-        return self
+def command_action_input(action: str, args: tuple[str, ...]) -> dict[str, object]:
+    if action != "runner.prepareLocalCommit":
+        return {}
+    try:
+        message = args[args.index("-m") + 1]
+    except (ValueError, IndexError) as exc:
+        raise ValueError("runner commit requires one -m message") from exc
+    return {"message": message}
 
 
 class GalorWorkGatewayClient(Protocol):
-    async def submit_dispatch(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
-
-    async def poll_dispatch(self, dispatch_id: str) -> Mapping[str, object]: ...
-
-    async def cancel_dispatch(self, dispatch_id: str) -> None: ...
+    async def create_approval(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
+    async def submit_job(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
+    async def poll_job(self, job_id: str) -> Mapping[str, object]: ...
+    async def cancel_job(self, job_id: str) -> None: ...
 
 
 class HttpGalorWorkGatewayClient:
     def __init__(
-        self,
-        *,
-        base_url: str,
-        auth_token: str,
-        client: httpx.AsyncClient | None = None,
+        self, *, base_url: str, auth_token: str, client: httpx.AsyncClient | None = None
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._auth_token = auth_token
+        self._headers = {"Authorization": f"Bearer {auth_token}", "X-GALOR-Service-ID": "lil-tweak"}
         self._client = client
 
     def _http_client(self) -> httpx.AsyncClient:
@@ -264,46 +173,43 @@ class HttpGalorWorkGatewayClient:
             self._client = httpx.AsyncClient()
         return self._client
 
-    async def submit_dispatch(self, payload: Mapping[str, object]) -> Mapping[str, object]:
-        response = await self._http_client().post(
-            f"{self._base_url}/v2/dispatches",
-            json=payload,
-            headers={"Authorization": "Bearer " + self._auth_token},
-            timeout=30.0,
+    async def _json(
+        self, method: str, path: str, payload: Mapping[str, object] | None = None
+    ) -> Mapping[str, object]:
+        response = await self._http_client().request(
+            method, f"{self._base_url}{path}", json=payload, headers=self._headers, timeout=30.0
         )
         response.raise_for_status()
         return cast(Mapping[str, object], response.json())
 
-    async def poll_dispatch(self, dispatch_id: str) -> Mapping[str, object]:
-        response = await self._http_client().get(
-            f"{self._base_url}/v2/dispatches/{dispatch_id}",
-            headers={"Authorization": "Bearer " + self._auth_token},
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        return cast(Mapping[str, object], response.json())
+    async def create_approval(self, payload: Mapping[str, object]) -> Mapping[str, object]:
+        return await self._json("POST", "/api/executor/approvals/action", payload)
 
-    async def cancel_dispatch(self, dispatch_id: str) -> None:
-        response = await self._http_client().post(
-            f"{self._base_url}/v2/dispatches/{dispatch_id}/cancel",
-            headers={"Authorization": "Bearer " + self._auth_token},
-            timeout=30.0,
+    async def submit_job(self, payload: Mapping[str, object]) -> Mapping[str, object]:
+        return await self._json("POST", "/api/work-gateway", payload)
+
+    async def poll_job(self, job_id: str) -> Mapping[str, object]:
+        return await self._json("GET", f"/api/executor/jobs/{job_id}")
+
+    async def cancel_job(self, job_id: str) -> None:
+        await self._json(
+            "POST",
+            "/api/executor/cancel",
+            {"jobId": job_id, "reason": "Lil' Tweak canceled the tool run"},
         )
-        response.raise_for_status()
 
 
 @dataclass(frozen=True)
 class GalorRunnerV2Config:
     gateway_url: str
     auth_token: str
-    contract: GalorRunnerV2Contract
+    contract: CanonicalGalorRunnerContract
     expected_contract_digest: str
     qualification_evidence_digest: str
     authorization_digest: str
-    signing_keys: Mapping[str, bytes]
     workspace_root: Path
-    max_heartbeat_age_seconds: int = 120
-    max_receipt_age_seconds: int = 300
+    repository_id: str
+    repository_commit: str
 
 
 @dataclass
@@ -323,9 +229,7 @@ class BlockedGalorRunnerV2Transport:
 
 
 class GalorRunnerV2Transport:
-    provider_name = "galor-runner-v2"
-    qualification_status = "qualified"
-    server_authorized = True
+    provider_name, qualification_status, server_authorized = "galor-runner-v2", "qualified", True
 
     def __init__(
         self,
@@ -335,36 +239,38 @@ class GalorRunnerV2Transport:
         now: Callable[[], datetime] | None = None,
         poll_interval_seconds: float = 0.25,
     ) -> None:
-        if config.contract.contract_digest != config.expected_contract_digest:
+        if config.contract.digest != config.expected_contract_digest:
             raise ValueError("GALOR Runner V2 contract digest mismatch")
         parsed = urlparse(config.gateway_url)
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.netloc
-            or parsed.params
+            or parsed.username
+            or parsed.password
             or parsed.query
+            or parsed.fragment
         ):
             raise ValueError("GALOR Runner V2 gateway URL is invalid")
-        if parsed.username is not None or parsed.password is not None or parsed.fragment:
-            raise ValueError("GALOR Runner V2 gateway URL is invalid")
-        if (
-            not config.authorization_digest
-            or len(config.authorization_digest) != 64
-            or any(
-                character not in "0123456789abcdef" for character in config.authorization_digest
+        if config.repository_id != "lil-tweak":
+            raise ValueError("GALOR Runner V2 repository is not allowlisted")
+        if len(config.repository_commit) != 40 or any(
+            char not in _HEX for char in config.repository_commit
+        ):
+            raise ValueError(
+                "GALOR Runner V2 repository commit must be an immutable lowercase Git SHA"
             )
-        ):
-            raise ValueError("GALOR Runner V2 authorization digest is invalid")
-        self._config = config
-        self._gateway = gateway or HttpGalorWorkGatewayClient(
-            base_url=config.gateway_url,
-            auth_token=config.auth_token,
+        self._config, self._gateway = (
+            config,
+            gateway
+            or HttpGalorWorkGatewayClient(
+                base_url=config.gateway_url, auth_token=config.auth_token
+            ),
         )
-        self._now = now or (lambda: datetime.now(UTC))
-        self._poll_interval_seconds = poll_interval_seconds
-        self._seen_receipts: set[str] = set()
+        self._now, self._poll_interval_seconds = (
+            now or (lambda: datetime.now(UTC)),
+            poll_interval_seconds,
+        )
         self._disconnect_reason = "GALOR Runner V2 is connected and authorized"
-        self._verify_contract()
 
     @property
     def connected(self) -> bool:
@@ -379,10 +285,10 @@ class GalorRunnerV2Transport:
         return self._disconnect_reason
 
     def action_for_request(self, request: ToolRequest) -> str:
-        action_id = tool_request_action_id(request)
-        if action_id not in self._config.contract.supported_actions:
+        action = tool_request_action_id(request)
+        if action not in self._config.contract.action_ids:
             raise ValueError("GALOR Runner V2 contract does not support the requested action")
-        return action_id
+        return action
 
     async def run(
         self,
@@ -394,253 +300,131 @@ class GalorRunnerV2Transport:
         output_byte_limit: int,
         network: NetworkMode,
         cancel_event: asyncio.Event,
+        approval_digest: str = "",
     ) -> ProcessResult:
-        action_id = command_action_id(executable, args)
-        if action_id not in self._config.contract.supported_actions:
+        action = command_action_id(executable, args)
+        return await self.run_action(
+            action=action,
+            input=command_action_input(action, args),
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            output_byte_limit=output_byte_limit,
+            network=network,
+            cancel_event=cancel_event,
+            approval_digest=approval_digest,
+        )
+
+    async def run_action(
+        self,
+        *,
+        action: str,
+        input: Mapping[str, object],
+        cwd: Path,
+        timeout_seconds: int,
+        output_byte_limit: int,
+        network: NetworkMode,
+        cancel_event: asyncio.Event,
+        approval_digest: str = "",
+    ) -> ProcessResult:
+        del cwd, output_byte_limit
+        if action not in self._config.contract.action_ids:
             raise ExecutorUnavailableError("GALOR Runner V2 contract does not support this action")
-        working_directory = self._relative_cwd(cwd)
-        dispatch_id = f"dispatch:{uuid.uuid4().hex}"
-        job_id = f"job:{uuid.uuid4().hex}"
-        source_binding_digest = content_digest(
+        if network != NetworkMode.DENIED:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 engineering actions require denied network"
+            )
+        if len(approval_digest) != 64 or any(char not in _HEX for char in approval_digest):
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 requires exact Workbench approval evidence"
+            )
+        scope = f"repo:{self._config.repository_id}@{self._config.repository_commit}"
+        effect_class = (
+            "WRITE" if action in {"runner.applyPatch", "runner.prepareLocalCommit"} else "READ"
+        )
+        reason = f"Lil' Tweak approved {action} for immutable repository scope"
+        approval = await self._gateway.create_approval(
             {
-                "action_id": action_id,
-                "working_directory": working_directory,
-                "network": network.value,
+                "scope": scope,
+                "action": action,
+                "effectClass": effect_class,
+                "input": dict(input),
+                "secretNames": [],
+                "reason": reason,
+                "ownerApprovalDigest": approval_digest,
             }
         )
-        payload = {
-            "schema_version": "liltweak-galor-dispatch-request-v2",
-            "dispatch_id": dispatch_id,
-            "job_id": job_id,
-            "tenant_id": self._config.contract.tenant_id,
-            "runner_id": self._config.contract.runner_id,
-            "contract_digest": self._config.contract.contract_digest,
-            "authorization_digest": self._config.authorization_digest,
-            "qualification_evidence_digest": self._config.qualification_evidence_digest,
-            "action_id": action_id,
-            "working_directory": working_directory,
-            "executable": executable,
-            "args": list(args),
-            "timeout_seconds": timeout_seconds,
-            "output_byte_limit": output_byte_limit,
-            "network": network.value,
-            "source_binding_digest": source_binding_digest,
-        }
-        accepted = self._validate_dispatch_accepted(
-            await self._gateway.submit_dispatch(payload),
-            dispatch_id=dispatch_id,
-            job_id=job_id,
-            action_id=action_id,
+        approval_id, tenant_id, expires_at = (
+            approval.get("approvalId"),
+            approval.get("tenantId"),
+            approval.get("expiresAt"),
         )
-        deadline = self._now() + timedelta(seconds=max(timeout_seconds, 1))
-        cancel_sent = False
+        if not all(
+            isinstance(value, str) and value for value in (approval_id, tenant_id, expires_at)
+        ):
+            raise ExecutorUnavailableError("GALOR Hub returned an invalid action approval")
+        accepted = await self._gateway.submit_job(
+            {
+                "project": "lil-tweak",
+                "command": action,
+                "objective": reason,
+                "idempotencyKey": f"liltweak:{uuid.uuid4().hex}",
+                "effectClass": effect_class,
+                "priority": 50,
+                "resources": [{"resource": scope, "mode": "exclusive"}],
+                "dependencyIds": [],
+                "approvalRequired": True,
+                "execution": {
+                    "tenantId": tenant_id,
+                    "scope": scope,
+                    "action": action,
+                    "input": dict(input),
+                    "secretNames": [],
+                    "approvalId": approval_id,
+                    "expiresAt": expires_at,
+                },
+            }
+        )
+        job_id = accepted.get("jobId")
+        if accepted.get("accepted") is not True or not isinstance(job_id, str) or not job_id:
+            raise ExecutorUnavailableError("GALOR Hub did not accept the executor job")
+        deadline, cancel_sent = self._now() + timedelta(seconds=max(timeout_seconds, 1)), False
         while True:
             if cancel_event.is_set() and not cancel_sent:
-                await self._gateway.cancel_dispatch(dispatch_id)
+                await self._gateway.cancel_job(job_id)
                 cancel_sent = True
             if self._now() >= deadline:
                 if not cancel_sent:
-                    await self._gateway.cancel_dispatch(dispatch_id)
+                    await self._gateway.cancel_job(job_id)
                 return ProcessResult(None, b"", b"", True, False)
-            status = self._validate_dispatch_status(
-                await self._gateway.poll_dispatch(dispatch_id),
-                accepted=accepted,
-            )
-            if self._now() - status.heartbeat_at > timedelta(
-                seconds=self._config.max_heartbeat_age_seconds
-            ):
-                raise ExecutorUnavailableError("GALOR Runner V2 heartbeat is stale")
-            if status.receipt is None:
+            status = await self._gateway.poll_job(job_id)
+            if status.get("jobId") != job_id or status.get("tenantId") != tenant_id:
+                raise ExecutorUnavailableError("GALOR Hub job status binding is invalid")
+            state = status.get("state")
+            if state not in {"succeeded", "failed", "cancelled", "blocked"}:
                 await asyncio.sleep(self._poll_interval_seconds)
                 continue
-            receipt = self._verify_receipt(
-                status.receipt,
-                dispatch_id=dispatch_id,
-                job_id=job_id,
-                action_id=action_id,
-                source_binding_digest=source_binding_digest,
-            )
-            stdout = _decode_b64(receipt.stdout_b64)
-            stderr = _decode_b64(receipt.stderr_b64)
+            if state == "cancelled":
+                return ProcessResult(None, b"", b"", False, True)
+            result = status.get("result")
+            if not isinstance(result, Mapping):
+                return ProcessResult(
+                    1,
+                    b"",
+                    str(status.get("failureReason") or "GALOR Runner V2 job failed").encode(),
+                    False,
+                    False,
+                )
+            receipt = result.get("receipt")
+            if (
+                not isinstance(receipt, Mapping)
+                or receipt.get("commit") != self._config.repository_commit
+            ):
+                raise ExecutorUnavailableError("GALOR Hub result repository binding is invalid")
+            exit_code = receipt.get("exitCode")
             return ProcessResult(
-                receipt.exit_code,
-                stdout,
-                stderr,
-                receipt.timed_out,
-                receipt.canceled,
+                exit_code if isinstance(exit_code, int) else None,
+                str(result.get("stdout") or "").encode(),
+                str(result.get("stderr") or "").encode(),
+                False,
+                False,
             )
-
-    def _relative_cwd(self, cwd: Path) -> str:
-        root = self._config.workspace_root.resolve()
-        resolved = cwd.resolve()
-        if not resolved.is_relative_to(root):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 source binding rejected the workspace path"
-            )
-        relative = resolved.relative_to(root).as_posix()
-        return relative if relative else "."
-
-    def _verify_contract(self) -> None:
-        public_key = self._config.signing_keys.get(self._config.contract.signer_key_id)
-        if public_key is None:
-            raise ValueError("GALOR Runner V2 contract signer is untrusted")
-        if _key_id(public_key) != self._config.contract.signer_key_id:
-            raise ValueError("GALOR Runner V2 contract signer key id is invalid")
-        try:
-            Ed25519PublicKey.from_public_bytes(public_key).verify(
-                _decode_signature(self._config.contract.signature),
-                galor_runner_contract_signature_message(self._config.contract),
-            )
-        except (InvalidSignature, ValueError) as exc:
-            raise ValueError("GALOR Runner V2 contract signature is invalid") from exc
-
-    def _validate_dispatch_accepted(
-        self,
-        payload: Mapping[str, object],
-        *,
-        dispatch_id: str,
-        job_id: str,
-        action_id: str,
-    ) -> GalorRunnerV2DispatchAccepted:
-        version = payload.get("schema_version")
-        if version == "galor-dispatch-accepted-v1":
-            raise ValueError("GALOR Runner V1 downgrade is rejected")
-        accepted = GalorRunnerV2DispatchAccepted.model_validate(payload)
-        if accepted.dispatch_id != dispatch_id:
-            raise ValueError("GALOR Runner V2 dispatch binding is invalid")
-        if accepted.job_id != job_id:
-            raise ValueError("GALOR Runner V2 job binding is invalid")
-        if accepted.action_id != action_id:
-            raise ValueError("GALOR Runner V2 action binding is invalid")
-        if accepted.tenant_id != self._config.contract.tenant_id:
-            raise ValueError("GALOR Runner V2 tenant binding is invalid")
-        if accepted.runner_id != self._config.contract.runner_id:
-            raise ValueError("GALOR Runner V2 runner identity is invalid")
-        return accepted
-
-    def _validate_dispatch_status(
-        self,
-        payload: Mapping[str, object],
-        *,
-        accepted: GalorRunnerV2DispatchAccepted,
-    ) -> GalorRunnerV2Status:
-        version = payload.get("schema_version")
-        if version == "galor-dispatch-status-v1":
-            raise ValueError("GALOR Runner V1 downgrade is rejected")
-        status = GalorRunnerV2Status.model_validate(payload)
-        if status.dispatch_id != accepted.dispatch_id:
-            raise ValueError("GALOR Runner V2 dispatch binding is invalid")
-        if status.job_id != accepted.job_id:
-            raise ValueError("GALOR Runner V2 job binding is invalid")
-        if status.action_id != accepted.action_id:
-            raise ValueError("GALOR Runner V2 action binding is invalid")
-        if status.tenant_id != self._config.contract.tenant_id:
-            raise ValueError("GALOR Runner V2 tenant binding is invalid")
-        if status.runner_id != self._config.contract.runner_id:
-            raise ValueError("GALOR Runner V2 runner identity is invalid")
-        return status
-
-    def _verify_receipt(
-        self,
-        receipt: GalorRunnerV2Receipt,
-        *,
-        dispatch_id: str,
-        job_id: str,
-        action_id: str,
-        source_binding_digest: str,
-    ) -> GalorRunnerV2Receipt:
-        if receipt.dispatch_id != dispatch_id:
-            raise ValueError("GALOR Runner V2 dispatch binding is invalid")
-        if receipt.job_id != job_id:
-            raise ValueError("GALOR Runner V2 job binding is invalid")
-        if receipt.action_id != action_id:
-            raise ValueError("GALOR Runner V2 action binding is invalid")
-        if receipt.tenant_id != self._config.contract.tenant_id:
-            raise ValueError("GALOR Runner V2 tenant binding is invalid")
-        if receipt.runner_id != self._config.contract.runner_id:
-            raise ValueError("GALOR Runner V2 runner identity is invalid")
-        if receipt.source_binding_digest != source_binding_digest:
-            raise ValueError("GALOR Runner V2 source binding is invalid")
-        if (
-            receipt.receipt_id in self._seen_receipts
-            or receipt.evidence_digest in self._seen_receipts
-        ):
-            raise ValueError("GALOR Runner V2 receipt replay is rejected")
-        if self._now() - receipt.completed_at > timedelta(
-            seconds=self._config.max_receipt_age_seconds
-        ):
-            raise ValueError("GALOR Runner V2 receipt is stale")
-        public_key = self._config.signing_keys.get(receipt.signer_key_id)
-        if public_key is None:
-            raise ValueError("GALOR Runner V2 receipt signer is untrusted")
-        if _key_id(public_key) != receipt.signer_key_id:
-            raise ValueError("GALOR Runner V2 receipt signer key id is invalid")
-        try:
-            Ed25519PublicKey.from_public_bytes(public_key).verify(
-                _decode_signature(receipt.signature),
-                galor_runner_receipt_signature_message(receipt),
-            )
-        except (InvalidSignature, ValueError) as exc:
-            raise ValueError("GALOR Runner V2 receipt signature is invalid") from exc
-        self._seen_receipts.add(receipt.receipt_id)
-        self._seen_receipts.add(receipt.evidence_digest)
-        return receipt
-
-
-def parse_signing_keys(payload: str) -> dict[str, bytes]:
-    try:
-        raw = json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise ValueError("GALOR Runner V2 signing keys must be valid JSON") from exc
-    if not isinstance(raw, dict) or not raw:
-        raise ValueError("GALOR Runner V2 signing keys must be a non-empty object")
-    parsed: dict[str, bytes] = {}
-    for key_id, encoded in raw.items():
-        if not isinstance(key_id, str) or not isinstance(encoded, str):
-            raise ValueError("GALOR Runner V2 signing keys must map strings to strings")
-        key = _decode_b64(encoded)
-        if _key_id(key) != key_id:
-            raise ValueError("GALOR Runner V2 signing key id does not match the supplied key")
-        parsed[key_id] = key
-    return parsed
-
-
-def sign_contract(
-    *,
-    runner_id: str,
-    tenant_id: str,
-    supported_actions: tuple[str, ...],
-    public_key: bytes,
-    private_key_signer: Callable[[bytes], bytes],
-) -> GalorRunnerV2Contract:
-    signer_key_id = _key_id(public_key)
-    unsigned = GalorRunnerV2Contract.model_construct(
-        runner_id=runner_id,
-        tenant_id=tenant_id,
-        supported_actions=supported_actions,
-        signer_key_id=signer_key_id,
-        contract_digest="0" * 64,
-        signature="A" * 86,
-    )
-    digest = content_digest(
-        unsigned.model_dump(mode="json", exclude={"contract_digest", "signature"})
-    )
-    draft = GalorRunnerV2Contract.model_construct(
-        runner_id=runner_id,
-        tenant_id=tenant_id,
-        supported_actions=supported_actions,
-        signer_key_id=signer_key_id,
-        contract_digest=digest,
-        signature="A" * 86,
-    )
-    signature = _encode_signature(
-        private_key_signer(galor_runner_contract_signature_message(draft))
-    )
-    return GalorRunnerV2Contract(
-        runner_id=runner_id,
-        tenant_id=tenant_id,
-        supported_actions=supported_actions,
-        signer_key_id=signer_key_id,
-        contract_digest=digest,
-        signature=signature,
-    )

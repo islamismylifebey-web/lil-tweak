@@ -171,6 +171,8 @@ class Settings:
     workbench_runner_authorization_digest: str | None = None
     workbench_runner_auth_token: str | None = field(default=None, repr=False)
     workbench_runner_signing_keys_json: str | None = None
+    workbench_runner_repository_id: str | None = None
+    workbench_runner_repository_commit: str | None = None
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -285,9 +287,10 @@ class Settings:
                     self.workbench_runner_authorization_digest,
                 ),
                 ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
+                ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
                 (
-                    "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON",
-                    self.workbench_runner_signing_keys_json,
+                    "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT",
+                    self.workbench_runner_repository_commit,
                 ),
             )
             for runner_name, runner_value in runner_values:
@@ -319,17 +322,23 @@ class Settings:
             for digest_name, digest_value in digest_values:
                 if digest_value is None or re.fullmatch(r"[0-9a-f]{64}", digest_value) is None:
                     raise ValueError(f"{digest_name} must be a lowercase SHA-256 digest")
-            if (
-                self.workbench_runner_auth_token is not None
-                and (
-                    len(self.workbench_runner_auth_token) < 16
-                    or any(
-                        ord(character) < 33 or ord(character) == 127
-                        for character in self.workbench_runner_auth_token
-                    )
+            if self.workbench_runner_auth_token is not None and (
+                len(self.workbench_runner_auth_token) < 16
+                or any(
+                    ord(character) < 33 or ord(character) == 127
+                    for character in self.workbench_runner_auth_token
                 )
             ):
                 raise ValueError("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN is invalid")
+            if self.workbench_runner_repository_id != "lil-tweak":
+                raise ValueError("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID must be lil-tweak")
+            if (
+                self.workbench_runner_repository_commit is None
+                or re.fullmatch(r"[0-9a-f]{40}", self.workbench_runner_repository_commit) is None
+            ):
+                raise ValueError(
+                    "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT must be an immutable Git SHA"
+                )
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -455,7 +464,9 @@ class Settings:
             workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
             workbench_runner_enabled=_bool_env("LILTWEAK_WORKBENCH_RUNNER_ENABLED", False),
             workbench_runner_gateway_url=os.getenv("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL"),
-            workbench_runner_contract_json=_json_text_env("LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON"),
+            workbench_runner_contract_json=_json_text_env(
+                "LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON"
+            ),
             workbench_runner_expected_contract_digest=os.getenv(
                 "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST"
             ),
@@ -468,5 +479,9 @@ class Settings:
             workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
             workbench_runner_signing_keys_json=_json_text_env(
                 "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
+            ),
+            workbench_runner_repository_id=os.getenv("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID"),
+            workbench_runner_repository_commit=os.getenv(
+                "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT"
             ),
         )

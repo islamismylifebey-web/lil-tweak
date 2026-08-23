@@ -56,10 +56,9 @@ from .execution_plane import (
 )
 from .galor_runner_v2 import (
     BlockedGalorRunnerV2Transport,
+    CanonicalGalorRunnerContract,
     GalorRunnerV2Config,
-    GalorRunnerV2Contract,
     GalorRunnerV2Transport,
-    parse_signing_keys,
 )
 from .live_contract import (
     LiveProposalDecisionRequest,
@@ -253,7 +252,8 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
             settings.workbench_runner_qualification_digest,
             settings.workbench_runner_authorization_digest,
             settings.workbench_runner_auth_token,
-            settings.workbench_runner_signing_keys_json,
+            settings.workbench_runner_repository_id,
+            settings.workbench_runner_repository_commit,
         )
     ):
         return BlockedGalorRunnerV2Transport(
@@ -262,14 +262,15 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
         )
     try:
         contract_json = str(settings.workbench_runner_contract_json)
-        signing_keys_json = str(settings.workbench_runner_signing_keys_json)
         gateway_url = str(settings.workbench_runner_gateway_url)
         auth_token = str(settings.workbench_runner_auth_token)
         expected_digest = str(settings.workbench_runner_expected_contract_digest)
         qualification_digest = str(settings.workbench_runner_qualification_digest)
         authorization_digest = str(settings.workbench_runner_authorization_digest)
-        contract = GalorRunnerV2Contract.model_validate_json(contract_json)
-        signing_keys = parse_signing_keys(signing_keys_json)
+        contract = CanonicalGalorRunnerContract.from_json(
+            contract_json,
+            expected_digest=expected_digest,
+        )
         return GalorRunnerV2Transport(
             GalorRunnerV2Config(
                 gateway_url=gateway_url,
@@ -278,8 +279,9 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
                 expected_contract_digest=expected_digest,
                 qualification_evidence_digest=qualification_digest,
                 authorization_digest=authorization_digest,
-                signing_keys=signing_keys,
                 workspace_root=settings.workbench_workspace_root,
+                repository_id=str(settings.workbench_runner_repository_id),
+                repository_commit=str(settings.workbench_runner_repository_commit),
             )
         )
     except ValueError as exc:
