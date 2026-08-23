@@ -259,6 +259,21 @@ jobs:
 
           package_artifact_subjects(Path(sys.argv[1]), Path(sys.argv[2]))
           PY
+
+      - name: Preserve generated supply-chain evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lil-tweak-supply-chain-candidate
+          path: ${{ runner.temp }}/liltweak-results/supply-chain/*.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Validate deterministic evidence
+        shell: bash
+        env:
+          RESULTS: ${{ runner.temp }}/liltweak-results
+        run: |
+          set -Eeuo pipefail
           python - <<'PY'
           import json
           import os

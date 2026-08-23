@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "c192726f9254be94b9736fe866af9c5b3c7ba539915b87b0c9a3e08ab3577851",
+  "manifest_scope_digest": "333f67c81c1d398aa6f4ddf1fc022a860fab9a635acaad2978388ab6b6278bd7",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 265,
@@ -26,9 +26,9 @@
       "relative_path": ".github/workflows/ci.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "73eff2459fcb55f9be7fe352a5fad8696627b97ce7655c338f1830c2dd203234",
-      "git_blob_sha1": "f24065618ba03f6d25594d195c3af5e37b00e421",
-      "bytes": 14351
+      "sha256": "f8693adc98c0457dc5b087d2b056802f0c60ac0946a6da2c96766fc79c664a51",
+      "git_blob_sha1": "d4109cdd37453e8e366120c424db87fab1fbfd44",
+      "bytes": 14872
     },
     {
       "relative_path": ".github/workflows/runner-qualification.yml",
@@ -1018,9 +1018,9 @@
       "relative_path": "liltweak/galor_runner_v2.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "5c964be7756d403f5db59ebeb53e51735cf2efbedef01ba5738a91654a0cd386",
-      "git_blob_sha1": "1d4e5ce7f812e217493cd1d957eb8740252b7fe4",
-      "bytes": 16293
+      "sha256": "0e64a6f2595d1547cd868b200263265d0f0031e14cdb922e476d821b6fc521d7",
+      "git_blob_sha1": "902622493653e3ff525af2b1401f06eb63262d8c",
+      "bytes": 16301
     },
     {
       "relative_path": "liltweak/hosted_sandbox.py",
@@ -1402,9 +1402,9 @@
       "relative_path": "scripts/generate_supply_chain_artifacts.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b5d1764a36a5b3173bb1275d23307bcebcb7fa130ea34264b0863487ed1c2710",
-      "git_blob_sha1": "6455e01b5248fdcaa080173748f4762afcb3e611",
-      "bytes": 33065
+      "sha256": "fec29b0c529bd701934089c5dc3c5d103301fcdff71332530329e55592a2310d",
+      "git_blob_sha1": "c9b3d29f050984b1bd1b3d16f845bb9767fbf6c5",
+      "bytes": 33253
     },
     {
       "relative_path": "scripts/lil_tweak_capability_discovery.py",

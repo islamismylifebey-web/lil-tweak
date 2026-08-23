@@ -259,12 +259,11 @@ class GalorRunnerV2Transport:
             raise ValueError(
                 "GALOR Runner V2 repository commit must be an immutable lowercase Git SHA"
             )
+        service_token = config.auth_token
         self._config, self._gateway = (
             config,
             gateway
-            or HttpGalorWorkGatewayClient(
-                base_url=config.gateway_url, auth_token=config.auth_token
-            ),
+            or HttpGalorWorkGatewayClient(base_url=config.gateway_url, auth_token=service_token),
         )
         self._now, self._poll_interval_seconds = (
             now or (lambda: datetime.now(UTC)),
