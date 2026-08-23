@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,7 +14,6 @@ from liltweak.isolated_runner import (
     IsolationUnavailableError,
     _OutputBudget,
 )
-from liltweak.repository import RepositoryInspector
 from liltweak.source_snapshot import RepositorySnapshotBuilder
 
 IMAGE = "registry.invalid/liltweak-python@sha256:" + ("c" * 64)
@@ -36,12 +37,22 @@ def recipe() -> ExecutionRecipe:
 def runner(tmp_path: Path) -> BubblewrapSandboxExecutor:
     runtime_root = tmp_path / "runtime-root"
     runtime_root.mkdir()
-    inspector = RepositoryInspector(tmp_path, repository_mappings={})
+    runtime_path, limiter_path = trusted_executables(tmp_path)
     return BubblewrapSandboxExecutor(
-        snapshot_builder=RepositorySnapshotBuilder(inspector),
+        snapshot_builder=Mock(spec=RepositorySnapshotBuilder),
         runtime_root=runtime_root,
         image_ref=IMAGE,
+        runtime_path=runtime_path,
+        limiter_path=limiter_path,
     )
+
+
+def trusted_executables(tmp_path: Path) -> tuple[Path, Path]:
+    paths = (tmp_path / "bwrap", tmp_path / "prlimit")
+    for path in paths:
+        shutil.copyfile(sys.executable, path)
+        path.chmod(0o700)
+    return paths
 
 
 def test_bubblewrap_invocation_has_fail_closed_profile(tmp_path: Path) -> None:
@@ -105,24 +116,25 @@ async def test_output_budget_is_shared_across_commands(tmp_path: Path) -> None:
 
 
 def test_host_root_cannot_be_used_as_runtime_bundle(tmp_path: Path) -> None:
-    inspector = RepositoryInspector(tmp_path, repository_mappings={})
+    runtime_path, limiter_path = trusted_executables(tmp_path)
     with pytest.raises(IsolationUnavailableError, match="dedicated pinned directory"):
         BubblewrapSandboxExecutor(
-            snapshot_builder=RepositorySnapshotBuilder(inspector),
+            snapshot_builder=Mock(spec=RepositorySnapshotBuilder),
             runtime_root=Path("/"),
             image_ref=IMAGE,
+            runtime_path=runtime_path,
+            limiter_path=limiter_path,
         )
 
 
 def test_runtime_bundle_symlink_is_rejected(tmp_path: Path) -> None:
-    inspector = RepositoryInspector(tmp_path, repository_mappings={})
     runtime_root = tmp_path / "runtime-root"
     runtime_root.mkdir()
     linked_root = tmp_path / "linked-runtime-root"
     linked_root.symlink_to(runtime_root, target_is_directory=True)
     with pytest.raises(IsolationUnavailableError, match="symbolic link"):
         BubblewrapSandboxExecutor(
-            snapshot_builder=RepositorySnapshotBuilder(inspector),
+            snapshot_builder=Mock(spec=RepositorySnapshotBuilder),
             runtime_root=linked_root,
             image_ref=IMAGE,
         )
