@@ -61,6 +61,17 @@ def _repository_mappings_env() -> dict[str, str]:
     return mappings
 
 
+def _json_text_env(name: str) -> str | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{name} must be valid JSON") from exc
+    return raw
+
+
 def _key_env(name: str) -> bytes | None:
     raw = os.getenv(name)
     if not raw:
@@ -152,6 +163,14 @@ class Settings:
     workbench_output_token_limit: int = 4_096
     workbench_cost_ceiling_usd: float = 0.20
     workbench_monthly_limit_usd: float = 5.0
+    workbench_runner_enabled: bool = False
+    workbench_runner_gateway_url: str | None = None
+    workbench_runner_contract_json: str | None = None
+    workbench_runner_expected_contract_digest: str | None = None
+    workbench_runner_qualification_digest: str | None = None
+    workbench_runner_authorization_digest: str | None = None
+    workbench_runner_auth_token: str | None = field(default=None, repr=False)
+    workbench_runner_signing_keys_json: str | None = None
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -249,6 +268,54 @@ class Settings:
                 )
         if self.workbench_enabled and not self.dev_api_key:
             raise ValueError("private Workbench requires LILTWEAK_DEV_API_KEY")
+        if self.workbench_runner_enabled:
+            for name, value in {
+                "LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL": self.workbench_runner_gateway_url,
+                "LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON": self.workbench_runner_contract_json,
+                "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST": (
+                    self.workbench_runner_expected_contract_digest
+                ),
+                "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST": (
+                    self.workbench_runner_qualification_digest
+                ),
+                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST": (
+                    self.workbench_runner_authorization_digest
+                ),
+                "LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN": self.workbench_runner_auth_token,
+                "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON": (
+                    self.workbench_runner_signing_keys_json
+                ),
+            }.items():
+                if value in {None, ""}:
+                    raise ValueError(f"{name} is required when the GALOR Runner V2 is enabled")
+            if self.workbench_runner_gateway_url is not None:
+                parsed = re.fullmatch(r"https?://[^/\s?#]+(?:/[^?#\s]*)?", self.workbench_runner_gateway_url)
+                if parsed is None:
+                    raise ValueError("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL is invalid")
+            for name, value in {
+                "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST": (
+                    self.workbench_runner_expected_contract_digest
+                ),
+                "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST": (
+                    self.workbench_runner_qualification_digest
+                ),
+                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST": (
+                    self.workbench_runner_authorization_digest
+                ),
+            }.items():
+                if value is None or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+                    raise ValueError(f"{name} must be a lowercase SHA-256 digest")
+            if (
+                self.workbench_runner_auth_token is not None
+                and (
+                    len(self.workbench_runner_auth_token) < 16
+                    or any(
+                        ord(character) < 33 or ord(character) == 127
+                        for character in self.workbench_runner_auth_token
+                    )
+                )
+            ):
+                raise ValueError("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN is invalid")
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -372,4 +439,20 @@ class Settings:
             workbench_output_token_limit=_int_env("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT", 4_096),
             workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.20),
             workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
+            workbench_runner_enabled=_bool_env("LILTWEAK_WORKBENCH_RUNNER_ENABLED", False),
+            workbench_runner_gateway_url=os.getenv("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL"),
+            workbench_runner_contract_json=_json_text_env("LILTWEAK_WORKBENCH_RUNNER_CONTRACT_JSON"),
+            workbench_runner_expected_contract_digest=os.getenv(
+                "LILTWEAK_WORKBENCH_RUNNER_EXPECTED_CONTRACT_DIGEST"
+            ),
+            workbench_runner_qualification_digest=os.getenv(
+                "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_DIGEST"
+            ),
+            workbench_runner_authorization_digest=os.getenv(
+                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST"
+            ),
+            workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
+            workbench_runner_signing_keys_json=_json_text_env(
+                "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
+            ),
         )

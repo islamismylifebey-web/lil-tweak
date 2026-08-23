@@ -56,3 +56,18 @@ def test_environment_rejects_non_primary_engineering_model(
     monkeypatch.setenv("LILTWEAK_MODEL", "gpt-5.6-luna")
     with pytest.raises(ValueError, match="canonical primary"):
         Settings.from_env()
+
+
+def test_galor_runner_activation_requires_complete_server_configuration(tmp_path: Path) -> None:
+    configured = settings(tmp_path)
+    with pytest.raises(ValueError, match="AUTH_TOKEN"):
+        replace(
+            configured,
+            workbench_runner_enabled=True,
+            workbench_runner_gateway_url="https://galor.invalid/runner",
+            workbench_runner_contract_json="{}",
+            workbench_runner_expected_contract_digest="a" * 64,
+            workbench_runner_qualification_digest="b" * 64,
+            workbench_runner_authorization_digest="c" * 64,
+            workbench_runner_signing_keys_json='{"key":"value"}',
+        )

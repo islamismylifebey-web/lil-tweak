@@ -1087,7 +1087,7 @@ class WorkbenchController:
         if not self.model.connected:
             missing.append("live Lil Tweak model adapter is disabled")
         if not self.executor.connected:
-            missing.append("qualified bounded command runner is disconnected")
+            missing.append(self.executor.disconnect_reason)
         if self.store.is_emergency_stopped():
             missing.append("emergency stop is active")
         evidence_integrity = (

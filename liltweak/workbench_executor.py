@@ -60,6 +60,9 @@ class ProcessTransport(Protocol):
     @property
     def authorization_digest(self) -> str | None: ...
 
+    @property
+    def server_authorized(self) -> bool: ...
+
     async def run(
         self,
         *,
@@ -78,6 +81,8 @@ class DisconnectedProcessTransport:
     provider_name = "none"
     qualification_status = "unavailable"
     authorization_digest = None
+    server_authorized = False
+    disconnect_reason = "No qualified bounded command runner is configured."
 
     async def run(self, **_: object) -> ProcessResult:
         raise ExecutorUnavailableError("qualified command runner is not connected")
@@ -130,6 +135,11 @@ class QualifiedProcessTransport:
     provider_name = "dormant-qualified-descriptor"
     qualification_status = "unqualified"
     authorization_digest = None
+    server_authorized = False
+    disconnect_reason = (
+        "No independently qualified Workbench runner provider is implemented; the runner remains "
+        "disconnected."
+    )
 
     @property
     def connected(self) -> bool:
@@ -549,9 +559,13 @@ class BoundedToolExecutor:
         self._cancel_events: dict[str, asyncio.Event] = {}
 
     @property
+    def _transport_enabled(self) -> bool:
+        return bool(self._allow_test_transport or getattr(self.transport, "server_authorized", False))
+
+    @property
     def connected(self) -> bool:
         return bool(
-            self._allow_test_transport
+            self._transport_enabled
             and self.transport.connected
             and self.qualification_status == "qualified"
             and self.authorization_digest is not None
@@ -563,7 +577,7 @@ class BoundedToolExecutor:
 
     @property
     def qualification_status(self) -> str:
-        if not self._allow_test_transport:
+        if not self._transport_enabled:
             if isinstance(self.transport, DisconnectedProcessTransport):
                 return "unavailable"
             return "unqualified"
@@ -572,7 +586,7 @@ class BoundedToolExecutor:
 
     @property
     def authorization_digest(self) -> str | None:
-        if not self._allow_test_transport:
+        if not self._transport_enabled:
             return None
         value = getattr(self.transport, "authorization_digest", None)
         return (
@@ -580,6 +594,13 @@ class BoundedToolExecutor:
             if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
             else None
         )
+
+    @property
+    def disconnect_reason(self) -> str:
+        value = getattr(self.transport, "disconnect_reason", None)
+        if isinstance(value, str) and value.strip():
+            return value
+        return "qualified bounded command runner is disconnected"
 
     def cancel(self, task_id: str) -> None:
         self._cancel_events.setdefault(task_id, asyncio.Event()).set()
@@ -608,7 +629,10 @@ class BoundedToolExecutor:
             if canceled:
                 raise ToolExecutionError("task was canceled before tool execution")
             if not self.connected:
-                raise ExecutorUnavailableError("qualified command runner is disconnected")
+                raise ExecutorUnavailableError(self.disconnect_reason)
+            action_for_request = getattr(self.transport, "action_for_request", None)
+            if callable(action_for_request):
+                action_for_request(request)
             if request.kind == ToolKind.COMMAND:
                 if request.command is None:
                     raise ToolExecutionError("command payload is missing")

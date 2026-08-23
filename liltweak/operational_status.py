@@ -49,7 +49,14 @@ def build_operational_status(
 ) -> OperationalStatus:
     planning_primary = bool(planning_chat and planning_chat.primary_connected)
     planning_fallback = bool(planning_chat and planning_chat.fallback_connected)
-    engineering_adapter = bool(controller.model.connected)
+    executor = getattr(controller, "executor", None)
+    runner_connected = bool(executor and executor.connected)
+    runner_detail = (
+        str(getattr(executor, "disconnect_reason", "No qualified process transport is injected."))
+        if not runner_connected
+        else "Qualified bounded command runner is connected."
+    )
+    engineering_adapter = bool(controller.model.connected and runner_connected)
     repositories = bool(controller.repository_ids)
     return OperationalStatus(
         backend=_state(True, "Authenticated private FastAPI request completed on loopback."),
@@ -65,9 +72,15 @@ def build_operational_status(
             planning_fallback,
             f"{FoundationModel.TERRA.value} read-only transient-failure fallback only",
         ),
-        runner=_state(False, "No qualified process transport is injected."),
+        runner=_state(runner_connected, runner_detail),
         execution=_state(
-            False, "Shell, patch, Git, filesystem mutation, and deployment are disabled."
+            runner_connected,
+            (
+                "Bounded runner execution is connected; separate approvals still gate patch, Git, "
+                "and delivery operations."
+                if runner_connected
+                else "Shell, patch, Git, filesystem mutation, and deployment are disabled."
+            ),
         ),
         browser=_state(False, "No active browser qualification is trusted by the server."),
         git=_state(False, "Git mutation is outside the private reasoning boundary."),
@@ -81,6 +94,10 @@ def build_operational_status(
         ),
         engineering_mode=_state(
             engineering_adapter,
-            "Sol high repository reasoning is tool-free; execution remains disconnected.",
+            (
+                "Qualified engineering reasoning and bounded runner execution are connected."
+                if engineering_adapter
+                else "Engineering execution remains disconnected until the runner is qualified."
+            ),
         ),
     )

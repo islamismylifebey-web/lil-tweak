@@ -54,6 +54,13 @@ from .execution_plane import (
     RepositoryExecutionError,
     RepositoryExecutionProviderError,
 )
+from .galor_runner_v2 import (
+    BlockedGalorRunnerV2Transport,
+    GalorRunnerV2Config,
+    GalorRunnerV2Contract,
+    GalorRunnerV2Transport,
+    parse_signing_keys,
+)
 from .live_contract import (
     LiveProposalDecisionRequest,
     LiveProposalDecisionResponse,
@@ -108,6 +115,7 @@ from .workbench_api import mount_workbench
 from .workbench_executor import (
     BoundedToolExecutor,
     DisconnectedProcessTransport,
+    ProcessTransport,
     TaskWorkspaceManager,
 )
 from .workbench_policy import ToolPolicyBroker
@@ -233,6 +241,44 @@ def build_default_service(settings: Settings) -> LilTweakService:
     )
 
 
+def _build_workbench_transport(settings: Settings) -> ProcessTransport:
+    if not settings.workbench_runner_enabled:
+        return DisconnectedProcessTransport()
+    if any(
+        value in {None, ""}
+        for value in (
+            settings.workbench_runner_gateway_url,
+            settings.workbench_runner_contract_json,
+            settings.workbench_runner_expected_contract_digest,
+            settings.workbench_runner_qualification_digest,
+            settings.workbench_runner_authorization_digest,
+            settings.workbench_runner_auth_token,
+            settings.workbench_runner_signing_keys_json,
+        )
+    ):
+        return BlockedGalorRunnerV2Transport(
+            "GALOR Runner V2 configuration is incomplete.",
+            qualification_status="unavailable",
+        )
+    try:
+        contract = GalorRunnerV2Contract.model_validate_json(settings.workbench_runner_contract_json)
+        signing_keys = parse_signing_keys(settings.workbench_runner_signing_keys_json)
+        return GalorRunnerV2Transport(
+            GalorRunnerV2Config(
+                gateway_url=str(settings.workbench_runner_gateway_url),
+                auth_token=str(settings.workbench_runner_auth_token),
+                contract=contract,
+                expected_contract_digest=str(settings.workbench_runner_expected_contract_digest),
+                qualification_evidence_digest=str(settings.workbench_runner_qualification_digest),
+                authorization_digest=str(settings.workbench_runner_authorization_digest),
+                signing_keys=signing_keys,
+                workspace_root=settings.workbench_workspace_root,
+            )
+        )
+    except ValueError as exc:
+        return BlockedGalorRunnerV2Transport(f"GALOR Runner V2 is blocked: {exc}")
+
+
 def create_app(
     service: LilTweakService | None = None,
     settings: Settings | None = None,
@@ -240,6 +286,7 @@ def create_app(
     live_controller: LiveCreatorController | None = None,
     execution_controller: RepositoryExecutionController | None = None,
     workbench_controller: WorkbenchController | None = None,
+    workbench_transport: ProcessTransport | None = None,
     workbench_reasoning_provider: OpenAIResponsesReasoningProvider | None = None,
     planning_chat_service: PlanningChatService | None = None,
     project_workspace_store: ProjectWorkspaceStore | None = None,
@@ -381,7 +428,7 @@ def create_app(
                 model=workbench_model,
                 executor=BoundedToolExecutor(
                     workbench_workspaces,
-                    DisconnectedProcessTransport(),
+                    workbench_transport or _build_workbench_transport(settings),
                 ),
                 workspaces=workbench_workspaces,
                 policy=ToolPolicyBroker(),
