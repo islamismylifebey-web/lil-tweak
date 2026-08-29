@@ -77,9 +77,7 @@ def signed_heartbeat(
     job_id = "heartbeat-job-1"
     dispatch_id = "heartbeat-dispatch-1"
     stdout = (
-        f"runner_id={RUNNER_ID}\n"
-        f"utc={issued_at.strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
-        "node=v22.13.0\n"
+        f"runner_id={RUNNER_ID}\nutc={issued_at.strftime('%Y-%m-%dT%H:%M:%SZ')}\nnode=v22.13.0\n"
     )
     result: dict[str, object] = {
         "envelope": {
@@ -116,11 +114,14 @@ def signed_heartbeat(
     }
     envelope = result["envelope"]
     assert isinstance(envelope, dict)
-    envelope["signature"] = signature or hmac.new(
-        KEY_SECRET.encode(),
-        canonical_result(result).encode(),
-        hashlib.sha256,
-    ).hexdigest()
+    envelope["signature"] = (
+        signature
+        or hmac.new(
+            KEY_SECRET.encode(),
+            canonical_result(result).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return result
 
 
