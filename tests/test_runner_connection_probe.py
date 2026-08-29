@@ -69,7 +69,11 @@ def canonical_result(result: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
-def signed_heartbeat(*, issued_at: datetime = NOW, signature: str | None = None) -> dict[str, object]:
+def signed_heartbeat(
+    *,
+    issued_at: datetime = NOW,
+    signature: str | None = None,
+) -> dict[str, object]:
     job_id = "heartbeat-job-1"
     dispatch_id = "heartbeat-dispatch-1"
     stdout = (
