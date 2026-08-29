@@ -80,9 +80,7 @@ _RECEIPT_FIELDS = frozenset(
     }
 )
 _HEX = frozenset("0123456789abcdef")
-_SAFE_ID_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
-)
+_SAFE_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
 _HANDSHAKE_MAX_AGE = timedelta(seconds=30)
 _CLOCK_SKEW = timedelta(seconds=5)
 
@@ -211,9 +209,7 @@ class RunnerConnectionVerifier:
                     handshake=handshake,
                 )
                 if not proof.is_fresh(self._now()):
-                    raise ExecutorUnavailableError(
-                        "GALOR Runner V2 connection proof is stale"
-                    )
+                    raise ExecutorUnavailableError("GALOR Runner V2 connection proof is stale")
             except asyncio.CancelledError:
                 raise
             except ExecutorUnavailableError as exc:
@@ -233,9 +229,7 @@ class RunnerConnectionVerifier:
         self,
         handshake: _HandshakeEvidence,
     ) -> tuple[str, str, Mapping[str, object]]:
-        objective = (
-            "Lil' Tweak verified the authenticated GALOR Runner V2 identity heartbeat."
-        )
+        objective = "Lil' Tweak verified the authenticated GALOR Runner V2 identity heartbeat."
         approval = await self._gateway.create_approval(
             {
                 "scope": handshake.heartbeat_scope,
@@ -251,16 +245,11 @@ class RunnerConnectionVerifier:
         tenant_id = approval.get("tenantId")
         expires_at = approval.get("expiresAt")
         if not all(
-            isinstance(value, str) and value
-            for value in (approval_id, tenant_id, expires_at)
+            isinstance(value, str) and value for value in (approval_id, tenant_id, expires_at)
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub returned an invalid heartbeat approval"
-            )
+            raise ExecutorUnavailableError("GALOR Hub returned an invalid heartbeat approval")
         if tenant_id != handshake.tenant_id:
-            raise ExecutorUnavailableError(
-                "GALOR Hub heartbeat approval tenant binding is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub heartbeat approval tenant binding is invalid")
 
         accepted = await self._gateway.submit_job(
             {
@@ -290,14 +279,8 @@ class RunnerConnectionVerifier:
             }
         )
         job_id = accepted.get("jobId")
-        if (
-            accepted.get("accepted") is not True
-            or not isinstance(job_id, str)
-            or not job_id
-        ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub did not accept the heartbeat job"
-            )
+        if accepted.get("accepted") is not True or not isinstance(job_id, str) or not job_id:
+            raise ExecutorUnavailableError("GALOR Hub did not accept the heartbeat job")
 
         deadline = _utc(self._now()) + timedelta(seconds=30)
         while True:
@@ -306,22 +289,16 @@ class RunnerConnectionVerifier:
                 raise ExecutorUnavailableError("GALOR Runner V2 heartbeat timed out")
             status = await self._gateway.poll_job(job_id)
             if status.get("jobId") != job_id or status.get("tenantId") != tenant_id:
-                raise ExecutorUnavailableError(
-                    "GALOR Hub heartbeat job binding is invalid"
-                )
+                raise ExecutorUnavailableError("GALOR Hub heartbeat job binding is invalid")
             state = status.get("state")
             if state not in {"succeeded", "failed", "cancelled", "blocked"}:
                 await asyncio.sleep(self._poll_interval_seconds)
                 continue
             if state != "succeeded":
-                raise ExecutorUnavailableError(
-                    f"GALOR Runner V2 heartbeat ended in {state}"
-                )
+                raise ExecutorUnavailableError(f"GALOR Runner V2 heartbeat ended in {state}")
             result = status.get("result")
             if not isinstance(result, Mapping):
-                raise ExecutorUnavailableError(
-                    "GALOR Runner V2 heartbeat result is unavailable"
-                )
+                raise ExecutorUnavailableError("GALOR Runner V2 heartbeat result is unavailable")
             receipt = result.get("receipt")
             if (
                 not isinstance(receipt, Mapping)
@@ -346,27 +323,16 @@ class RunnerConnectionVerifier:
             or payload.get("serviceId") != "lil-tweak"
             or payload.get("hub") != "islamismylifebey-web/galor-hub"
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub authenticated handshake is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub authenticated handshake is invalid")
         observed_nonce = payload.get("nonce")
-        if (
-            not isinstance(observed_nonce, str)
-            or not hmac.compare_digest(observed_nonce, nonce)
-        ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub handshake nonce binding is invalid"
-            )
+        if not isinstance(observed_nonce, str) or not hmac.compare_digest(observed_nonce, nonce):
+            raise ExecutorUnavailableError("GALOR Hub handshake nonce binding is invalid")
         runner_id = payload.get("runnerId")
         if runner_id != self._execution_host:
-            raise ExecutorUnavailableError(
-                "GALOR Hub handshake runner identity is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub handshake runner identity is invalid")
         tenant_id = payload.get("tenantId")
         if not _is_safe_id(tenant_id):
-            raise ExecutorUnavailableError(
-                "GALOR Hub handshake tenant identity is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub handshake tenant identity is invalid")
 
         now = _utc(self._now())
         checked_at = _parse_iso(payload.get("checkedAt"), "handshake checkedAt")
@@ -384,21 +350,16 @@ class RunnerConnectionVerifier:
             "GALOR Hub gateway health is invalid",
         )
         if set(gateway) != _GATEWAY_HEALTH_FIELDS or any(
-            gateway.get(field_name) is not True
-            for field_name in _GATEWAY_HEALTH_FIELDS
+            gateway.get(field_name) is not True for field_name in _GATEWAY_HEALTH_FIELDS
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub gateway health is not operational"
-            )
+            raise ExecutorUnavailableError("GALOR Hub gateway health is not operational")
 
         heartbeat = _mapping(
             payload.get("heartbeat"),
             "GALOR Hub heartbeat route is invalid",
         )
         if set(heartbeat) != _HEARTBEAT_ROUTE_FIELDS:
-            raise ExecutorUnavailableError(
-                "GALOR Hub heartbeat route fields are invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub heartbeat route fields are invalid")
         if heartbeat.get("action") != "runner.reportIdentity":
             raise ExecutorUnavailableError("GALOR Hub heartbeat action is invalid")
         scope = heartbeat.get("scope")
@@ -414,9 +375,7 @@ class RunnerConnectionVerifier:
             or max_age_ms < 1_000
             or max_age_ms > 60_000
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Hub heartbeat max age is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Hub heartbeat max age is invalid")
         return _HandshakeEvidence(
             runner_id=cast(str, runner_id),
             tenant_id=cast(str, tenant_id),
@@ -438,13 +397,9 @@ class RunnerConnectionVerifier:
         handshake: _HandshakeEvidence,
     ) -> RunnerConnectionProof:
         if expected_tenant_id != handshake.tenant_id:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat tenant binding is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat tenant binding is invalid")
         if set(result) != _SIGNED_RESULT_FIELDS:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat result fields are invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat result fields are invalid")
         envelope = _mapping(
             result.get("envelope"),
             "GALOR Runner V2 heartbeat envelope is invalid",
@@ -454,29 +409,21 @@ class RunnerConnectionVerifier:
             "GALOR Runner V2 heartbeat receipt is invalid",
         )
         if set(envelope) != _SIGNED_ENVELOPE_FIELDS or set(receipt) != _RECEIPT_FIELDS:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat signed fields are invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat signed fields are invalid")
         key_id = envelope.get("keyId")
         signature = envelope.get("signature")
         if not isinstance(key_id, str) or not isinstance(signature, str):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat signature is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat signature is invalid")
         signing_key = self._result_signing_keys.get(key_id)
         if signing_key is None:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat signature key is unknown"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat signature key is unknown")
         expected_signature = hmac.new(
             signing_key.encode(),
             _canonical_signed_result(result).encode(),
             hashlib.sha256,
         ).hexdigest()
         if not hmac.compare_digest(signature, expected_signature):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat signature is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat signature is invalid")
 
         if (
             envelope.get("jobId") != expected_job_id
@@ -484,17 +431,14 @@ class RunnerConnectionVerifier:
             or receipt.get("jobId") != expected_job_id
             or receipt.get("commit") != expected_commit
             or receipt.get("operation") != "approved_script"
-            or "runner-report-identity.sh"
-            not in str(receipt.get("commandLine") or "")
+            or "runner-report-identity.sh" not in str(receipt.get("commandLine") or "")
             or receipt.get("exitCode") != 0
             or receipt.get("state") != "succeeded"
             or result.get("state") != "succeeded"
             or result.get("failureReason") not in {None, ""}
             or result.get("stderr") != ""
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat binding is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat binding is invalid")
 
         issued_at = _epoch_millis(envelope.get("issuedAt"), "heartbeat issuedAt")
         heartbeat_expires_at = _epoch_millis(
@@ -513,20 +457,13 @@ class RunnerConnectionVerifier:
 
         stdout = result.get("stdout")
         if not isinstance(stdout, str):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat output is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat output is invalid")
         identity = _parse_identity_output(stdout)
         if identity.get("runner_id") != expected_runner_id:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat runner identity is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat runner identity is invalid")
         reported_at = _parse_iso(identity.get("utc"), "heartbeat utc")
         reported_age_ms = (now - reported_at).total_seconds() * 1_000
-        if (
-            reported_at > now + _CLOCK_SKEW
-            or reported_age_ms > handshake.heartbeat_max_age_ms
-        ):
+        if reported_at > now + _CLOCK_SKEW or reported_age_ms > handshake.heartbeat_max_age_ms:
             raise ExecutorUnavailableError("GALOR Runner V2 heartbeat is stale")
 
         return RunnerConnectionProof(
@@ -547,17 +484,12 @@ def validate_result_signing_keys(keys: Mapping[str, str]) -> None:
         raise ValueError("GALOR Runner V2 requires one to eight result signing keys")
     for key_id, secret_value in keys.items():
         if not _is_safe_id(key_id):
-            raise ValueError(
-                "GALOR Runner V2 result signing key identifier is invalid"
-            )
+            raise ValueError("GALOR Runner V2 result signing key identifier is invalid")
         if (
             not isinstance(secret_value, str)
             or len(secret_value) < 16
             or len(secret_value) > 512
-            or any(
-                ord(character) < 33 or ord(character) == 127
-                for character in secret_value
-            )
+            or any(ord(character) < 33 or ord(character) == 127 for character in secret_value)
         ):
             raise ValueError("GALOR Runner V2 result signing key secret is invalid")
 
@@ -570,8 +502,7 @@ def parse_result_signing_keys(payload: str | None) -> dict[str, str]:
     except json.JSONDecodeError as exc:
         raise ValueError("GALOR Runner V2 heartbeat signing keys are invalid JSON") from exc
     if not isinstance(parsed, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in parsed.items()
+        not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
     ):
         raise ValueError("GALOR Runner V2 heartbeat signing keys must be a string map")
     result = cast(dict[str, str], parsed)
@@ -621,25 +552,17 @@ def _mapping(value: object, message: str) -> Mapping[str, object]:
 
 def _parse_identity_output(stdout: str) -> dict[str, str]:
     if len(stdout.encode()) > 4_096:
-        raise ExecutorUnavailableError(
-            "GALOR Runner V2 heartbeat output is invalid"
-        )
+        raise ExecutorUnavailableError("GALOR Runner V2 heartbeat output is invalid")
     values: dict[str, str] = {}
     for line in stdout.splitlines():
         key, separator, value = line.partition("=")
         if not separator or key not in {"runner_id", "utc", "node"} or not value:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat output is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat output is invalid")
         if key in values:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 heartbeat output is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 heartbeat output is invalid")
         values[key] = value
     if set(values) != {"runner_id", "utc", "node"}:
-        raise ExecutorUnavailableError(
-            "GALOR Runner V2 heartbeat output is invalid"
-        )
+        raise ExecutorUnavailableError("GALOR Runner V2 heartbeat output is invalid")
     return values
 
 
@@ -649,9 +572,7 @@ def _parse_iso(value: object, name: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ExecutorUnavailableError(
-            f"GALOR Runner V2 {name} is invalid"
-        ) from exc
+        raise ExecutorUnavailableError(f"GALOR Runner V2 {name} is invalid") from exc
     return _utc(parsed)
 
 
@@ -661,9 +582,7 @@ def _epoch_millis(value: object, name: str) -> datetime:
     try:
         return datetime.fromtimestamp(value / 1_000, tz=UTC)
     except (OverflowError, OSError, ValueError) as exc:
-        raise ExecutorUnavailableError(
-            f"GALOR Runner V2 {name} is invalid"
-        ) from exc
+        raise ExecutorUnavailableError(f"GALOR Runner V2 {name} is invalid") from exc
 
 
 def _utc(value: datetime) -> datetime:

@@ -91,6 +91,7 @@ from .reasoning_policy import ReasoningProfileName
 from .reasoning_provider import OpenAIResponsesReasoningProvider
 from .recovery import RecoveryCapture, RecoveryError
 from .repository import RepositoryAccessError, RepositoryInspectionError, RepositoryInspector
+from .runner_connection import parse_result_signing_keys
 from .service import (
     EmergencyStopError,
     InspectionUnavailableError,
@@ -252,6 +253,7 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
             settings.workbench_runner_qualification_digest,
             settings.workbench_runner_authorization_digest,
             settings.workbench_runner_auth_token,
+            settings.workbench_runner_signing_keys_json,
             settings.workbench_runner_repository_id,
             settings.workbench_runner_repository_commit,
         )
@@ -267,6 +269,7 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
         expected_digest = str(settings.workbench_runner_expected_contract_digest)
         qualification_digest = str(settings.workbench_runner_qualification_digest)
         authorization_digest = str(settings.workbench_runner_authorization_digest)
+        result_signing_keys = parse_result_signing_keys(settings.workbench_runner_signing_keys_json)
         contract = CanonicalGalorRunnerContract.from_json(
             contract_json,
             expected_digest=expected_digest,
@@ -282,6 +285,7 @@ def _build_workbench_transport(settings: Settings) -> ProcessTransport:
                 workspace_root=settings.workbench_workspace_root,
                 repository_id=str(settings.workbench_runner_repository_id),
                 repository_commit=str(settings.workbench_runner_repository_commit),
+                result_signing_keys=result_signing_keys,
             )
         )
     except ValueError as exc:

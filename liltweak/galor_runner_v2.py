@@ -5,7 +5,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol, cast
@@ -13,6 +13,10 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .runner_connection import (
+    RunnerConnectionProof,
+    RunnerConnectionVerifier,
+)
 from .workbench_contract import NetworkMode, ToolKind, ToolRequest
 from .workbench_executor import ExecutorUnavailableError, ProcessResult
 
@@ -47,6 +51,7 @@ _REQUIRED_ACTIONS = frozenset(
         "runner.verifyLint",
         "runner.verifyBuild",
         "runner.prepareLocalCommit",
+        "runner.reportIdentity",
     }
 )
 _HEX = frozenset("0123456789abcdef")
@@ -154,6 +159,7 @@ def command_action_input(action: str, args: tuple[str, ...]) -> dict[str, object
 
 
 class GalorWorkGatewayClient(Protocol):
+    async def handshake(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
     async def create_approval(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
     async def submit_job(self, payload: Mapping[str, object]) -> Mapping[str, object]: ...
     async def poll_job(self, job_id: str) -> Mapping[str, object]: ...
@@ -181,6 +187,9 @@ class HttpGalorWorkGatewayClient:
         )
         response.raise_for_status()
         return cast(Mapping[str, object], response.json())
+
+    async def handshake(self, payload: Mapping[str, object]) -> Mapping[str, object]:
+        return await self._json("POST", "/api/executor/handshake", payload)
 
     async def create_approval(self, payload: Mapping[str, object]) -> Mapping[str, object]:
         return await self._json("POST", "/api/executor/approvals/action", payload)
@@ -210,6 +219,7 @@ class GalorRunnerV2Config:
     workspace_root: Path
     repository_id: str
     repository_commit: str
+    result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
 
 
 @dataclass
@@ -269,11 +279,18 @@ class GalorRunnerV2Transport:
             now or (lambda: datetime.now(UTC)),
             poll_interval_seconds,
         )
-        self._disconnect_reason = "GALOR Runner V2 is connected and authorized"
+        self._connection = RunnerConnectionVerifier(
+            gateway=self._gateway,
+            execution_host=config.contract.execution_host,
+            authorization_digest=config.authorization_digest,
+            result_signing_keys=config.result_signing_keys,
+            now=self._now,
+            poll_interval_seconds=self._poll_interval_seconds,
+        )
 
     @property
     def connected(self) -> bool:
-        return True
+        return self._connection.connected
 
     @property
     def authorization_digest(self) -> str:
@@ -281,7 +298,10 @@ class GalorRunnerV2Transport:
 
     @property
     def disconnect_reason(self) -> str:
-        return self._disconnect_reason
+        return self._connection.disconnect_reason
+
+    async def refresh_connection(self) -> RunnerConnectionProof:
+        return await self._connection.refresh()
 
     def action_for_request(self, request: ToolRequest) -> str:
         action = tool_request_action_id(request)
