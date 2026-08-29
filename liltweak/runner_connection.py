@@ -307,7 +307,7 @@ class RunnerConnectionVerifier:
                 raise ExecutorUnavailableError(
                     "GALOR Runner V2 heartbeat repository binding is invalid"
                 )
-            return cast(str, tenant_id), job_id, cast(Mapping[str, object], result)
+            return tenant_id, job_id, cast(Mapping[str, object], result)
 
     def _validate_handshake(
         self,
@@ -377,7 +377,7 @@ class RunnerConnectionVerifier:
         ):
             raise ExecutorUnavailableError("GALOR Hub heartbeat max age is invalid")
         return _HandshakeEvidence(
-            runner_id=cast(str, runner_id),
+            runner_id=runner_id,
             tenant_id=cast(str, tenant_id),
             checked_at=checked_at,
             expires_at=expires_at,
