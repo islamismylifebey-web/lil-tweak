@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "c5cd50018edbd109dd67ca6217aad5a16b966fcf35ba26c2c6b7f3ad33853c29",
+  "manifest_scope_digest": "766f0d66b2beeed6eb36c6916da0b51fbfef281c4ee744259fe9c9e86783b6cd",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 267,
@@ -866,9 +866,9 @@
       "relative_path": "liltweak/api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "c856241f404c9daed637eda2f2333c48a37913274b6f0bf3435c5e6bfe04a3ad",
-      "git_blob_sha1": "0131e1339b76b32512a9fb661690ad19a663805c",
-      "bytes": 39682
+      "sha256": "a20a98c38a27954631b06cf63bd33938da1931d2aad2626f78fa11a1300d4dcd",
+      "git_blob_sha1": "741479cd6d373941c1065dfc065b8b3e7fd96fa6",
+      "bytes": 39954
     },
     {
       "relative_path": "liltweak/approvals.py",
@@ -1018,9 +1018,9 @@
       "relative_path": "liltweak/galor_runner_v2.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "0e64a6f2595d1547cd868b200263265d0f0031e14cdb922e476d821b6fc521d7",
-      "git_blob_sha1": "902622493653e3ff525af2b1401f06eb63262d8c",
-      "bytes": 16301
+      "sha256": "e720fe80f5a03145d49f399610b97d5b8a238d0475f02b42ec9844701776d6a7",
+      "git_blob_sha1": "57bec2e458ae6b42c2804e617dd0acddd25d9638",
+      "bytes": 17207
     },
     {
       "relative_path": "liltweak/hosted_sandbox.py",
@@ -1186,9 +1186,9 @@
       "relative_path": "liltweak/runner_connection.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ecb6874f2f70b5f1053ef342ceea1943b10cf4b848be26a5a5d487721faa95c6",
-      "git_blob_sha1": "190c7c679aa65eba9252b278046439fda0c9c26b",
-      "bytes": 25276
+      "sha256": "8691963738992d68ecc375e555bf4e02911ba57aebbc2f228b05552b818c828f",
+      "git_blob_sha1": "ac446c82dd41a3b49201252487c001568df30b6d",
+      "bytes": 24128
     },
     {
       "relative_path": "liltweak/runner_qualification.py",
@@ -1266,9 +1266,9 @@
       "relative_path": "liltweak/workbench_api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "7faadb90a39b38d5ea88bbdd5154c7f2df9554a9ee062e42eddaa6824e558a79",
-      "git_blob_sha1": "0fb4f1d6e4314a462cd5ba5f670a79453260480b",
-      "bytes": 26339
+      "sha256": "5b58b11d0ef4156e3595af4dbdeaa4f5abac308f2cfb25b09ef9e711d94db0d1",
+      "git_blob_sha1": "c247619011177d7aa3aa27160ba633e24631ac2b",
+      "bytes": 26394
     },
     {
       "relative_path": "liltweak/workbench_capabilities.py",
@@ -1290,9 +1290,9 @@
       "relative_path": "liltweak/workbench_executor.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "8b8b13d35bffef826cff3faf54d09c66e40554899b0273402a512e55f5c1676f",
-      "git_blob_sha1": "33f8cc585a115662dc494ab785b0cffa3fd2c7c1",
-      "bytes": 32713
+      "sha256": "597ed12179c0114c1e68d2f161e4cb6849b79a6ba3a308bc9276f767583d43de",
+      "git_blob_sha1": "296794c5067233efb4e18940920158591b3f55b1",
+      "bytes": 33120
     },
     {
       "relative_path": "liltweak/workbench_policy.py",
