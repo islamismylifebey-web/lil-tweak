@@ -1,45 +1,46 @@
 apply=0
 install=0
-tests=2
+tests=1
 lint=99
 typecheck=99
 compile=99
-source=73715f21a929fbc25f0f0b5fe57a9a488236f7e8
+source=fe2d7898bd2261ccc70946a6c0c8310ab12a8bff
 
 --- apply ---
 rm '.github/workflows/gate3-liltweak-integrate.yml'
 rm 'scripts/gate3_integrate_liltweak.py'
+rm 'tests/test_runner_connection_authorization_gate.py'
 --- install ---
 Collecting uv==0.8.13
   Downloading uv-0.8.13-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
 Downloading uv-0.8.13-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (19.5 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 19.5/19.5 MB 70.1 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 19.5/19.5 MB 45.8 MB/s  0:00:00
 Installing collected packages: uv
 Successfully installed uv-0.8.13
 Using CPython 3.12.14 interpreter at: /opt/hostedtoolcache/Python/3.12.14/x64/bin/python3
 Creating virtual environment at: .venv
    Building lil-tweak-engine @ file:///home/runner/work/lil-tweak/lil-tweak
-Downloading pydantic-core (2.0MiB)
-Downloading cryptography (4.3MiB)
-Downloading pygments (1.2MiB)
 Downloading uvloop (4.2MiB)
-Downloading pillow (6.6MiB)
-Downloading ruff (10.9MiB)
 Downloading ast-serialize (1.2MiB)
+Downloading pydantic-core (2.0MiB)
 Downloading openai (1.6MiB)
 Downloading mypy (14.6MiB)
+Downloading ruff (10.9MiB)
+Downloading cryptography (4.3MiB)
+Downloading pygments (1.2MiB)
+Downloading pillow (6.6MiB)
  Downloading ast-serialize
  Downloading pydantic-core
  Downloading ruff
- Downloading pillow
  Downloading uvloop
+ Downloading pillow
  Downloading cryptography
  Downloading pygments
  Downloading openai
  Downloading mypy
       Built lil-tweak-engine @ file:///home/runner/work/lil-tweak/lil-tweak
-Prepared 64 packages in 1.73s
-Installed 64 packages in 94ms
+Prepared 64 packages in 1.77s
+Installed 64 packages in 92ms
  + annotated-doc==0.0.4
  + annotated-types==0.8.0
  + anyio==4.14.2
@@ -106,20 +107,405 @@ Installed 64 packages in 94ms
  + wheel==0.47.0
 --- tests ---
 
-==================================== ERRORS ====================================
-_____ ERROR collecting tests/test_runner_connection_authorization_gate.py ______
-ImportError while importing test module '/home/runner/work/lil-tweak/lil-tweak/tests/test_runner_connection_authorization_gate.py'.
-Hint: make sure your test modules/packages have valid Python names.
-Traceback:
-/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/importlib/__init__.py:90: in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-tests/test_runner_connection_authorization_gate.py:10: in <module>
-    from liltweak.runner_evidence import RunnerConnectionAuthorizationVerifier
-E   ImportError: cannot import name 'RunnerConnectionAuthorizationVerifier' from 'liltweak.runner_evidence' (/home/runner/work/lil-tweak/lil-tweak/liltweak/runner_evidence.py)
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_connection_fails_closed_o3')
+gateway = <test_runner_connection_probe.Gateway object at 0x7fcf979797c0>
+message = 'signature'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("gateway", "message"),
+        [
+            (
+                Gateway(handshake_overrides={"nonce": "wrong-nonce-value-0123456789012345"}),
+                "nonce",
+            ),
+            (Gateway(handshake_overrides={"runnerId": "wrong-runner"}), "runner identity"),
+            (
+                Gateway(heartbeat=signed_heartbeat(signature="0" * 64)),
+                "signature",
+            ),
+            (
+                Gateway(heartbeat=signed_heartbeat(issued_at=NOW - timedelta(minutes=5))),
+                "stale",
+            ),
+        ],
+    )
+    async def test_connection_fails_closed_on_invalid_handshake_or_heartbeat(
+        tmp_path: Path,
+        gateway: Gateway,
+        message: str,
+    ) -> None:
+        transport = GalorRunnerV2Transport(
+            config(tmp_path),
+            gateway=gateway,
+            now=lambda: NOW,
+            poll_interval_seconds=0,
+        )
+    
+        with pytest.raises(ExecutorUnavailableError, match=message):
+>           await transport.refresh_connection()
+
+tests/test_runner_connection_probe.py:398: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+liltweak/galor_runner_v2.py:387: in refresh_connection
+    return await self._connection.refresh()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <liltweak.runner_gate3.Gate3RunnerConnectionVerifier object at 0x7fcf992806b0>
+
+    async def refresh(self) -> Gate3RunnerConnectionProof:
+        proof = self._proof
+        if proof is not None and self.connected:
+            return proof
+    
+        async with self._refresh_lock:
+            proof = self._proof
+            if proof is not None and self.connected:
+                return proof
+            self._proof = None
+            if not self._qualification_issuer_public_keys:
+                self._disconnect_reason = "GALOR Runner V2 qualification issuer keys are not configured"
+>               raise ExecutorUnavailableError(self._disconnect_reason)
+E               liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+
+liltweak/runner_gate3.py:266: ExecutorUnavailableError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_connection_fails_closed_o3')
+gateway = <test_runner_connection_probe.Gateway object at 0x7fcf979797c0>
+message = 'signature'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("gateway", "message"),
+        [
+            (
+                Gateway(handshake_overrides={"nonce": "wrong-nonce-value-0123456789012345"}),
+                "nonce",
+            ),
+            (Gateway(handshake_overrides={"runnerId": "wrong-runner"}), "runner identity"),
+            (
+                Gateway(heartbeat=signed_heartbeat(signature="0" * 64)),
+                "signature",
+            ),
+            (
+                Gateway(heartbeat=signed_heartbeat(issued_at=NOW - timedelta(minutes=5))),
+                "stale",
+            ),
+        ],
+    )
+    async def test_connection_fails_closed_on_invalid_handshake_or_heartbeat(
+        tmp_path: Path,
+        gateway: Gateway,
+        message: str,
+    ) -> None:
+        transport = GalorRunnerV2Transport(
+            config(tmp_path),
+            gateway=gateway,
+            now=lambda: NOW,
+            poll_interval_seconds=0,
+        )
+    
+>       with pytest.raises(ExecutorUnavailableError, match=message):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'signature'
+E        Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+
+tests/test_runner_connection_probe.py:397: AssertionError
+_ test_connection_fails_closed_on_invalid_handshake_or_heartbeat[gateway3-stale] _
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_connection_fails_closed_o4')
+gateway = <test_runner_connection_probe.Gateway object at 0x7fcf979799d0>
+message = 'stale'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("gateway", "message"),
+        [
+            (
+                Gateway(handshake_overrides={"nonce": "wrong-nonce-value-0123456789012345"}),
+                "nonce",
+            ),
+            (Gateway(handshake_overrides={"runnerId": "wrong-runner"}), "runner identity"),
+            (
+                Gateway(heartbeat=signed_heartbeat(signature="0" * 64)),
+                "signature",
+            ),
+            (
+                Gateway(heartbeat=signed_heartbeat(issued_at=NOW - timedelta(minutes=5))),
+                "stale",
+            ),
+        ],
+    )
+    async def test_connection_fails_closed_on_invalid_handshake_or_heartbeat(
+        tmp_path: Path,
+        gateway: Gateway,
+        message: str,
+    ) -> None:
+        transport = GalorRunnerV2Transport(
+            config(tmp_path),
+            gateway=gateway,
+            now=lambda: NOW,
+            poll_interval_seconds=0,
+        )
+    
+        with pytest.raises(ExecutorUnavailableError, match=message):
+>           await transport.refresh_connection()
+
+tests/test_runner_connection_probe.py:398: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+liltweak/galor_runner_v2.py:387: in refresh_connection
+    return await self._connection.refresh()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <liltweak.runner_gate3.Gate3RunnerConnectionVerifier object at 0x7fcf977b2e10>
+
+    async def refresh(self) -> Gate3RunnerConnectionProof:
+        proof = self._proof
+        if proof is not None and self.connected:
+            return proof
+    
+        async with self._refresh_lock:
+            proof = self._proof
+            if proof is not None and self.connected:
+                return proof
+            self._proof = None
+            if not self._qualification_issuer_public_keys:
+                self._disconnect_reason = "GALOR Runner V2 qualification issuer keys are not configured"
+>               raise ExecutorUnavailableError(self._disconnect_reason)
+E               liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+
+liltweak/runner_gate3.py:266: ExecutorUnavailableError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_connection_fails_closed_o4')
+gateway = <test_runner_connection_probe.Gateway object at 0x7fcf979799d0>
+message = 'stale'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("gateway", "message"),
+        [
+            (
+                Gateway(handshake_overrides={"nonce": "wrong-nonce-value-0123456789012345"}),
+                "nonce",
+            ),
+            (Gateway(handshake_overrides={"runnerId": "wrong-runner"}), "runner identity"),
+            (
+                Gateway(heartbeat=signed_heartbeat(signature="0" * 64)),
+                "signature",
+            ),
+            (
+                Gateway(heartbeat=signed_heartbeat(issued_at=NOW - timedelta(minutes=5))),
+                "stale",
+            ),
+        ],
+    )
+    async def test_connection_fails_closed_on_invalid_handshake_or_heartbeat(
+        tmp_path: Path,
+        gateway: Gateway,
+        message: str,
+    ) -> None:
+        transport = GalorRunnerV2Transport(
+            config(tmp_path),
+            gateway=gateway,
+            now=lambda: NOW,
+            poll_interval_seconds=0,
+        )
+    
+>       with pytest.raises(ExecutorUnavailableError, match=message):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'stale'
+E        Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+
+tests/test_runner_connection_probe.py:397: AssertionError
+____________ test_transport_runs_exact_approval_gateway_status_flow ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_transport_runs_exact_appr0')
+
+    @pytest.mark.asyncio
+    async def test_transport_runs_exact_approval_gateway_status_flow(tmp_path: Path) -> None:
+        gateway = Gateway()
+        transport = GalorRunnerV2Transport(
+            config(tmp_path), gateway=gateway, now=lambda: NOW, poll_interval_seconds=0
+        )
+>       result = await transport.run(
+            executable="git",
+            args=("status", "--short"),
+            cwd=tmp_path,
+            timeout_seconds=30,
+            output_byte_limit=1_000_000,
+            network=NetworkMode.DENIED,
+            cancel_event=asyncio.Event(),
+            approval_digest="c" * 64,
+        )
+
+tests/test_galor_runner_v2.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+liltweak/galor_runner_v2.py:408: in run
+    return await self.run_action(
+liltweak/galor_runner_v2.py:443: in run_action
+    await self.refresh_connection()
+liltweak/galor_runner_v2.py:387: in refresh_connection
+    return await self._connection.refresh()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <liltweak.runner_gate3.Gate3RunnerConnectionVerifier object at 0x7fcf98595850>
+
+    async def refresh(self) -> Gate3RunnerConnectionProof:
+        proof = self._proof
+        if proof is not None and self.connected:
+            return proof
+    
+        async with self._refresh_lock:
+            proof = self._proof
+            if proof is not None and self.connected:
+                return proof
+            self._proof = None
+            if not self._qualification_issuer_public_keys:
+                self._disconnect_reason = "GALOR Runner V2 qualification issuer keys are not configured"
+>               raise ExecutorUnavailableError(self._disconnect_reason)
+E               liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+
+liltweak/runner_gate3.py:266: ExecutorUnavailableError
+_______ test_transport_rejects_missing_approval_and_wrong_receipt_commit _______
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_transport_rejects_missing0')
+
+    @pytest.mark.asyncio
+    async def test_transport_rejects_missing_approval_and_wrong_receipt_commit(tmp_path: Path) -> None:
+        gateway = Gateway()
+        transport = GalorRunnerV2Transport(
+            config(tmp_path), gateway=gateway, now=lambda: NOW, poll_interval_seconds=0
+        )
+        with pytest.raises(Exception, match="approval evidence"):
+            await transport.run(
+                executable="git",
+                args=("status",),
+                cwd=tmp_path,
+                timeout_seconds=30,
+                output_byte_limit=100,
+                network=NetworkMode.DENIED,
+                cancel_event=asyncio.Event(),
+            )
+    
+        async def wrong_status(job_id: str):
+            return {
+                "jobId": job_id,
+                "tenantId": "owner-tenant",
+                "state": "succeeded",
+                "result": {"stdout": "", "stderr": "", "receipt": {"commit": "f" * 40, "exitCode": 0}},
+            }
+    
+        gateway.poll_job = wrong_status  # type: ignore[method-assign]
+        with pytest.raises(Exception, match="repository binding"):
+>           await transport.run(
+                executable="git",
+                args=("status",),
+                cwd=tmp_path,
+                timeout_seconds=30,
+                output_byte_limit=100,
+                network=NetworkMode.DENIED,
+                cancel_event=asyncio.Event(),
+                approval_digest="d" * 64,
+            )
+
+tests/test_galor_runner_v2.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+liltweak/galor_runner_v2.py:408: in run
+    return await self.run_action(
+liltweak/galor_runner_v2.py:443: in run_action
+    await self.refresh_connection()
+liltweak/galor_runner_v2.py:387: in refresh_connection
+    return await self._connection.refresh()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <liltweak.runner_gate3.Gate3RunnerConnectionVerifier object at 0x7fcf977b4d70>
+
+    async def refresh(self) -> Gate3RunnerConnectionProof:
+        proof = self._proof
+        if proof is not None and self.connected:
+            return proof
+    
+        async with self._refresh_lock:
+            proof = self._proof
+            if proof is not None and self.connected:
+                return proof
+            self._proof = None
+            if not self._qualification_issuer_public_keys:
+                self._disconnect_reason = "GALOR Runner V2 qualification issuer keys are not configured"
+>               raise ExecutorUnavailableError(self._disconnect_reason)
+E               liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+
+liltweak/runner_gate3.py:266: ExecutorUnavailableError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_transport_rejects_missing0')
+
+    @pytest.mark.asyncio
+    async def test_transport_rejects_missing_approval_and_wrong_receipt_commit(tmp_path: Path) -> None:
+        gateway = Gateway()
+        transport = GalorRunnerV2Transport(
+            config(tmp_path), gateway=gateway, now=lambda: NOW, poll_interval_seconds=0
+        )
+        with pytest.raises(Exception, match="approval evidence"):
+            await transport.run(
+                executable="git",
+                args=("status",),
+                cwd=tmp_path,
+                timeout_seconds=30,
+                output_byte_limit=100,
+                network=NetworkMode.DENIED,
+                cancel_event=asyncio.Event(),
+            )
+    
+        async def wrong_status(job_id: str):
+            return {
+                "jobId": job_id,
+                "tenantId": "owner-tenant",
+                "state": "succeeded",
+                "result": {"stdout": "", "stderr": "", "receipt": {"commit": "f" * 40, "exitCode": 0}},
+            }
+    
+        gateway.poll_job = wrong_status  # type: ignore[method-assign]
+>       with pytest.raises(Exception, match="repository binding"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'repository binding'
+E        Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+
+tests/test_galor_runner_v2.py:204: AssertionError
 =========================== short test summary info ============================
-ERROR tests/test_runner_connection_authorization_gate.py
-!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+FAILED tests/test_runner_ed25519_gate.py::test_full_ed25519_qualification_bundle_is_verified - TypeError: a bytes-like object is required, not 'str'
+FAILED tests/test_runner_ed25519_gate.py::test_self_signed_tampered_stale_or_wrongly_bound_bundle_fails_closed - TypeError: a bytes-like object is required, not 'str'
+FAILED tests/test_runner_gate3_connection.py::test_all_four_cryptographic_gates_establish_connection - liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 authorization evidence is unavailable
+FAILED tests/test_runner_gate3_connection.py::test_connection_authorization_cannot_be_replayed_after_proof_is_cleared - liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 authorization evidence is unavailable
+FAILED tests/test_runner_connection_probe.py::test_authenticated_handshake_and_recent_signed_heartbeat_establish_connection - liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+FAILED tests/test_runner_connection_probe.py::test_connection_fails_closed_on_invalid_handshake_or_heartbeat[gateway0-nonce] - AssertionError: Regex pattern did not match.
+ Regex: 'nonce'
+ Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+FAILED tests/test_runner_connection_probe.py::test_connection_fails_closed_on_invalid_handshake_or_heartbeat[gateway1-runner identity] - AssertionError: Regex pattern did not match.
+ Regex: 'runner identity'
+ Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+FAILED tests/test_runner_connection_probe.py::test_connection_fails_closed_on_invalid_handshake_or_heartbeat[gateway2-signature] - AssertionError: Regex pattern did not match.
+ Regex: 'signature'
+ Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+FAILED tests/test_runner_connection_probe.py::test_connection_fails_closed_on_invalid_handshake_or_heartbeat[gateway3-stale] - AssertionError: Regex pattern did not match.
+ Regex: 'stale'
+ Input: 'GALOR Runner V2 qualification issuer keys are not configured'
+FAILED tests/test_galor_runner_v2.py::test_transport_runs_exact_approval_gateway_status_flow - liltweak.workbench_executor.ExecutorUnavailableError: GALOR Runner V2 qualification issuer keys are not configured
+FAILED tests/test_galor_runner_v2.py::test_transport_rejects_missing_approval_and_wrong_receipt_commit - AssertionError: Regex pattern did not match.
+ Regex: 'repository binding'
+ Input: 'GALOR Runner V2 qualification issuer keys are not configured'
 --- lint ---
 --- types ---
 --- compile ---
