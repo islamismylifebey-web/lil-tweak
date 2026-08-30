@@ -1,0 +1,383 @@
+name: Phase 7.1 dedicated runner evidence (manual, dormant)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact 40-character main commit to evaluate
+        required: true
+        type: string
+      acknowledge_candidate_only:
+        description: Evidence collection only; this never connects execution
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase71-dedicated-runner-evidence
+  cancel-in-progress: false
+
+jobs:
+  validate-and-issue:
+    name: Validate request and issue signed challenge
+    environment: liltweak-runner-qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      repository_tree: ${{ steps.source.outputs.repository_tree }}
+    env:
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      ACKNOWLEDGED: ${{ inputs.acknowledge_candidate_only }}
+      EXPECTED_REPOSITORY_ID: github:islamismylifebey-web/lil-tweak
+      QUALIFICATION_RUNNER_ID: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_ID }}
+      QUALIFICATION_KEY_ID: ${{ vars.LILTWEAK_QUALIFICATION_KEY_ID }}
+      QUALIFICATION_IMAGE_REF: ${{ vars.LILTWEAK_QUALIFICATION_IMAGE_REF }}
+      QUALIFICATION_PROFILE_DIGEST: ${{ vars.LILTWEAK_QUALIFICATION_PROFILE_DIGEST }}
+      QUALIFICATION_RUNTIME_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_RUNTIME_SHA256 }}
+      QUALIFICATION_LIMITER_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_LIMITER_SHA256 }}
+      QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
+      DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
+      CHALLENGE_PATH: ${{ runner.temp }}/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/liltweak-qualification-issuer.json
+      OPENAI_API_KEY: ""
+      LILTWEAK_LIVE_MODEL_ENABLED: "false"
+      LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
+      GIT_TERMINAL_PROMPT: "0"
+
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          clean: true
+          lfs: false
+          submodules: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12.13"
+          cache: ""
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.29"
+          enable-cache: false
+
+      - name: Fail-closed request and source validation
+        id: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
+          test "$EXPECTED_REPOSITORY_ID" = "github:$GITHUB_REPOSITORY"
+          test "$ACKNOWLEDGED" = "true"
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_COMMIT" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          if git config --local --get-regexp '^http\..*\.extraheader$' >/dev/null; then
+            echo "Checkout credentials remained in Git configuration." >&2
+            exit 1
+          fi
+          [[ "$QUALIFICATION_RUNNER_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]]
+          [[ "$QUALIFICATION_KEY_ID" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_IMAGE_REF" =~ ^[a-z0-9][a-z0-9._/-]{0,255}@sha256:[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_PROFILE_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_LIMITER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$DESTROYER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test -z "${OPENAI_API_KEY:-}"
+          test "$LILTWEAK_LIVE_MODEL_ENABLED" = "false"
+          test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
+          test "$(python --version)" = "Python 3.12.13"
+          test "$(uv --version)" = "uv 0.11.29"
+          uv sync --locked --group dev --python 3.12.13
+          uv lock --check --offline
+          tree="$(git rev-parse HEAD^{tree})"
+          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+          echo "repository_tree=$tree" >> "$GITHUB_OUTPUT"
+
+      - name: Issue ephemeral signed exact-source challenge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline python -m scripts.verify_runner_qualification issue \
+            --runner-id "$QUALIFICATION_RUNNER_ID" \
+            --key-id "$QUALIFICATION_KEY_ID" \
+            --repository-id "$EXPECTED_REPOSITORY_ID" \
+            --repository-commit "$GITHUB_SHA" \
+            --repository-tree "${{ steps.source.outputs.repository_tree }}" \
+            --image-ref "$QUALIFICATION_IMAGE_REF" \
+            --sandbox-profile-digest "$QUALIFICATION_PROFILE_DIGEST" \
+            --runtime-sha256 "$QUALIFICATION_RUNTIME_SHA256" \
+            --limiter-sha256 "$QUALIFICATION_LIMITER_SHA256" \
+            --qualifier-sha256 "$QUALIFIER_SHA256" \
+            --destroyer-sha256 "$DESTROYER_SHA256" \
+            --lifetime-seconds 600 \
+            --output "$CHALLENGE_PATH" \
+            --issuer-public-key-output "$ISSUER_PUBLIC_KEY_PATH"
+
+      - name: Upload bounded public challenge
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/liltweak-qualification-challenge.json
+            ${{ runner.temp }}/liltweak-qualification-issuer.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
+
+  collect-candidate-evidence:
+    name: Collect candidate evidence and force cleanup
+    needs: validate-and-issue
+    permissions: {}
+    environment: liltweak-runner-qualification
+    runs-on: [self-hosted, linux, x64, liltweak-qualification, ephemeral]
+    timeout-minutes: 30
+    env:
+      QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
+      DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
+      RUNNER_ENVIRONMENT_CONTEXT: ${{ runner.environment }}
+      CHALLENGE_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-issuer.json
+      ATTESTATION_PATH: ${{ runner.temp }}/liltweak-qualification-attestation.json
+      OPENAI_API_KEY: ""
+      LILTWEAK_LIVE_MODEL_ENABLED: "false"
+      LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
+
+    steps:
+      - name: Download signed challenge
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase71-challenge
+
+      - name: Validate host-owned collector and destroyer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$RUNNER_ENVIRONMENT_CONTEXT" = "self-hosted"
+          test "$(id -u)" -ne 0
+          [[ "$QUALIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$DESTROYER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test -z "${OPENAI_API_KEY:-}"
+          test "$LILTWEAK_LIVE_MODEL_ENABLED" = "false"
+          test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
+          assert_trusted_tool() {
+            local tool="$1"
+            local expected_sha="$2"
+            local directory
+            test -f "$tool"
+            test ! -L "$tool"
+            test "$(readlink -f -- "$tool")" = "$tool"
+            test "$(stat -c '%U:%G:%a:%h' -- "$tool")" = "root:root:555:1"
+            for directory in /opt /opt/liltweak-qualification /opt/liltweak-qualification/bin; do
+              test -d "$directory"
+              test ! -L "$directory"
+              test "$(readlink -f -- "$directory")" = "$directory"
+              test "$(stat -c '%U:%G' -- "$directory")" = "root:root"
+              test -z "$(find "$directory" -maxdepth 0 -perm /022 -print -quit)"
+            done
+            test "$(sha256sum -- "$tool" | cut -d' ' -f1)" = "$expected_sha"
+          }
+          assert_trusted_tool /opt/liltweak-qualification/bin/collect "$QUALIFIER_SHA256"
+          assert_trusted_tool /opt/liltweak-qualification/bin/destroy "$DESTROYER_SHA256"
+          test -f "$CHALLENGE_PATH"
+          test ! -L "$CHALLENGE_PATH"
+          test "$(stat -c '%h' -- "$CHALLENGE_PATH")" = "1"
+          test "$(stat -c '%s' -- "$CHALLENGE_PATH")" -le 128000
+          test -f "$ISSUER_PUBLIC_KEY_PATH"
+          test ! -L "$ISSUER_PUBLIC_KEY_PATH"
+          test "$(stat -c '%h' -- "$ISSUER_PUBLIC_KEY_PATH")" = "1"
+          test "$(stat -c '%s' -- "$ISSUER_PUBLIC_KEY_PATH")" -le 128000
+
+      - name: Collect externally signed candidate evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          stdout_path="$RUNNER_TEMP/liltweak-collector.stdout"
+          stderr_path="$RUNNER_TEMP/liltweak-collector.stderr"
+          if ! /opt/liltweak-qualification/bin/collect \
+            --challenge "$CHALLENGE_PATH" \
+            --issuer-public-key "$ISSUER_PUBLIC_KEY_PATH" \
+            --output "$ATTESTATION_PATH" \
+            --deny-all-network \
+            --require-non-root \
+            --require-mac-and-seccomp \
+            --require-cgroup-and-filesystem-limits \
+            --require-live-cancel-and-emergency-kill \
+            --require-orphan-reaping \
+            --require-host-process-and-control-plane-denial \
+            --require-signed-attestation \
+            --require-complete-cleanup \
+            --require-execution-disconnected \
+            >"$stdout_path" 2>"$stderr_path"; then
+            rm -f -- "$stdout_path" "$stderr_path"
+            echo "Candidate evidence collection failed." >&2
+            exit 1
+          fi
+          rm -f -- "$stdout_path" "$stderr_path"
+          test -f "$ATTESTATION_PATH"
+          test ! -L "$ATTESTATION_PATH"
+          test "$(stat -c '%h' -- "$ATTESTATION_PATH")" = "1"
+          size="$(stat -c '%s' -- "$ATTESTATION_PATH")"
+          test "$size" -ge 2
+          test "$size" -le 128000
+
+      - name: Revalidate and force host-owned cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(id -u)" -ne 0
+          [[ "$DESTROYER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          destroyer=/opt/liltweak-qualification/bin/destroy
+          test -f "$destroyer"
+          test ! -L "$destroyer"
+          test "$(readlink -f -- "$destroyer")" = "$destroyer"
+          test "$(stat -c '%U:%G:%a:%h' -- "$destroyer")" = "root:root:555:1"
+          for directory in /opt /opt/liltweak-qualification /opt/liltweak-qualification/bin; do
+            test -d "$directory"
+            test ! -L "$directory"
+            test "$(readlink -f -- "$directory")" = "$directory"
+            test "$(stat -c '%U:%G' -- "$directory")" = "root:root"
+            test -z "$(find "$directory" -maxdepth 0 -perm /022 -print -quit)"
+          done
+          test "$(sha256sum -- "$destroyer" | cut -d' ' -f1)" = "$DESTROYER_SHA256"
+          "$destroyer" \
+            --github-run-id "$GITHUB_RUN_ID" \
+            --github-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --require-no-processes \
+            --require-no-mounts \
+            --require-no-cgroups \
+            --require-no-workspaces
+
+      - name: Upload signed evidence after cleanup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phase71-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/liltweak-qualification-attestation.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
+
+  verify-candidate-evidence:
+    name: Verify signed evidence after runner cleanup
+    needs: [validate-and-issue, collect-candidate-evidence]
+    environment: liltweak-runner-qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_REPOSITORY_ID: github:islamismylifebey-web/lil-tweak
+      QUALIFICATION_RUNNER_ID: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_ID }}
+      QUALIFICATION_RUNNER_PUBLIC_KEY: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_PUBLIC_KEY }}
+      QUALIFICATION_IMAGE_REF: ${{ vars.LILTWEAK_QUALIFICATION_IMAGE_REF }}
+      QUALIFICATION_PROFILE_DIGEST: ${{ vars.LILTWEAK_QUALIFICATION_PROFILE_DIGEST }}
+      QUALIFICATION_RUNTIME_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_RUNTIME_SHA256 }}
+      QUALIFICATION_LIMITER_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_LIMITER_SHA256 }}
+      QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
+      DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
+      CHALLENGE_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-issuer.json
+      ATTESTATION_PATH: ${{ runner.temp }}/phase71-attestation/liltweak-qualification-attestation.json
+      DECISION_PATH: ${{ runner.temp }}/liltweak-qualification-decision.json
+      OPENAI_API_KEY: ""
+      LILTWEAK_LIVE_MODEL_ENABLED: "false"
+      LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
+      GIT_TERMINAL_PROMPT: "0"
+
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          clean: true
+          lfs: false
+          submodules: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12.13"
+          cache: ""
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.29"
+          enable-cache: false
+
+      - name: Download signed challenge
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase71-challenge
+
+      - name: Download signed attestation
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: phase71-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase71-attestation
+
+      - name: Verify independently pinned bindings and signatures
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
+          test "$EXPECTED_REPOSITORY_ID" = "github:$GITHUB_REPOSITORY"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${{ needs['validate-and-issue'].outputs.repository_tree }}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$QUALIFICATION_RUNNER_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]]
+          [[ "$QUALIFICATION_RUNNER_PUBLIC_KEY" =~ ^[A-Za-z0-9_-]{43}$ ]]
+          [[ "$QUALIFICATION_IMAGE_REF" =~ ^[a-z0-9][a-z0-9._/-]{0,255}@sha256:[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_PROFILE_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_LIMITER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$DESTROYER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test -z "${OPENAI_API_KEY:-}"
+          test "$LILTWEAK_LIVE_MODEL_ENABLED" = "false"
+          test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
+          test "$(python --version)" = "Python 3.12.13"
+          test "$(uv --version)" = "uv 0.11.29"
+          uv sync --locked --group dev --python 3.12.13
+          uv lock --check --offline
+          uv run --no-sync --offline python -m scripts.verify_runner_qualification verify \
+            --challenge "$CHALLENGE_PATH" \
+            --attestation "$ATTESTATION_PATH" \
+            --issuer-public-key-file "$ISSUER_PUBLIC_KEY_PATH" \
+            --runner-public-key-b64 "$QUALIFICATION_RUNNER_PUBLIC_KEY" \
+            --runner-id "$QUALIFICATION_RUNNER_ID" \
+            --repository-id "$EXPECTED_REPOSITORY_ID" \
+            --repository-commit "$GITHUB_SHA" \
+            --repository-tree "${{ needs['validate-and-issue'].outputs.repository_tree }}" \
+            --image-ref "$QUALIFICATION_IMAGE_REF" \
+            --sandbox-profile-digest "$QUALIFICATION_PROFILE_DIGEST" \
+            --runtime-sha256 "$QUALIFICATION_RUNTIME_SHA256" \
+            --limiter-sha256 "$QUALIFICATION_LIMITER_SHA256" \
+            --qualifier-sha256 "$QUALIFIER_SHA256" \
+            --destroyer-sha256 "$DESTROYER_SHA256" \
+            --output "$DECISION_PATH"
+          grep -Eq '"qualified": (true|True)' "$DECISION_PATH"
+          grep -Eq '"connection_authorized": (false|False)' "$DECISION_PATH"
+          test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
+          echo "Signed candidate evidence passed after cleanup; execution remains disconnected." \
+            >> "$GITHUB_STEP_SUMMARY"
+
+

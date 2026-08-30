@@ -9,10 +9,10 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "848ec1355f357f41e95426471c3e905c3decf691add0e81a651b2d205773cc07",
+  "manifest_scope_digest": "369c6f7003b8b12e2a9e4dd960442524cc294d1898457bf496f65a22281844ae",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 271,
+  "file_count_excluding_manifest": 272,
   "files": [
     {
       "relative_path": ".env.example",
@@ -37,6 +37,14 @@
       "sha256": "20c89c0418bfe4ce7c8ae6b27f34ee1ff9601e475e55033bed9adebcfe3ac371",
       "git_blob_sha1": "bcb0bc0ea4600b02bb4c3b0296105fc39b915276",
       "bytes": 1190
+    },
+    {
+      "relative_path": ".github/workflows/runner-qualification.yml",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "42323a8c24ce6c9d4549d354beac3f578780884de7ec37a7b5bd3d8e1cff6c6d",
+      "git_blob_sha1": "5a6c53b6137c40bed0ed1edfdb89e2ebb6052f0b",
+      "bytes": 17569
     },
     {
       "relative_path": ".gitignore",
