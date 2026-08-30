@@ -31,9 +31,7 @@ REPOSITORY_ID = "github:islamismylifebey-web/lil-tweak"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 TREE = "89abcdef0123456789abcdef0123456789abcdef"
 IMAGE = "ghcr.io/galor/liltweak-runner@sha256:" + ("3" * 64)
-PROFILE, RUNTIME, LIMITER, QUALIFIER, DESTROYER = (
-    (str(index) * 64) for index in range(4, 9)
-)
+PROFILE, RUNTIME, LIMITER, QUALIFIER, DESTROYER = ((str(index) * 64) for index in range(4, 9))
 ISSUER_SEED = bytes(range(1, 33))
 RUNNER_SEED = bytes(range(33, 65))
 
@@ -153,7 +151,8 @@ def build_bundle(
 
 def verifier(
     bundle: dict[str, object],
-    *, trusted_issuer: bytes,
+    *,
+    trusted_issuer: bytes,
     trusted_runner: bytes,
     **overrides: object,
 ) -> RunnerQualificationBundleVerifier:
@@ -164,9 +163,7 @@ def verifier(
         "expected_repository_id": REPOSITORY_ID,
         "expected_repository_commit": COMMIT,
         "expected_evidence_digest": attestation["evidence_digest"],
-        "trusted_issuer_public_keys": {
-            hashlib.sha256(trusted_issuer).hexdigest(): trusted_issuer
-        },
+        "trusted_issuer_public_keys": {hashlib.sha256(trusted_issuer).hexdigest(): trusted_issuer},
         "trusted_runner_public_keys": {RUNNER_ID: trusted_runner},
         "maximum_age": timedelta(hours=24),
     }
@@ -176,9 +173,9 @@ def verifier(
 
 def test_full_ed25519_qualification_bundle_is_verified() -> None:
     bundle, issuer_public, runner_public = build_bundle()
-    verified = verifier(
-        bundle, trusted_issuer=issuer_public, trusted_runner=runner_public
-    ).verify(bundle, now=NOW)
+    verified = verifier(bundle, trusted_issuer=issuer_public, trusted_runner=runner_public).verify(
+        bundle, now=NOW
+    )
 
     assert verified.runner_id == RUNNER_ID
     assert verified.repository_id == REPOSITORY_ID
@@ -189,13 +186,11 @@ def test_full_ed25519_qualification_bundle_is_verified() -> None:
 
 def test_self_signed_tampered_stale_or_wrongly_bound_bundle_fails_closed() -> None:
     trusted, issuer_public, runner_public = build_bundle()
-    forged, _, _ = build_bundle(
-        issuer_seed=bytes(range(65, 97)), runner_seed=bytes(range(97, 129))
-    )
+    forged, _, _ = build_bundle(issuer_seed=bytes(range(65, 97)), runner_seed=bytes(range(97, 129)))
     with pytest.raises(ExecutorUnavailableError, match=r"untrusted|issuer|runner.*key"):
-        verifier(
-            forged, trusted_issuer=issuer_public, trusted_runner=runner_public
-        ).verify(forged, now=NOW)
+        verifier(forged, trusted_issuer=issuer_public, trusted_runner=runner_public).verify(
+            forged, now=NOW
+        )
 
     tampered, _, _ = build_bundle()
     report = tampered["attestation"]
@@ -206,9 +201,9 @@ def test_self_signed_tampered_stale_or_wrongly_bound_bundle_fails_closed() -> No
     body = {key: value for key, value in tampered.items() if key != "bundle_digest"}
     tampered["bundle_digest"] = content_digest(body)
     with pytest.raises(ExecutorUnavailableError, match=r"attestation|evidence|signature"):
-        verifier(
-            tampered, trusted_issuer=issuer_public, trusted_runner=runner_public
-        ).verify(tampered, now=NOW)
+        verifier(tampered, trusted_issuer=issuer_public, trusted_runner=runner_public).verify(
+            tampered, now=NOW
+        )
 
     with pytest.raises(ExecutorUnavailableError, match=r"repository.*commit|binding"):
         verifier(
@@ -218,6 +213,6 @@ def test_self_signed_tampered_stale_or_wrongly_bound_bundle_fails_closed() -> No
             expected_repository_commit="f" * 40,
         ).verify(trusted, now=NOW)
     with pytest.raises(ExecutorUnavailableError, match=r"stale|expired"):
-        verifier(
-            trusted, trusted_issuer=issuer_public, trusted_runner=runner_public
-        ).verify(trusted, now=NOW + timedelta(days=2))
+        verifier(trusted, trusted_issuer=issuer_public, trusted_runner=runner_public).verify(
+            trusted, now=NOW + timedelta(days=2)
+        )

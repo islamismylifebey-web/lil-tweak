@@ -160,16 +160,12 @@ class RunnerQualificationBundleVerifier:
                     "runner qualification evidence digest does not match the pinned digest"
                 )
 
-            issuer_public_key = self._trusted_issuer_public_keys.get(
-                challenge.issuer_key_id
-            )
+            issuer_public_key = self._trusted_issuer_public_keys.get(challenge.issuer_key_id)
             if issuer_public_key is None:
                 raise ExecutorUnavailableError(
                     "runner qualification issuer key is untrusted or not pinned"
                 )
-            runner_public_key = self._trusted_runner_public_keys.get(
-                challenge.runner_id
-            )
+            runner_public_key = self._trusted_runner_public_keys.get(challenge.runner_id)
             if runner_public_key is None:
                 raise ExecutorUnavailableError(
                     "runner qualification runner key is untrusted or not pinned"
@@ -288,8 +284,7 @@ def parse_qualification_public_keys(
     except json.JSONDecodeError as exc:
         raise ValueError("runner qualification pinned public keys are invalid JSON") from exc
     if not isinstance(parsed, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in parsed.items()
+        not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
     ):
         raise ValueError("runner qualification pinned public keys must be a string map")
     result = cast(dict[str, str], parsed)
@@ -333,9 +328,7 @@ def _mapping(value: object, message: str) -> Mapping[str, object]:
 
 def _public_key(value: object, label: str) -> bytes:
     if not isinstance(value, str):
-        raise ExecutorUnavailableError(
-            f"runner qualification {label} public key is invalid"
-        )
+        raise ExecutorUnavailableError(f"runner qualification {label} public key is invalid")
     try:
         return _public_key_value(value, label)
     except ValueError as exc:
@@ -356,13 +349,8 @@ def _public_key_value(value: str | bytes, label: str) -> bytes:
             validate=True,
         )
     except (binascii.Error, ValueError, UnicodeEncodeError) as exc:
-        raise ValueError(
-            f"runner qualification {label} public key is invalid"
-        ) from exc
-    if (
-        len(decoded) != 32
-        or base64.urlsafe_b64encode(decoded).decode().rstrip("=") != value
-    ):
+        raise ValueError(f"runner qualification {label} public key is invalid") from exc
+    if len(decoded) != 32 or base64.urlsafe_b64encode(decoded).decode().rstrip("=") != value:
         raise ValueError(f"runner qualification {label} public key is invalid")
     return decoded
 
@@ -384,19 +372,27 @@ def _repository_identifier(value: object) -> bool:
 
 
 def _object_id(value: object) -> bool:
-    return isinstance(value, str) and len(value) in {40, 64} and all(
-        character in _HEX for character in value
+    return (
+        isinstance(value, str)
+        and len(value) in {40, 64}
+        and all(character in _HEX for character in value)
     )
 
 
 def _digest(value: object) -> bool:
-    return isinstance(value, str) and len(value) == 64 and all(
-        character in _HEX for character in value
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in _HEX for character in value)
     )
 
 
 def _same_digest(left: object, right: object) -> bool:
-    return _digest(left) and _digest(right) and hmac.compare_digest(
-        cast(str, left),
-        cast(str, right),
+    return (
+        _digest(left)
+        and _digest(right)
+        and hmac.compare_digest(
+            cast(str, left),
+            cast(str, right),
+        )
     )
