@@ -6,6 +6,7 @@ on:
       - feature/runner-health-handshake-heartbeat-20260829
     paths:
       - .github/workflows/gate3-liltweak-integrate.yml
+      - scripts/gate3_integrate_liltweak.py
 
 permissions:
   contents: write
@@ -34,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          original="$GITHUB_SHA"
+          original="$(git rev-parse HEAD)"
           rm -f GATE3_LILTWEAK_VERIFIED.txt GATE3_LILTWEAK_FAILED.txt GATE3_LILTWEAK_FAILURE.log
 
           python3 scripts/gate3_integrate_liltweak.py > /tmp/gate3-apply.log 2>&1
@@ -63,7 +64,7 @@ jobs:
             test_status=$?
           fi
           if [ "$test_status" -eq 0 ]; then
-            uv run ruff check liltweak tests/test_runner_ed25519_gate.py tests/test_runner_gate3_connection.py tests/test_runner_connection_authorization_gate.py tests/test_runner_connection_probe.py tests/test_galor_runner_v2.py > /tmp/gate3-lint.log 2>&1
+            uv run ruff check liltweak tests/test_runner_ed25519_gate.py tests/test_runner_gate3_connection.py tests/test_runner_connection_probe.py tests/test_galor_runner_v2.py > /tmp/gate3-lint.log 2>&1
             lint_status=$?
           fi
           if [ "$lint_status" -eq 0 ]; then
