@@ -15,19 +15,19 @@ jobs:
       - name: Checkout exact target revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 5453902448e0925e5b750f584b6bd4ac76dec0b9
+          ref: 65c826da4255f7ac77bf0eb221f6b15050d7c268
           fetch-depth: 1
           persist-credentials: false
       - name: Package repository including Git metadata
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD)" = "5453902448e0925e5b750f584b6bd4ac76dec0b9"
+          test "$(git rev-parse HEAD)" = "65c826da4255f7ac77bf0eb221f6b15050d7c268"
           tar -czf "$RUNNER_TEMP/lil-tweak-repository.tgz" .
       - name: Upload exact repository
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: lil-tweak-exact-target-source
+          name: lil-tweak-current-exact-source
           path: ${{ runner.temp }}/lil-tweak-repository.tgz
           if-no-files-found: error
           retention-days: 1
