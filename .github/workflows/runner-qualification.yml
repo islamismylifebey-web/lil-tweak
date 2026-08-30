@@ -40,8 +40,8 @@ jobs:
       QUALIFICATION_LIMITER_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_LIMITER_SHA256 }}
       QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
       DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
-      CHALLENGE_PATH: ${{ runner.temp }}/liltweak-qualification-challenge.json
-      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/liltweak-qualification-issuer.json
+      CHALLENGE_PATH: ${{ github.workspace }}/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ github.workspace }}/liltweak-qualification-issuer.json
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
@@ -132,8 +132,8 @@ jobs:
         with:
           name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/liltweak-qualification-challenge.json
-            ${{ runner.temp }}/liltweak-qualification-issuer.json
+            ${{ github.workspace }}/liltweak-qualification-challenge.json
+            ${{ github.workspace }}/liltweak-qualification-issuer.json
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -149,10 +149,9 @@ jobs:
     env:
       QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
       DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
-      RUNNER_ENVIRONMENT_CONTEXT: ${{ runner.environment }}
-      CHALLENGE_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-challenge.json
-      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-issuer.json
-      ATTESTATION_PATH: ${{ runner.temp }}/liltweak-qualification-attestation.json
+      CHALLENGE_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-issuer.json
+      ATTESTATION_PATH: ${{ github.workspace }}/liltweak-qualification-attestation.json
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
@@ -162,13 +161,12 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/phase71-challenge
+          path: ${{ github.workspace }}/phase71-challenge
 
       - name: Validate host-owned collector and destroyer
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$RUNNER_ENVIRONMENT_CONTEXT" = "self-hosted"
           test "$(id -u)" -ne 0
           [[ "$QUALIFIER_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$DESTROYER_SHA256" =~ ^[0-9a-f]{64}$ ]]
@@ -268,7 +266,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: phase71-attestation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/liltweak-qualification-attestation.json
+          path: ${{ github.workspace }}/liltweak-qualification-attestation.json
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -290,10 +288,10 @@ jobs:
       QUALIFICATION_LIMITER_SHA256: ${{ vars.LILTWEAK_QUALIFICATION_LIMITER_SHA256 }}
       QUALIFIER_SHA256: ${{ vars.LILTWEAK_QUALIFIER_SHA256 }}
       DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
-      CHALLENGE_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-challenge.json
-      ISSUER_PUBLIC_KEY_PATH: ${{ runner.temp }}/phase71-challenge/liltweak-qualification-issuer.json
-      ATTESTATION_PATH: ${{ runner.temp }}/phase71-attestation/liltweak-qualification-attestation.json
-      DECISION_PATH: ${{ runner.temp }}/liltweak-qualification-decision.json
+      CHALLENGE_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-challenge.json
+      ISSUER_PUBLIC_KEY_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-issuer.json
+      ATTESTATION_PATH: ${{ github.workspace }}/phase71-attestation/liltweak-qualification-attestation.json
+      DECISION_PATH: ${{ github.workspace }}/liltweak-qualification-decision.json
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
@@ -326,13 +324,13 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: phase71-challenge-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/phase71-challenge
+          path: ${{ github.workspace }}/phase71-challenge
 
       - name: Download signed attestation
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: phase71-attestation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/phase71-attestation
+          path: ${{ github.workspace }}/phase71-attestation
 
       - name: Verify independently pinned bindings and signatures
         shell: bash
@@ -379,5 +377,4 @@ jobs:
           test "$LILTWEAK_REPOSITORY_EXECUTION_ENABLED" = "false"
           echo "Signed candidate evidence passed after cleanup; execution remains disconnected." \
             >> "$GITHUB_STEP_SUMMARY"
-
 

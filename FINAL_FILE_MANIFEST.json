@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "369c6f7003b8b12e2a9e4dd960442524cc294d1898457bf496f65a22281844ae",
+  "manifest_scope_digest": "26a69a66d208b8ba9f19371579851bb010382ec03622a568d74d0686f8e52fe7",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 272,
@@ -42,9 +42,9 @@
       "relative_path": ".github/workflows/runner-qualification.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "42323a8c24ce6c9d4549d354beac3f578780884de7ec37a7b5bd3d8e1cff6c6d",
-      "git_blob_sha1": "5a6c53b6137c40bed0ed1edfdb89e2ebb6052f0b",
-      "bytes": 17569
+      "sha256": "f65ae3b1e6ad9b9fc5518b6c9aa100acf29a0891b1f790a0701230a7dad35025",
+      "git_blob_sha1": "665aad9be392ec81bdfcb5bf333dea23375200bc",
+      "bytes": 17522
     },
     {
       "relative_path": ".gitignore",
