@@ -276,6 +276,7 @@ def main() -> None:
             "--ignore-unmatch",
             "scripts/gate3_integrate_liltweak.py",
             ".github/workflows/gate3-liltweak-integrate.yml",
+            "tests/test_runner_connection_authorization_gate.py",
         ],
         cwd=ROOT,
         check=True,
