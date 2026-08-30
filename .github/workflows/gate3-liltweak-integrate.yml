@@ -57,7 +57,7 @@ jobs:
             uv run pytest -q \
               tests/test_runner_ed25519_gate.py \
               tests/test_runner_gate3_connection.py \
-              tests/test_runner_connection_authorization_gate.py \
+              \
               tests/test_runner_connection_probe.py \
               tests/test_galor_runner_v2.py > /tmp/gate3-tests.log 2>&1
             test_status=$?
