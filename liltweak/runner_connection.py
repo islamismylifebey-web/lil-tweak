@@ -14,6 +14,8 @@ from typing import Protocol, cast
 from .workbench_executor import ExecutorUnavailableError
 
 _HANDSHAKE_SCHEMA_VERSION = "galor-executor-health-handshake-v1"
+_QUALIFICATION_SCHEMA_VERSION = "galor-runner-qualification-evidence-v1"
+_HUB_REPOSITORY = "islamismylifebey-web/galor-hub"
 _HANDSHAKE_FIELDS = frozenset(
     {
         "schemaVersion",
@@ -26,6 +28,7 @@ _HANDSHAKE_FIELDS = frozenset(
         "checkedAt",
         "expiresAt",
         "gateway",
+        "qualification",
         "heartbeat",
     }
 )
@@ -37,7 +40,45 @@ _GATEWAY_HEALTH_FIELDS = frozenset(
         "signingAvailable",
     }
 )
+_QUALIFICATION_FIELDS = frozenset(
+    {
+        "schemaVersion",
+        "keyId",
+        "signature",
+        "issuedAt",
+        "expiresAt",
+        "serviceId",
+        "nonce",
+        "tenantId",
+        "runnerId",
+        "executionHost",
+        "contractSha256",
+        "sourceRepository",
+        "sourceCommit",
+        "qualificationDigest",
+        "heartbeatAction",
+        "heartbeatScope",
+    }
+)
 _HEARTBEAT_ROUTE_FIELDS = frozenset({"action", "scope", "maxAgeMs"})
+_AUTHORIZATION_FIELDS = frozenset(
+    {
+        "keyId",
+        "signature",
+        "issuedAt",
+        "expiresAt",
+        "jobId",
+        "tenantId",
+        "scope",
+        "action",
+        "input",
+        "secretNames",
+        "requestedBy",
+        "idempotencyKey",
+        "approvalId",
+        "approvalState",
+    }
+)
 _SIGNED_RESULT_FIELDS = frozenset(
     {
         "envelope",
@@ -82,6 +123,8 @@ _RECEIPT_FIELDS = frozenset(
 _HEX = frozenset("0123456789abcdef")
 _SAFE_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
 _HANDSHAKE_MAX_AGE = timedelta(seconds=30)
+_QUALIFICATION_MAX_LIFETIME = timedelta(seconds=60)
+_AUTHORIZATION_MAX_LIFETIME = timedelta(minutes=5)
 _CLOCK_SKEW = timedelta(seconds=5)
 
 
@@ -103,6 +146,13 @@ class RunnerConnectionProof:
     tenant_id: str
     handshake_checked_at: datetime
     handshake_expires_at: datetime
+    qualification_digest: str
+    qualification_key_id: str
+    qualification_evidence_digest: str
+    qualification_expires_at: datetime
+    authorization_key_id: str
+    authorization_evidence_digest: str
+    authorization_expires_at: datetime
     heartbeat_job_id: str
     heartbeat_issued_at: datetime
     heartbeat_expires_at: datetime
@@ -115,6 +165,8 @@ class RunnerConnectionProof:
         return (
             -_CLOCK_SKEW.total_seconds() * 1_000 <= age_ms <= self.heartbeat_max_age_ms
             and current < self.handshake_expires_at
+            and current < self.qualification_expires_at
+            and current < self.authorization_expires_at
             and current < self.heartbeat_expires_at
         )
 
@@ -128,6 +180,27 @@ class _HandshakeEvidence:
     heartbeat_scope: str
     heartbeat_commit: str
     heartbeat_max_age_ms: int
+    qualification_digest: str
+    qualification_key_id: str
+    qualification_evidence_digest: str
+    qualification_expires_at: datetime
+
+
+@dataclass(frozen=True)
+class _AuthorizationEvidence:
+    key_id: str
+    evidence_digest: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class _HeartbeatRun:
+    tenant_id: str
+    job_id: str
+    approval_id: str
+    idempotency_key: str
+    authorization: Mapping[str, object]
+    result: Mapping[str, object]
 
 
 class RunnerConnectionVerifier:
@@ -136,29 +209,42 @@ class RunnerConnectionVerifier:
         *,
         gateway: RunnerConnectionGateway,
         execution_host: str,
+        contract_digest: str,
+        qualification_evidence_digest: str,
         authorization_digest: str,
+        authorization_signing_keys: Mapping[str, str],
         result_signing_keys: Mapping[str, str],
         now: Callable[[], datetime] | None = None,
         poll_interval_seconds: float = 0.25,
     ) -> None:
         if not _is_safe_id(execution_host):
             raise ValueError("GALOR Runner V2 execution host identity is invalid")
+        if not _is_digest(contract_digest):
+            raise ValueError("GALOR Runner V2 contract digest is invalid")
+        if not _is_digest(qualification_evidence_digest):
+            raise ValueError("GALOR Runner V2 qualification evidence digest is invalid")
         if not _is_digest(authorization_digest):
             raise ValueError("GALOR Runner V2 authorization digest is invalid")
+        if authorization_signing_keys:
+            validate_authorization_signing_keys(authorization_signing_keys)
         if result_signing_keys:
             validate_result_signing_keys(result_signing_keys)
         if poll_interval_seconds < 0 or poll_interval_seconds > 5:
             raise ValueError("GALOR Runner V2 poll interval is invalid")
         self._gateway = gateway
         self._execution_host = execution_host
+        self._contract_digest = contract_digest
+        self._qualification_evidence_digest = qualification_evidence_digest
         self._authorization_digest = authorization_digest
+        self._authorization_signing_keys = dict(authorization_signing_keys)
         self._result_signing_keys = dict(result_signing_keys)
         self._now = now or (lambda: datetime.now(UTC))
         self._poll_interval_seconds = poll_interval_seconds
         self._proof: RunnerConnectionProof | None = None
         self._refresh_lock = asyncio.Lock()
         self._disconnect_reason = (
-            "GALOR Runner V2 requires an authenticated handshake and recent signed heartbeat"
+            "GALOR Runner V2 requires an authenticated handshake, "
+            "cryptographic qualification and authorization, and a recent signed heartbeat"
         )
 
     @property
@@ -189,6 +275,11 @@ class RunnerConnectionVerifier:
             if proof is not None and self.connected:
                 return proof
             self._proof = None
+            if not self._authorization_signing_keys:
+                self._disconnect_reason = (
+                    "GALOR Runner V2 authorization signing keys are not configured"
+                )
+                raise ExecutorUnavailableError(self._disconnect_reason)
             if not self._result_signing_keys:
                 self._disconnect_reason = (
                     "GALOR Runner V2 heartbeat signing keys are not configured"
@@ -199,14 +290,23 @@ class RunnerConnectionVerifier:
             try:
                 handshake_payload = await self._gateway.handshake({"nonce": nonce})
                 handshake = self._validate_handshake(handshake_payload, nonce=nonce)
-                tenant_id, job_id, result = await self._run_identity_heartbeat(handshake)
+                run = await self._run_identity_heartbeat(handshake)
+                authorization = self._validate_signed_authorization(
+                    run.authorization,
+                    expected_tenant_id=run.tenant_id,
+                    expected_job_id=run.job_id,
+                    expected_approval_id=run.approval_id,
+                    expected_idempotency_key=run.idempotency_key,
+                    handshake=handshake,
+                )
                 proof = self._validate_signed_heartbeat(
-                    result,
+                    run.result,
                     expected_runner_id=handshake.runner_id,
-                    expected_tenant_id=tenant_id,
-                    expected_job_id=job_id,
+                    expected_tenant_id=run.tenant_id,
+                    expected_job_id=run.job_id,
                     expected_commit=handshake.heartbeat_commit,
                     handshake=handshake,
+                    authorization=authorization,
                 )
                 if not proof.is_fresh(self._now()):
                     raise ExecutorUnavailableError("GALOR Runner V2 connection proof is stale")
@@ -221,14 +321,15 @@ class RunnerConnectionVerifier:
 
             self._proof = proof
             self._disconnect_reason = (
-                "GALOR Runner V2 authenticated handshake and signed heartbeat are current"
+                "GALOR Runner V2 handshake, qualification, authorization, "
+                "and signed heartbeat are current"
             )
             return proof
 
     async def _run_identity_heartbeat(
         self,
         handshake: _HandshakeEvidence,
-    ) -> tuple[str, str, Mapping[str, object]]:
+    ) -> _HeartbeatRun:
         objective = "Lil' Tweak verified the authenticated GALOR Runner V2 identity heartbeat."
         approval = await self._gateway.create_approval(
             {
@@ -251,12 +352,13 @@ class RunnerConnectionVerifier:
         if tenant_id != handshake.tenant_id:
             raise ExecutorUnavailableError("GALOR Hub heartbeat approval tenant binding is invalid")
 
+        idempotency_key = f"liltweak-heartbeat:{uuid.uuid4().hex}"
         accepted = await self._gateway.submit_job(
             {
                 "project": "lil-tweak",
                 "command": "runner.reportIdentity",
                 "objective": objective,
-                "idempotencyKey": f"liltweak-heartbeat:{uuid.uuid4().hex}",
+                "idempotencyKey": idempotency_key,
                 "effectClass": "READ",
                 "priority": 100,
                 "resources": [
@@ -296,6 +398,11 @@ class RunnerConnectionVerifier:
                 continue
             if state != "succeeded":
                 raise ExecutorUnavailableError(f"GALOR Runner V2 heartbeat ended in {state}")
+            authorization = status.get("authorization")
+            if not isinstance(authorization, Mapping):
+                raise ExecutorUnavailableError(
+                    "GALOR Runner V2 authorization evidence is unavailable"
+                )
             result = status.get("result")
             if not isinstance(result, Mapping):
                 raise ExecutorUnavailableError("GALOR Runner V2 heartbeat result is unavailable")
@@ -307,7 +414,14 @@ class RunnerConnectionVerifier:
                 raise ExecutorUnavailableError(
                     "GALOR Runner V2 heartbeat repository binding is invalid"
                 )
-            return tenant_id, job_id, cast(Mapping[str, object], result)
+            return _HeartbeatRun(
+                tenant_id=cast(str, tenant_id),
+                job_id=job_id,
+                approval_id=cast(str, approval_id),
+                idempotency_key=idempotency_key,
+                authorization=cast(Mapping[str, object], authorization),
+                result=cast(Mapping[str, object], result),
+            )
 
     def _validate_handshake(
         self,
@@ -321,7 +435,7 @@ class RunnerConnectionVerifier:
             payload.get("schemaVersion") != _HANDSHAKE_SCHEMA_VERSION
             or payload.get("authenticated") is not True
             or payload.get("serviceId") != "lil-tweak"
-            or payload.get("hub") != "islamismylifebey-web/galor-hub"
+            or payload.get("hub") != _HUB_REPOSITORY
         ):
             raise ExecutorUnavailableError("GALOR Hub authenticated handshake is invalid")
         observed_nonce = payload.get("nonce")
@@ -376,14 +490,199 @@ class RunnerConnectionVerifier:
             or max_age_ms > 60_000
         ):
             raise ExecutorUnavailableError("GALOR Hub heartbeat max age is invalid")
+
+        qualification = _mapping(
+            payload.get("qualification"),
+            "GALOR Runner V2 qualification evidence is invalid",
+        )
+        (
+            qualification_digest,
+            qualification_key_id,
+            qualification_envelope_digest,
+            qualification_expires_at,
+        ) = self._validate_signed_qualification(
+            qualification,
+            nonce=nonce,
+            runner_id=cast(str, runner_id),
+            tenant_id=cast(str, tenant_id),
+            checked_at=checked_at,
+            handshake_expires_at=expires_at,
+            heartbeat_scope=scope,
+            heartbeat_commit=heartbeat_commit,
+        )
+
         return _HandshakeEvidence(
-            runner_id=runner_id,
+            runner_id=cast(str, runner_id),
             tenant_id=cast(str, tenant_id),
             checked_at=checked_at,
             expires_at=expires_at,
             heartbeat_scope=scope,
             heartbeat_commit=heartbeat_commit,
             heartbeat_max_age_ms=max_age_ms,
+            qualification_digest=qualification_digest,
+            qualification_key_id=qualification_key_id,
+            qualification_evidence_digest=qualification_envelope_digest,
+            qualification_expires_at=qualification_expires_at,
+        )
+
+    def _validate_signed_qualification(
+        self,
+        evidence: Mapping[str, object],
+        *,
+        nonce: str,
+        runner_id: str,
+        tenant_id: str,
+        checked_at: datetime,
+        handshake_expires_at: datetime,
+        heartbeat_scope: str,
+        heartbeat_commit: str,
+    ) -> tuple[str, str, str, datetime]:
+        if set(evidence) != _QUALIFICATION_FIELDS:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 qualification evidence fields are invalid"
+            )
+        key_id = evidence.get("keyId")
+        signature = evidence.get("signature")
+        if not _is_safe_id(key_id) or not _is_digest(signature):
+            raise ExecutorUnavailableError("GALOR Runner V2 qualification signature is invalid")
+        signing_key = self._authorization_signing_keys.get(cast(str, key_id))
+        if signing_key is None:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 qualification signature key is unknown"
+            )
+        expected_signature = hmac.new(
+            signing_key.encode(),
+            _canonical_qualification(evidence).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(cast(str, signature), expected_signature):
+            raise ExecutorUnavailableError("GALOR Runner V2 qualification signature is invalid")
+
+        issued_at = _epoch_millis(evidence.get("issuedAt"), "qualification issuedAt")
+        qualification_expires_at = _epoch_millis(
+            evidence.get("expiresAt"),
+            "qualification expiresAt",
+        )
+        now = _utc(self._now())
+        if qualification_expires_at <= now:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 qualification evidence is expired"
+            )
+        if (
+            issued_at > now + _CLOCK_SKEW
+            or qualification_expires_at <= issued_at
+            or qualification_expires_at - issued_at > _QUALIFICATION_MAX_LIFETIME
+        ):
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 qualification evidence freshness is invalid"
+            )
+
+        qualification_digest = evidence.get("qualificationDigest")
+        if qualification_digest != self._qualification_evidence_digest:
+            raise ExecutorUnavailableError("GALOR Runner V2 qualification digest is invalid")
+        if (
+            evidence.get("schemaVersion") != _QUALIFICATION_SCHEMA_VERSION
+            or evidence.get("serviceId") != "lil-tweak"
+            or evidence.get("nonce") != nonce
+            or evidence.get("tenantId") != tenant_id
+            or evidence.get("runnerId") != runner_id
+            or evidence.get("executionHost") != self._execution_host
+            or evidence.get("contractSha256") != self._contract_digest
+            or evidence.get("sourceRepository") != _HUB_REPOSITORY
+            or evidence.get("sourceCommit") != heartbeat_commit
+            or evidence.get("heartbeatAction") != "runner.reportIdentity"
+            or evidence.get("heartbeatScope") != heartbeat_scope
+            or issued_at != checked_at
+            or qualification_expires_at != handshake_expires_at
+        ):
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 qualification evidence binding is invalid"
+            )
+
+        return (
+            cast(str, qualification_digest),
+            cast(str, key_id),
+            _signed_mapping_digest(evidence),
+            qualification_expires_at,
+        )
+
+    def _validate_signed_authorization(
+        self,
+        authorization: Mapping[str, object],
+        *,
+        expected_tenant_id: str,
+        expected_job_id: str,
+        expected_approval_id: str,
+        expected_idempotency_key: str,
+        handshake: _HandshakeEvidence,
+    ) -> _AuthorizationEvidence:
+        if set(authorization) != _AUTHORIZATION_FIELDS:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 authorization evidence fields are invalid"
+            )
+        key_id = authorization.get("keyId")
+        signature = authorization.get("signature")
+        if not _is_safe_id(key_id) or not _is_digest(signature):
+            raise ExecutorUnavailableError("GALOR Runner V2 authorization signature is invalid")
+        signing_key = self._authorization_signing_keys.get(cast(str, key_id))
+        if signing_key is None:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 authorization signature key is unknown"
+            )
+        expected_signature = hmac.new(
+            signing_key.encode(),
+            _canonical_authorization(authorization).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(cast(str, signature), expected_signature):
+            raise ExecutorUnavailableError("GALOR Runner V2 authorization signature is invalid")
+
+        issued_at = _epoch_millis(authorization.get("issuedAt"), "authorization issuedAt")
+        expires_at = _parse_iso(
+            authorization.get("expiresAt"),
+            "authorization expiresAt",
+        )
+        now = _utc(self._now())
+        if expires_at <= now:
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 authorization evidence is expired"
+            )
+        if (
+            issued_at > now + _CLOCK_SKEW
+            or expires_at <= issued_at
+            or expires_at - issued_at > _AUTHORIZATION_MAX_LIFETIME
+            or issued_at + _CLOCK_SKEW < handshake.checked_at
+        ):
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 authorization evidence freshness is invalid"
+            )
+
+        input_value = authorization.get("input")
+        secret_names = authorization.get("secretNames")
+        requested_by = authorization.get("requestedBy")
+        if (
+            authorization.get("jobId") != expected_job_id
+            or authorization.get("tenantId") != expected_tenant_id
+            or authorization.get("scope") != handshake.heartbeat_scope
+            or authorization.get("action") != "runner.reportIdentity"
+            or not isinstance(input_value, Mapping)
+            or dict(input_value)
+            or secret_names != []
+            or not isinstance(requested_by, str)
+            or not requested_by
+            or any(ord(character) < 32 or ord(character) == 127 for character in requested_by)
+            or authorization.get("idempotencyKey") != expected_idempotency_key
+            or authorization.get("approvalId") != expected_approval_id
+            or authorization.get("approvalState") != "approved"
+        ):
+            raise ExecutorUnavailableError(
+                "GALOR Runner V2 authorization binding is invalid"
+            )
+
+        return _AuthorizationEvidence(
+            key_id=cast(str, key_id),
+            evidence_digest=_signed_mapping_digest(authorization),
+            expires_at=expires_at,
         )
 
     def _validate_signed_heartbeat(
@@ -395,6 +694,7 @@ class RunnerConnectionVerifier:
         expected_job_id: str,
         expected_commit: str,
         handshake: _HandshakeEvidence,
+        authorization: _AuthorizationEvidence,
     ) -> RunnerConnectionProof:
         if expected_tenant_id != handshake.tenant_id:
             raise ExecutorUnavailableError("GALOR Runner V2 heartbeat tenant binding is invalid")
@@ -471,6 +771,13 @@ class RunnerConnectionVerifier:
             tenant_id=handshake.tenant_id,
             handshake_checked_at=handshake.checked_at,
             handshake_expires_at=handshake.expires_at,
+            qualification_digest=handshake.qualification_digest,
+            qualification_key_id=handshake.qualification_key_id,
+            qualification_evidence_digest=handshake.qualification_evidence_digest,
+            qualification_expires_at=handshake.qualification_expires_at,
+            authorization_key_id=authorization.key_id,
+            authorization_evidence_digest=authorization.evidence_digest,
+            authorization_expires_at=authorization.expires_at,
             heartbeat_job_id=expected_job_id,
             heartbeat_issued_at=issued_at,
             heartbeat_expires_at=heartbeat_expires_at,
@@ -479,35 +786,166 @@ class RunnerConnectionVerifier:
         )
 
 
+def validate_authorization_signing_keys(keys: Mapping[str, str]) -> None:
+    _validate_signing_keys(
+        keys,
+        count_message=(
+            "GALOR Runner V2 requires one to eight authorization signing keys"
+        ),
+        id_message=(
+            "GALOR Runner V2 authorization signing key identifier is invalid"
+        ),
+        secret_message=(
+            "GALOR Runner V2 authorization signing key secret is invalid"
+        ),
+    )
+
+
 def validate_result_signing_keys(keys: Mapping[str, str]) -> None:
+    _validate_signing_keys(
+        keys,
+        count_message="GALOR Runner V2 requires one to eight result signing keys",
+        id_message="GALOR Runner V2 result signing key identifier is invalid",
+        secret_message="GALOR Runner V2 result signing key secret is invalid",
+    )
+
+
+def _validate_signing_keys(
+    keys: Mapping[str, str],
+    *,
+    count_message: str,
+    id_message: str,
+    secret_message: str,
+) -> None:
     if not keys or len(keys) > 8:
-        raise ValueError("GALOR Runner V2 requires one to eight result signing keys")
+        raise ValueError(count_message)
     for key_id, secret_value in keys.items():
         if not _is_safe_id(key_id):
-            raise ValueError("GALOR Runner V2 result signing key identifier is invalid")
+            raise ValueError(id_message)
         if (
             not isinstance(secret_value, str)
             or len(secret_value) < 16
             or len(secret_value) > 512
             or any(ord(character) < 33 or ord(character) == 127 for character in secret_value)
         ):
-            raise ValueError("GALOR Runner V2 result signing key secret is invalid")
+            raise ValueError(secret_message)
+
+
+def parse_authorization_signing_keys(payload: str | None) -> dict[str, str]:
+    return _parse_signing_keys(
+        payload,
+        missing_message="GALOR Runner V2 authorization signing keys are missing",
+        json_message="GALOR Runner V2 authorization signing keys are invalid JSON",
+        map_message="GALOR Runner V2 authorization signing keys must be a string map",
+        validate=validate_authorization_signing_keys,
+    )
 
 
 def parse_result_signing_keys(payload: str | None) -> dict[str, str]:
+    return _parse_signing_keys(
+        payload,
+        missing_message="GALOR Runner V2 heartbeat signing keys are missing",
+        json_message="GALOR Runner V2 heartbeat signing keys are invalid JSON",
+        map_message="GALOR Runner V2 heartbeat signing keys must be a string map",
+        validate=validate_result_signing_keys,
+    )
+
+
+def _parse_signing_keys(
+    payload: str | None,
+    *,
+    missing_message: str,
+    json_message: str,
+    map_message: str,
+    validate: Callable[[Mapping[str, str]], None],
+) -> dict[str, str]:
     if payload is None or not payload.strip():
-        raise ValueError("GALOR Runner V2 heartbeat signing keys are missing")
+        raise ValueError(missing_message)
     try:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise ValueError("GALOR Runner V2 heartbeat signing keys are invalid JSON") from exc
+        raise ValueError(json_message) from exc
     if not isinstance(parsed, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in parsed.items()
     ):
-        raise ValueError("GALOR Runner V2 heartbeat signing keys must be a string map")
+        raise ValueError(map_message)
     result = cast(dict[str, str], parsed)
-    validate_result_signing_keys(result)
+    validate(result)
     return dict(result)
+
+
+def _canonical_qualification(evidence: Mapping[str, object]) -> str:
+    payload = [
+        evidence.get("schemaVersion"),
+        evidence.get("keyId"),
+        evidence.get("issuedAt"),
+        evidence.get("expiresAt"),
+        evidence.get("serviceId"),
+        evidence.get("nonce"),
+        evidence.get("tenantId"),
+        evidence.get("runnerId"),
+        evidence.get("executionHost"),
+        evidence.get("contractSha256"),
+        evidence.get("sourceRepository"),
+        evidence.get("sourceCommit"),
+        evidence.get("qualificationDigest"),
+        evidence.get("heartbeatAction"),
+        evidence.get("heartbeatScope"),
+    ]
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _canonical_authorization(authorization: Mapping[str, object]) -> str:
+    input_value = _mapping(
+        authorization.get("input"),
+        "GALOR Runner V2 authorization input is invalid",
+    )
+    payload = [
+        authorization.get("keyId"),
+        authorization.get("issuedAt"),
+        authorization.get("expiresAt"),
+        authorization.get("jobId"),
+        authorization.get("tenantId"),
+        authorization.get("scope"),
+        authorization.get("action"),
+        _normalize_input(input_value),
+        authorization.get("secretNames"),
+        authorization.get("requestedBy"),
+        authorization.get("idempotencyKey"),
+        authorization.get("approvalId") or "",
+        authorization.get("approvalState"),
+    ]
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _normalize_input(value: Mapping[str, object]) -> str:
+    if any(not isinstance(key, str) for key in value):
+        raise ExecutorUnavailableError(
+            "GALOR Runner V2 authorization input is invalid"
+        )
+    ordered = {key: value[key] for key in sorted(value)}
+    try:
+        return json.dumps(ordered, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise ExecutorUnavailableError(
+            "GALOR Runner V2 authorization input is invalid"
+        ) from exc
+
+
+def _signed_mapping_digest(value: Mapping[str, object]) -> str:
+    try:
+        serialized = json.dumps(
+            dict(value),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError) as exc:
+        raise ExecutorUnavailableError(
+            "GALOR Runner V2 signed evidence is not canonical JSON"
+        ) from exc
+    return hashlib.sha256(serialized.encode()).hexdigest()
 
 
 def _canonical_signed_result(result: Mapping[str, object]) -> str:
