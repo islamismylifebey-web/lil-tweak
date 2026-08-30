@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "26a69a66d208b8ba9f19371579851bb010382ec03622a568d74d0686f8e52fe7",
+  "manifest_scope_digest": "b63232654e2a660b0de9ac2b1391b068776bfe5741f81c57707f4a07d93b6375",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 272,
@@ -106,8 +106,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "22d0072fd6a43af72554c820ba06c169f32b06e66023bfbb19cd1eafe006dea9",
-      "git_blob_sha1": "4c59b963ffc6c67f4bcf40a04a2f11fb8032ff00",
+      "sha256": "7688dd190c2dfdaa323305f4692a7a6c028f64e074da98b530651d33ebeaa393",
+      "git_blob_sha1": "b0e64965770c86ce2df6367dd03950692b54a1b3",
       "bytes": 2471
     },
     {
@@ -162,9 +162,9 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "3d4bc9baad6fd204aa95632a2cec102ff40679988aee89e0d8d88e56f3ae9f3f",
-      "git_blob_sha1": "9d9be714014c9c53ea851c2bc28064261d35014c",
-      "bytes": 2487
+      "sha256": "207e43b81fffc4f31b5c2e3ea732a53049fa721d0c20a317e6093225b15aaf90",
+      "git_blob_sha1": "a797ec690ff9f4f85a7981034fcc2eda1429a8a7",
+      "bytes": 2261
     },
     {
       "relative_path": "EVIDENCE_AND_EXTERNAL_ANTI_ROLLBACK.md",
@@ -1666,9 +1666,9 @@
       "relative_path": "tests/test_galor_runner_v2.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "e3260cd17736c88bee735bcfe2c64200c281a64c79a2f1c9dd8001a9fa4b7258",
-      "git_blob_sha1": "7534776201c1e437a1b73d24b7b0edbfaa3dce88",
-      "bytes": 9102
+      "sha256": "89b2dd467a3fcfaa79258c38b3fa94e326d0c6ad86438441781a146ddbbecbcd",
+      "git_blob_sha1": "81c11ceaffee8ce35788bc98a1c27911111839d8",
+      "bytes": 9107
     },
     {
       "relative_path": "tests/test_gauntlet_concurrency.py",
@@ -1954,9 +1954,9 @@
       "relative_path": "tests/test_runner_gate3_connection.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "9514e5b8e3d588456202528488b8a78f7fd287ec36af385e140b6b098e453471",
-      "git_blob_sha1": "fd86b882d3e86cdb76dfc08436969a93a0db5a4f",
-      "bytes": 19558
+      "sha256": "26cc2ebc72b319a2c30a23873db3927aab0b9e278cb993f53ea19c4962cb8d64",
+      "git_blob_sha1": "522e2ba781bfff4537c533ce8272df3f1356c5e3",
+      "bytes": 19573
     },
     {
       "relative_path": "tests/test_runner_qualification.py",

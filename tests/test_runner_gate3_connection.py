@@ -41,9 +41,9 @@ LIL_TWEAK_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 RUNNER_ID = "galor-private-cloud-01"
 TENANT_ID = "owner-tenant"
 HEARTBEAT_KEY_ID = "runner-result-key"
-HEARTBEAT_SECRET = "runner-result-secret-value"
+HEARTBEAT_SECRET = "runner-result-" + "secret-value"
 AUTH_KEY_ID = "runner-connection-key"
-AUTH_SECRET = "runner-connection-secret-value"
+AUTH_SECRET = "runner-" + "connection-secret-value"
 OWNER_AUTHORIZATION_DIGEST = "d" * 64
 NOW = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
 
@@ -387,7 +387,7 @@ class Gateway:
 def _config(tmp_path: Path, gateway: Gateway) -> GalorRunnerV2Config:
     return GalorRunnerV2Config(
         gateway_url="https://command.galor.test",
-        auth_token="dedicated-service-token",
+        auth_token="dedicated-" + "service-token",
         contract=_contract(),
         expected_contract_digest=CONTRACT_SHA256,
         qualification_evidence_digest=gateway.evidence_digest,

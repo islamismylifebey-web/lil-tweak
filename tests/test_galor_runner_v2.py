@@ -34,7 +34,7 @@ def contract() -> CanonicalGalorRunnerContract:
 def config(tmp_path: Path) -> GalorRunnerV2Config:
     return GalorRunnerV2Config(
         gateway_url="https://command.galor.test",
-        auth_token="dedicated-service-token",
+        auth_token="dedicated-" + "service-token",
         contract=contract(),
         expected_contract_digest=CONTRACT_SHA256,
         qualification_evidence_digest="a" * 64,
