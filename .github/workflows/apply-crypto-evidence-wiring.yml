@@ -43,167 +43,123 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def insert_after(path: str, anchor: str, addition: str) -> None:
               target = Path(path)
-              text = target.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"expected one match in {path}, found {count}")
-              target.write_text(text.replace(old, new), encoding="utf-8")
+              lines = target.read_text(encoding="utf-8").splitlines()
+              matches = [index for index, line in enumerate(lines) if line == anchor]
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f"expected one anchor in {path}: {anchor!r}; found {len(matches)}"
+                  )
+              index = matches[0] + 1
+              new_lines = lines[:index] + addition.splitlines() + lines[index:]
+              target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
-          replace_once(
+          def insert_before(path: str, anchor: str, addition: str) -> None:
+              target = Path(path)
+              lines = target.read_text(encoding="utf-8").splitlines()
+              matches = [index for index, line in enumerate(lines) if line == anchor]
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f"expected one anchor in {path}: {anchor!r}; found {len(matches)}"
+                  )
+              index = matches[0]
+              new_lines = lines[:index] + addition.splitlines() + lines[index:]
+              target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+          def replace_line(path: str, old: str, replacement: str) -> None:
+              target = Path(path)
+              lines = target.read_text(encoding="utf-8").splitlines()
+              matches = [index for index, line in enumerate(lines) if line == old]
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f"expected one line in {path}: {old!r}; found {len(matches)}"
+                  )
+              index = matches[0]
+              new_lines = lines[:index] + replacement.splitlines() + lines[index + 1 :]
+              target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+          insert_after(
               "liltweak/galor_runner_v2.py",
-              '''    repository_id: str
-              repository_commit: str
-              result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
-          ''',
-              '''    repository_id: str
-              repository_commit: str
-              authorization_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
-              result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
-          ''',
+              "    repository_commit: str",
+              "    authorization_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)",
           )
-          replace_once(
+          insert_after(
               "liltweak/galor_runner_v2.py",
-              '''        self._connection = RunnerConnectionVerifier(
-                  gateway=self._gateway,
-                  execution_host=config.contract.execution_host,
-                  authorization_digest=config.authorization_digest,
-                  result_signing_keys=config.result_signing_keys,
-                  now=self._now,
-                  poll_interval_seconds=self._poll_interval_seconds,
-              )
-          ''',
-              '''        self._connection = RunnerConnectionVerifier(
-                  gateway=self._gateway,
-                  execution_host=config.contract.execution_host,
-                  contract_digest=config.expected_contract_digest,
-                  qualification_evidence_digest=config.qualification_evidence_digest,
-                  authorization_digest=config.authorization_digest,
-                  authorization_signing_keys=config.authorization_signing_keys,
-                  result_signing_keys=config.result_signing_keys,
-                  now=self._now,
-                  poll_interval_seconds=self._poll_interval_seconds,
-              )
-          ''',
+              "            execution_host=config.contract.execution_host,",
+              "            contract_digest=config.expected_contract_digest,\n"
+              "            qualification_evidence_digest=config.qualification_evidence_digest,",
+          )
+          insert_after(
+              "liltweak/galor_runner_v2.py",
+              "            authorization_digest=config.authorization_digest,",
+              "            authorization_signing_keys=config.authorization_signing_keys,",
           )
 
-          replace_once(
+          insert_after(
               "liltweak/config.py",
-              '''    workbench_runner_authorization_digest: str | None = None
-              workbench_runner_auth_token: str | None = field(default=None, repr=False)
-              workbench_runner_signing_keys_json: str | None = None
-          ''',
-              '''    workbench_runner_authorization_digest: str | None = None
-              workbench_runner_auth_token: str | None = field(default=None, repr=False)
-              workbench_runner_authorization_signing_keys_json: str | None = None
-              workbench_runner_signing_keys_json: str | None = None
-          ''',
+              "    workbench_runner_auth_token: str | None = field(default=None, repr=False)",
+              "    workbench_runner_authorization_signing_keys_json: str | None = None",
           )
-          replace_once(
+          insert_after(
               "liltweak/config.py",
-              '''                ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
-                          ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
-          ''',
-              '''                ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
-                          (
-                              "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON",
-                              self.workbench_runner_authorization_signing_keys_json,
-                          ),
-                          (
-                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON",
-                              self.workbench_runner_signing_keys_json,
-                          ),
-                          ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
-          ''',
+              "                (\"LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN\", self.workbench_runner_auth_token),",
+              "                (\n"
+              "                    \"LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON\",\n"
+              "                    self.workbench_runner_authorization_signing_keys_json,\n"
+              "                ),\n"
+              "                (\n"
+              "                    \"LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON\",\n"
+              "                    self.workbench_runner_signing_keys_json,\n"
+              "                ),",
           )
-          replace_once(
+          insert_before(
               "liltweak/config.py",
-              '''            workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
-                          workbench_runner_signing_keys_json=_json_text_env(
-                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
-                          ),
-          ''',
-              '''            workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
-                          workbench_runner_authorization_signing_keys_json=_json_text_env(
-                              "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON"
-                          ),
-                          workbench_runner_signing_keys_json=_json_text_env(
-                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
-                          ),
-          ''',
+              "            workbench_runner_signing_keys_json=_json_text_env(",
+              "            workbench_runner_authorization_signing_keys_json=_json_text_env(\n"
+              "                \"LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON\"\n"
+              "            ),",
           )
 
-          replace_once(
+          replace_line(
               "liltweak/api.py",
-              '''from .runner_connection import parse_result_signing_keys
-          ''',
-              '''from .runner_connection import (
-                  parse_authorization_signing_keys,
-                  parse_result_signing_keys,
-              )
-          ''',
+              "from .runner_connection import parse_result_signing_keys",
+              "from .runner_connection import (\n"
+              "    parse_authorization_signing_keys,\n"
+              "    parse_result_signing_keys,\n"
+              ")",
           )
-          replace_once(
+          insert_after(
               "liltweak/api.py",
-              '''            settings.workbench_runner_auth_token,
-                          settings.workbench_runner_signing_keys_json,
-          ''',
-              '''            settings.workbench_runner_auth_token,
-                          settings.workbench_runner_authorization_signing_keys_json,
-                          settings.workbench_runner_signing_keys_json,
-          ''',
+              "            settings.workbench_runner_auth_token,",
+              "            settings.workbench_runner_authorization_signing_keys_json,",
           )
-          replace_once(
+          insert_before(
               "liltweak/api.py",
-              '''        authorization_digest = str(settings.workbench_runner_authorization_digest)
-                      result_signing_keys = parse_result_signing_keys(settings.workbench_runner_signing_keys_json)
-          ''',
-              '''        authorization_digest = str(settings.workbench_runner_authorization_digest)
-                      authorization_signing_keys = parse_authorization_signing_keys(
-                          settings.workbench_runner_authorization_signing_keys_json
-                      )
-                      result_signing_keys = parse_result_signing_keys(
-                          settings.workbench_runner_signing_keys_json
-                      )
-          ''',
+              "        result_signing_keys = parse_result_signing_keys(settings.workbench_runner_signing_keys_json)",
+              "        authorization_signing_keys = parse_authorization_signing_keys(\n"
+              "            settings.workbench_runner_authorization_signing_keys_json\n"
+              "        )",
           )
-          replace_once(
+          insert_after(
               "liltweak/api.py",
-              '''                authorization_digest=authorization_digest,
-                              workspace_root=settings.workbench_workspace_root,
-          ''',
-              '''                authorization_digest=authorization_digest,
-                              workspace_root=settings.workbench_workspace_root,
-                              authorization_signing_keys=authorization_signing_keys,
-          ''',
+              "                workspace_root=settings.workbench_workspace_root,",
+              "                authorization_signing_keys=authorization_signing_keys,",
           )
 
-          replace_once(
+          insert_after(
               ".env.example",
-              '''LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN=
-              LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON=
-          ''',
-              '''LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN=
-              LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON=
-              LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON=
-          ''',
+              "LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN=",
+              "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON=",
           )
 
-          replace_once(
+          insert_after(
               "tests/test_galor_runner_v2.py",
-              '''        repository_id="lil-tweak",
-                      repository_commit=COMMIT,
-                  )
-          ''',
-              '''        repository_id="lil-tweak",
-                      repository_commit=COMMIT,
-                      authorization_signing_keys={
-                          "executor-authorization-key": "executor-authorization-secret-value"
-                      },
-                      result_signing_keys={"runner-result-key": "runner-result-secret-value"},
-                  )
-          ''',
+              "        repository_commit=COMMIT,",
+              "        authorization_signing_keys={\n"
+              "            \"executor-authorization-key\": \"executor-authorization-secret-value\"\n"
+              "        },\n"
+              "        result_signing_keys={\"runner-result-key\": \"runner-result-secret-value\"},",
           )
           PY
 
