@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
