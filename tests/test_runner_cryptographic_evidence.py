@@ -77,11 +77,14 @@ def qualification(
         "heartbeatScope": f"repo:galor-hub@{HUB_COMMIT}",
     }
     evidence.update(overrides or {})
-    evidence["signature"] = signature or hmac.new(
-        AUTH_KEY_SECRET.encode(),
-        canonical_qualification(evidence).encode(),
-        hashlib.sha256,
-    ).hexdigest()
+    evidence["signature"] = (
+        signature
+        or hmac.new(
+            AUTH_KEY_SECRET.encode(),
+            canonical_qualification(evidence).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return evidence
 
 
@@ -140,11 +143,14 @@ def authorization(
         "approvalState": "approved",
     }
     evidence.update(overrides or {})
-    evidence["signature"] = signature or hmac.new(
-        AUTH_KEY_SECRET.encode(),
-        canonical_authorization(evidence).encode(),
-        hashlib.sha256,
-    ).hexdigest()
+    evidence["signature"] = (
+        signature
+        or hmac.new(
+            AUTH_KEY_SECRET.encode(),
+            canonical_authorization(evidence).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return evidence
 
 
