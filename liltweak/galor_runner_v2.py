@@ -219,6 +219,7 @@ class GalorRunnerV2Config:
     workspace_root: Path
     repository_id: str
     repository_commit: str
+    authorization_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
     result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
 
 
@@ -282,7 +283,10 @@ class GalorRunnerV2Transport:
         self._connection = RunnerConnectionVerifier(
             gateway=self._gateway,
             execution_host=config.contract.execution_host,
+            contract_digest=config.expected_contract_digest,
+            qualification_evidence_digest=config.qualification_evidence_digest,
             authorization_digest=config.authorization_digest,
+            authorization_signing_keys=config.authorization_signing_keys,
             result_signing_keys=config.result_signing_keys,
             now=self._now,
             poll_interval_seconds=self._poll_interval_seconds,

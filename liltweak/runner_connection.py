@@ -547,9 +547,7 @@ class RunnerConnectionVerifier:
             raise ExecutorUnavailableError("GALOR Runner V2 qualification signature is invalid")
         signing_key = self._authorization_signing_keys.get(cast(str, key_id))
         if signing_key is None:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 qualification signature key is unknown"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 qualification signature key is unknown")
         expected_signature = hmac.new(
             signing_key.encode(),
             _canonical_qualification(evidence).encode(),
@@ -565,9 +563,7 @@ class RunnerConnectionVerifier:
         )
         now = _utc(self._now())
         if qualification_expires_at <= now:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 qualification evidence is expired"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 qualification evidence is expired")
         if (
             issued_at > now + _CLOCK_SKEW
             or qualification_expires_at <= issued_at
@@ -626,9 +622,7 @@ class RunnerConnectionVerifier:
             raise ExecutorUnavailableError("GALOR Runner V2 authorization signature is invalid")
         signing_key = self._authorization_signing_keys.get(cast(str, key_id))
         if signing_key is None:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 authorization signature key is unknown"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 authorization signature key is unknown")
         expected_signature = hmac.new(
             signing_key.encode(),
             _canonical_authorization(authorization).encode(),
@@ -644,9 +638,7 @@ class RunnerConnectionVerifier:
         )
         now = _utc(self._now())
         if expires_at <= now:
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 authorization evidence is expired"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 authorization evidence is expired")
         if (
             issued_at > now + _CLOCK_SKEW
             or expires_at <= issued_at
@@ -675,9 +667,7 @@ class RunnerConnectionVerifier:
             or authorization.get("approvalId") != expected_approval_id
             or authorization.get("approvalState") != "approved"
         ):
-            raise ExecutorUnavailableError(
-                "GALOR Runner V2 authorization binding is invalid"
-            )
+            raise ExecutorUnavailableError("GALOR Runner V2 authorization binding is invalid")
 
         return _AuthorizationEvidence(
             key_id=cast(str, key_id),
@@ -789,15 +779,9 @@ class RunnerConnectionVerifier:
 def validate_authorization_signing_keys(keys: Mapping[str, str]) -> None:
     _validate_signing_keys(
         keys,
-        count_message=(
-            "GALOR Runner V2 requires one to eight authorization signing keys"
-        ),
-        id_message=(
-            "GALOR Runner V2 authorization signing key identifier is invalid"
-        ),
-        secret_message=(
-            "GALOR Runner V2 authorization signing key secret is invalid"
-        ),
+        count_message=("GALOR Runner V2 requires one to eight authorization signing keys"),
+        id_message=("GALOR Runner V2 authorization signing key identifier is invalid"),
+        secret_message=("GALOR Runner V2 authorization signing key secret is invalid"),
     )
 
 
@@ -866,8 +850,7 @@ def _parse_signing_keys(
     except json.JSONDecodeError as exc:
         raise ValueError(json_message) from exc
     if not isinstance(parsed, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in parsed.items()
+        not isinstance(key, str) or not isinstance(value, str) for key, value in parsed.items()
     ):
         raise ValueError(map_message)
     result = cast(dict[str, str], parsed)
@@ -921,16 +904,12 @@ def _canonical_authorization(authorization: Mapping[str, object]) -> str:
 
 def _normalize_input(value: Mapping[str, object]) -> str:
     if any(not isinstance(key, str) for key in value):
-        raise ExecutorUnavailableError(
-            "GALOR Runner V2 authorization input is invalid"
-        )
+        raise ExecutorUnavailableError("GALOR Runner V2 authorization input is invalid")
     ordered = {key: value[key] for key in sorted(value)}
     try:
         return json.dumps(ordered, ensure_ascii=False, separators=(",", ":"))
     except (TypeError, ValueError) as exc:
-        raise ExecutorUnavailableError(
-            "GALOR Runner V2 authorization input is invalid"
-        ) from exc
+        raise ExecutorUnavailableError("GALOR Runner V2 authorization input is invalid") from exc
 
 
 def _signed_mapping_digest(value: Mapping[str, object]) -> str:

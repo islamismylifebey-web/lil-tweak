@@ -170,6 +170,7 @@ class Settings:
     workbench_runner_qualification_digest: str | None = None
     workbench_runner_authorization_digest: str | None = None
     workbench_runner_auth_token: str | None = field(default=None, repr=False)
+    workbench_runner_authorization_signing_keys_json: str | None = None
     workbench_runner_signing_keys_json: str | None = None
     workbench_runner_repository_id: str | None = None
     workbench_runner_repository_commit: str | None = None
@@ -287,6 +288,14 @@ class Settings:
                     self.workbench_runner_authorization_digest,
                 ),
                 ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON",
+                    self.workbench_runner_authorization_signing_keys_json,
+                ),
+                (
+                    "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON",
+                    self.workbench_runner_signing_keys_json,
+                ),
                 ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
                 (
                     "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT",
@@ -477,6 +486,9 @@ class Settings:
                 "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_DIGEST"
             ),
             workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
+            workbench_runner_authorization_signing_keys_json=_json_text_env(
+                "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON"
+            ),
             workbench_runner_signing_keys_json=_json_text_env(
                 "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
             ),

@@ -198,8 +198,7 @@ def signed_heartbeat(
     job_id = "heartbeat-job-1"
     dispatch_id = "heartbeat-dispatch-1"
     stdout = (
-        f"runner_id={RUNNER_ID}\nutc={issued_at.strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
-        "node=v22.13.0\n"
+        f"runner_id={RUNNER_ID}\nutc={issued_at.strftime('%Y-%m-%dT%H:%M:%SZ')}\nnode=v22.13.0\n"
     )
     result: dict[str, object] = {
         "envelope": {
@@ -369,11 +368,7 @@ async def test_authenticated_handshake_and_recent_signed_heartbeat_establish_con
     ("gateway", "message"),
     [
         (
-            Gateway(
-                handshake_overrides={
-                    "nonce": "wrong-nonce-value-0123456789012345"
-                }
-            ),
+            Gateway(handshake_overrides={"nonce": "wrong-nonce-value-0123456789012345"}),
             "nonce",
         ),
         (Gateway(handshake_overrides={"runnerId": "wrong-runner"}), "runner identity"),

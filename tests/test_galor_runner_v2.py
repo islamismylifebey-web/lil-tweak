@@ -41,6 +41,10 @@ def config(tmp_path: Path) -> GalorRunnerV2Config:
         workspace_root=tmp_path,
         repository_id="lil-tweak",
         repository_commit=COMMIT,
+        authorization_signing_keys={
+            "executor-authorization-key": "executor-authorization-secret-value"
+        },
+        result_signing_keys={"runner-result-key": "runner-result-secret-value"},
     )
 
 
