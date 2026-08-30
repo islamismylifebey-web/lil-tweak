@@ -12,20 +12,22 @@ jobs:
   export:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout exact revision
+      - name: Checkout exact target revision
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: 5453902448e0925e5b750f584b6bd4ac76dec0b9
           fetch-depth: 1
           persist-credentials: false
       - name: Package repository including Git metadata
         shell: bash
         run: |
           set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "5453902448e0925e5b750f584b6bd4ac76dec0b9"
           tar -czf "$RUNNER_TEMP/lil-tweak-repository.tgz" .
       - name: Upload exact repository
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: lil-tweak-exact-source
+          name: lil-tweak-exact-target-source
           path: ${{ runner.temp }}/lil-tweak-repository.tgz
           if-no-files-found: error
           retention-days: 1
