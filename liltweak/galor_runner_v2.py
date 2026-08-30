@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -15,8 +16,9 @@ import httpx
 
 from .runner_connection import (
     RunnerConnectionProof,
-    RunnerConnectionVerifier,
 )
+from .runner_evidence import parse_qualification_public_keys
+from .runner_gate3 import Gate3RunnerConnectionVerifier, parse_secret_keys_json
 from .workbench_contract import NetworkMode, ToolKind, ToolRequest
 from .workbench_executor import ExecutorUnavailableError, ProcessResult
 
@@ -55,6 +57,33 @@ _REQUIRED_ACTIONS = frozenset(
     }
 )
 _HEX = frozenset("0123456789abcdef")
+
+
+def _gate3_public_keys(name: str, *, key_by_runner: bool) -> dict[str, str]:
+    payload = os.getenv(name)
+    if payload is None or not payload.strip():
+        return {}
+    return parse_qualification_public_keys(payload, key_by_runner=key_by_runner)
+
+
+def _gate3_secret_keys(name: str) -> dict[str, str]:
+    payload = os.getenv(name)
+    if payload is None or not payload.strip():
+        return {}
+    return parse_secret_keys_json(payload, label="connection authorization")
+
+
+def _gate3_integer(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    payload = os.getenv(name)
+    if payload is None or not payload.strip():
+        return default
+    try:
+        value = int(payload)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name} is outside the accepted range")
+    return value
 
 
 @dataclass(frozen=True)
@@ -221,6 +250,18 @@ class GalorRunnerV2Config:
     repository_commit: str
     authorization_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
     result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
+    gate3_qualification_issuer_public_keys: Mapping[str, str] = field(
+        default_factory=dict, repr=False
+    )
+    gate3_qualification_runner_public_keys: Mapping[str, str] = field(
+        default_factory=dict, repr=False
+    )
+    gate3_connection_authorization_signing_keys: Mapping[str, str] = field(
+        default_factory=dict, repr=False
+    )
+    gate3_qualification_maximum_age_seconds: int = 86_400
+    gate3_connection_authorization_minimum_sequence: int = 0
+    gate3_connection_authorization_minimum_revocation_epoch: int = 1
 
 
 @dataclass
@@ -280,13 +321,54 @@ class GalorRunnerV2Transport:
             now or (lambda: datetime.now(UTC)),
             poll_interval_seconds,
         )
-        self._connection = RunnerConnectionVerifier(
+        self._connection = Gate3RunnerConnectionVerifier(
             gateway=self._gateway,
             execution_host=config.contract.execution_host,
             contract_digest=config.expected_contract_digest,
             qualification_evidence_digest=config.qualification_evidence_digest,
+            qualification_issuer_public_keys=(
+                dict(config.gate3_qualification_issuer_public_keys)
+                or _gate3_public_keys(
+                    "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_ISSUER_KEYS_JSON",
+                    key_by_runner=False,
+                )
+            ),
+            qualification_runner_public_keys=(
+                dict(config.gate3_qualification_runner_public_keys)
+                or _gate3_public_keys(
+                    "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_RUNNER_KEYS_JSON",
+                    key_by_runner=True,
+                )
+            ),
+            qualification_maximum_age=timedelta(
+                seconds=_gate3_integer(
+                    "LILTWEAK_WORKBENCH_RUNNER_QUALIFICATION_MAX_AGE_SECONDS",
+                    config.gate3_qualification_maximum_age_seconds,
+                    minimum=1,
+                    maximum=2_592_000,
+                )
+            ),
             authorization_digest=config.authorization_digest,
-            authorization_signing_keys=config.authorization_signing_keys,
+            connection_authorization_signing_keys=(
+                dict(config.gate3_connection_authorization_signing_keys)
+                or _gate3_secret_keys(
+                    "LILTWEAK_WORKBENCH_RUNNER_CONNECTION_AUTHORIZATION_KEYS_JSON"
+                )
+            ),
+            connection_authorization_minimum_sequence=_gate3_integer(
+                "LILTWEAK_WORKBENCH_RUNNER_CONNECTION_AUTHORIZATION_MINIMUM_SEQUENCE",
+                config.gate3_connection_authorization_minimum_sequence,
+                minimum=0,
+                maximum=9_007_199_254_740_991,
+            ),
+            connection_authorization_minimum_revocation_epoch=_gate3_integer(
+                "LILTWEAK_WORKBENCH_RUNNER_CONNECTION_AUTHORIZATION_REVOCATION_EPOCH",
+                config.gate3_connection_authorization_minimum_revocation_epoch,
+                minimum=1,
+                maximum=9_007_199_254_740_991,
+            ),
+            repository_id=config.repository_id,
+            repository_commit=config.repository_commit,
             result_signing_keys=config.result_signing_keys,
             now=self._now,
             poll_interval_seconds=self._poll_interval_seconds,
@@ -360,6 +442,8 @@ class GalorRunnerV2Transport:
             raise ExecutorUnavailableError(
                 "GALOR Runner V2 requires exact Workbench approval evidence"
             )
+        if not self.connected:
+            await self.refresh_connection()
         scope = f"repo:{self._config.repository_id}@{self._config.repository_commit}"
         effect_class = (
             "WRITE" if action in {"runner.applyPatch", "runner.prepareLocalCommit"} else "READ"

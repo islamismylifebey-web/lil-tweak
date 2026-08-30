@@ -300,7 +300,7 @@ def parse_qualification_public_keys(
     return dict(result)
 
 
-def _trusted_issuer_keys(keys: Mapping[str, str]) -> dict[str, bytes]:
+def _trusted_issuer_keys(keys: Mapping[str, str | bytes]) -> dict[str, bytes]:
     if not keys or len(keys) > 16:
         raise ValueError("runner qualification requires one to sixteen pinned issuer keys")
     trusted: dict[str, bytes] = {}
@@ -314,7 +314,7 @@ def _trusted_issuer_keys(keys: Mapping[str, str]) -> dict[str, bytes]:
     return trusted
 
 
-def _trusted_runner_keys(keys: Mapping[str, str]) -> dict[str, bytes]:
+def _trusted_runner_keys(keys: Mapping[str, str | bytes]) -> dict[str, bytes]:
     if not keys or len(keys) > 16:
         raise ValueError("runner qualification requires one to sixteen pinned runner keys")
     trusted: dict[str, bytes] = {}
@@ -342,7 +342,11 @@ def _public_key(value: object, label: str) -> bytes:
         raise ExecutorUnavailableError(str(exc)) from exc
 
 
-def _public_key_value(value: str, label: str) -> bytes:
+def _public_key_value(value: str | bytes, label: str) -> bytes:
+    if isinstance(value, bytes):
+        if len(value) != 32:
+            raise ValueError(f"runner qualification {label} public key is invalid")
+        return value
     if not value or "=" in value or len(value) > 64:
         raise ValueError(f"runner qualification {label} public key is invalid")
     try:

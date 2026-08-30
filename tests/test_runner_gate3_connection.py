@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -219,22 +220,20 @@ def _authorization(
         "qualificationEvidenceDigest": evidence_digest,
         "qualificationBundleDigest": qualification["bundle_digest"],
         "qualificationVerifiedAt": decision["verified_at"],
-        "qualificationExpiresAt": (
-            NOW + timedelta(days=1)
-        ).isoformat().replace("+00:00", "Z"),
+        "qualificationExpiresAt": (NOW + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
         "repositoryId": "lil-tweak",
         "repositoryCommit": LIL_TWEAK_COMMIT,
         "action": "runner.reportIdentity",
         "ownerAuthorizationDigest": OWNER_AUTHORIZATION_DIGEST,
     }
-    payload["signature"] = signature or hmac.new(
-        AUTH_SECRET.encode(),
-        (
-            _AUTHORIZATION_SIGNATURE_DOMAIN
-            + _canonical_json(payload)
-        ).encode(),
-        hashlib.sha256,
-    ).hexdigest()
+    payload["signature"] = (
+        signature
+        or hmac.new(
+            AUTH_SECRET.encode(),
+            (_AUTHORIZATION_SIGNATURE_DOMAIN + _canonical_json(payload)).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return payload
 
 
@@ -274,17 +273,16 @@ def _canonical_result(result: dict[str, object]) -> str:
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
 
 
-def _heartbeat() -> dict[str, object]:
+def _heartbeat(*, issued_at: datetime = NOW) -> dict[str, object]:
     job_id = "heartbeat-job-1"
     stdout = (
-        f"runner_id={RUNNER_ID}\nutc={NOW.strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
-        "node=v22.13.0\n"
+        f"runner_id={RUNNER_ID}\nutc={issued_at.strftime('%Y-%m-%dT%H:%M:%SZ')}\nnode=v22.13.0\n"
     )
     result: dict[str, object] = {
         "envelope": {
             "keyId": HEARTBEAT_KEY_ID,
-            "issuedAt": int(NOW.timestamp() * 1_000),
-            "expiresAt": int((NOW + timedelta(seconds=60)).timestamp() * 1_000),
+            "issuedAt": int(issued_at.timestamp() * 1_000),
+            "expiresAt": int((issued_at + timedelta(seconds=60)).timestamp() * 1_000),
             "jobId": job_id,
             "dispatchId": "heartbeat-dispatch-1",
             "runnerId": RUNNER_ID,
@@ -293,14 +291,12 @@ def _heartbeat() -> dict[str, object]:
         "receipt": {
             "jobId": job_id,
             "operation": "approved_script",
-            "commit": HUB_COMMIT,
+            "commit": LIL_TWEAK_COMMIT,
             "commandLine": "bash apps/command-center/scripts/runner-report-identity.sh",
             "exitCode": 0,
             "state": "succeeded",
-            "startedAt": NOW.isoformat().replace("+00:00", "Z"),
-            "finishedAt": (NOW + timedelta(seconds=1)).isoformat().replace(
-                "+00:00", "Z"
-            ),
+            "startedAt": issued_at.isoformat().replace("+00:00", "Z"),
+            "finishedAt": (issued_at + timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
             "durationMs": 1_000,
             "cpuMs": 50,
             "peakMemoryBytes": 16_384,
@@ -344,9 +340,7 @@ class Gateway:
             "runnerId": RUNNER_ID,
             "tenantId": TENANT_ID,
             "checkedAt": NOW.isoformat().replace("+00:00", "Z"),
-            "expiresAt": (NOW + timedelta(seconds=30)).isoformat().replace(
-                "+00:00", "Z"
-            ),
+            "expiresAt": (NOW + timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
             "gateway": {
                 "healthy": True,
                 "storeAvailable": True,
@@ -372,9 +366,7 @@ class Gateway:
         return {
             "approvalId": "heartbeat-approval-1",
             "tenantId": TENANT_ID,
-            "expiresAt": (NOW + timedelta(minutes=5)).isoformat().replace(
-                "+00:00", "Z"
-            ),
+            "expiresAt": (NOW + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
         }
 
     async def submit_job(self, payload):
@@ -430,6 +422,7 @@ async def test_all_four_cryptographic_gates_establish_connection(tmp_path: Path)
     assert proof.authorization_id == gateway.authorization_id
     assert proof.authorization_sequence == 1
     assert proof.authorization_revocation_epoch == 1
+    assert proof.lil_tweak_commit == LIL_TWEAK_COMMIT
 
 
 @pytest.mark.asyncio
@@ -449,21 +442,121 @@ async def test_connection_fails_closed_on_authorization_tampering(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_connection_authorization_cannot_be_replayed_after_proof_expires(
+async def test_connection_authorization_cannot_be_replayed_after_proof_is_cleared(
     tmp_path: Path,
 ) -> None:
-    clock = [NOW]
     gateway = Gateway()
+    transport = GalorRunnerV2Transport(
+        _config(tmp_path, gateway),
+        gateway=gateway,
+        now=lambda: NOW,
+        poll_interval_seconds=0,
+    )
+    await transport.refresh_connection()
+    transport._connection._proof = None
+
+    with pytest.raises(ExecutorUnavailableError, match="replayed"):
+        await transport.refresh_connection()
+
+    assert transport.connected is False
+
+
+@pytest.mark.asyncio
+async def test_timeout_clears_public_connection_status(tmp_path: Path) -> None:
+    clock = [NOW]
+
+    class TimeoutGateway(Gateway):
+        async def poll_job(self, job_id: str):
+            clock[0] += timedelta(seconds=31)
+            return {
+                "jobId": job_id,
+                "tenantId": TENANT_ID,
+                "state": "running",
+            }
+
+        async def cancel_job(self, job_id: str) -> None:
+            assert job_id == "heartbeat-job-1"
+
+    gateway = TimeoutGateway()
     transport = GalorRunnerV2Transport(
         _config(tmp_path, gateway),
         gateway=gateway,
         now=lambda: clock[0],
         poll_interval_seconds=0,
     )
-    await transport.refresh_connection()
-    clock[0] = NOW + timedelta(seconds=31)
 
-    with pytest.raises(ExecutorUnavailableError, match="replayed"):
+    with pytest.raises(ExecutorUnavailableError, match="timed out"):
+        await transport.refresh_connection()
+
+    assert transport.connected is False
+
+
+@pytest.mark.asyncio
+async def test_http_401_clears_public_connection_status(tmp_path: Path) -> None:
+    class UnauthorizedGateway(Gateway):
+        async def handshake(self, payload):
+            request = httpx.Request("POST", "https://command.galor.test/api/executor/handshake")
+            response = httpx.Response(401, request=request)
+            raise httpx.HTTPStatusError(
+                "unauthorized",
+                request=request,
+                response=response,
+            )
+
+    gateway = UnauthorizedGateway()
+    transport = GalorRunnerV2Transport(
+        _config(tmp_path, gateway),
+        gateway=gateway,
+        now=lambda: NOW,
+        poll_interval_seconds=0,
+    )
+
+    with pytest.raises(ExecutorUnavailableError, match="failed closed"):
+        await transport.refresh_connection()
+
+    assert transport.connected is False
+
+
+@pytest.mark.asyncio
+async def test_gateway_failure_clears_public_connection_status(tmp_path: Path) -> None:
+    class FailedGateway(Gateway):
+        async def handshake(self, payload):
+            raise RuntimeError("gateway unavailable")
+
+    gateway = FailedGateway()
+    transport = GalorRunnerV2Transport(
+        _config(tmp_path, gateway),
+        gateway=gateway,
+        now=lambda: NOW,
+        poll_interval_seconds=0,
+    )
+
+    with pytest.raises(ExecutorUnavailableError, match="failed closed"):
+        await transport.refresh_connection()
+
+    assert transport.connected is False
+
+
+@pytest.mark.asyncio
+async def test_stale_heartbeat_clears_public_connection_status(tmp_path: Path) -> None:
+    class StaleHeartbeatGateway(Gateway):
+        async def poll_job(self, job_id: str):
+            return {
+                "jobId": job_id,
+                "tenantId": TENANT_ID,
+                "state": "succeeded",
+                "result": _heartbeat(issued_at=NOW - timedelta(minutes=5)),
+            }
+
+    gateway = StaleHeartbeatGateway()
+    transport = GalorRunnerV2Transport(
+        _config(tmp_path, gateway),
+        gateway=gateway,
+        now=lambda: NOW,
+        poll_interval_seconds=0,
+    )
+
+    with pytest.raises(ExecutorUnavailableError, match="stale"):
         await transport.refresh_connection()
 
     assert transport.connected is False

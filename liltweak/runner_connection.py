@@ -415,7 +415,7 @@ class RunnerConnectionVerifier:
                     "GALOR Runner V2 heartbeat repository binding is invalid"
                 )
             return _HeartbeatRun(
-                tenant_id=cast(str, tenant_id),
+                tenant_id=tenant_id,
                 job_id=job_id,
                 approval_id=cast(str, approval_id),
                 idempotency_key=idempotency_key,
@@ -503,7 +503,7 @@ class RunnerConnectionVerifier:
         ) = self._validate_signed_qualification(
             qualification,
             nonce=nonce,
-            runner_id=cast(str, runner_id),
+            runner_id=runner_id,
             tenant_id=cast(str, tenant_id),
             checked_at=checked_at,
             handshake_expires_at=expires_at,
@@ -512,7 +512,7 @@ class RunnerConnectionVerifier:
         )
 
         return _HandshakeEvidence(
-            runner_id=cast(str, runner_id),
+            runner_id=runner_id,
             tenant_id=cast(str, tenant_id),
             checked_at=checked_at,
             expires_at=expires_at,
@@ -596,7 +596,7 @@ class RunnerConnectionVerifier:
             )
 
         return (
-            cast(str, qualification_digest),
+            qualification_digest,
             cast(str, key_id),
             _signed_mapping_digest(evidence),
             qualification_expires_at,
