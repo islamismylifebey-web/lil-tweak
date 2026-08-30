@@ -101,7 +101,7 @@ jobs:
               tail -n 400 "/tmp/gate3-$file.log" 2>/dev/null || true
             done
           } > GATE3_LILTWEAK_FAILURE.log
-          git add GATE3_LILTWEAK_FAILED.txt GATE3_LILTWEAK_FAILURE.log
+          git add GATE3_LILTWEAK_FAILED.txt\n          git add -f GATE3_LILTWEAK_FAILURE.log
           git commit -m "chore: record Lil Tweak Gate 3 integration blocker" || true
           git push origin HEAD:feature/runner-health-handshake-heartbeat-20260829
           exit 1
