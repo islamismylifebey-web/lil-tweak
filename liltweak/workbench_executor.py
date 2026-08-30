@@ -606,6 +606,17 @@ class BoundedToolExecutor:
             return value
         return "qualified bounded command runner is disconnected"
 
+    async def refresh_connection(self) -> bool:
+        if not self._transport_enabled:
+            return False
+        refresh = getattr(self.transport, "refresh_connection", None)
+        if callable(refresh):
+            try:
+                await refresh()
+            except ExecutorUnavailableError:
+                return False
+        return self.connected
+
     def cancel(self, task_id: str) -> None:
         self._cancel_events.setdefault(task_id, asyncio.Event()).set()
 
@@ -632,7 +643,7 @@ class BoundedToolExecutor:
         try:
             if canceled:
                 raise ToolExecutionError("task was canceled before tool execution")
-            if not self.connected:
+            if not self.connected and not await self.refresh_connection():
                 raise ExecutorUnavailableError(self.disconnect_reason)
             action_for_request = getattr(self.transport, "action_for_request", None)
             action = action_for_request(request) if callable(action_for_request) else None

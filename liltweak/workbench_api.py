@@ -205,6 +205,7 @@ def mount_workbench(
         _session: Annotated[Session, Depends(require_session)],
         task_id: str | None = None,
     ) -> WorkbenchHealth:
+        await controller.executor.refresh_connection()
         return controller.health(task_id)
 
     @router.get("/operational-status", response_model=OperationalStatus)

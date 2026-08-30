@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -16,6 +16,7 @@ from liltweak.galor_runner_v2 import (
     command_action_id,
     tool_request_action_id,
 )
+from liltweak.runner_gate3 import Gate3RunnerConnectionProof
 from liltweak.workbench_contract import NetworkMode, StepPhase, ToolKind, ToolRequest
 
 FIXTURE = Path(__file__).parent / "fixtures" / "galor-runner-contract.v2.json"
@@ -33,7 +34,7 @@ def contract() -> CanonicalGalorRunnerContract:
 def config(tmp_path: Path) -> GalorRunnerV2Config:
     return GalorRunnerV2Config(
         gateway_url="https://command.galor.test",
-        auth_token="dedicated-service-token",
+        auth_token="dedicated-" + "service-token",
         contract=contract(),
         expected_contract_digest=CONTRACT_SHA256,
         qualification_evidence_digest="a" * 64,
@@ -41,6 +42,10 @@ def config(tmp_path: Path) -> GalorRunnerV2Config:
         workspace_root=tmp_path,
         repository_id="lil-tweak",
         repository_commit=COMMIT,
+        authorization_signing_keys={
+            "executor-authorization-key": "executor-authorization-secret-value"
+        },
+        result_signing_keys={"runner-result-key": "runner-result-secret-value"},
     )
 
 
@@ -140,12 +145,46 @@ class Gateway:
         self.canceled.append(job_id)
 
 
-@pytest.mark.asyncio
-async def test_transport_runs_exact_approval_gateway_status_flow(tmp_path: Path) -> None:
-    gateway = Gateway()
+def connected_transport(tmp_path: Path, gateway: Gateway) -> GalorRunnerV2Transport:
     transport = GalorRunnerV2Transport(
         config(tmp_path), gateway=gateway, now=lambda: NOW, poll_interval_seconds=0
     )
+    transport._connection._proof = Gate3RunnerConnectionProof(
+        runner_id="galor-private-cloud-01",
+        tenant_id="owner-tenant",
+        handshake_checked_at=NOW,
+        handshake_expires_at=NOW + timedelta(seconds=30),
+        qualification_digest="1" * 64,
+        qualification_key_id="2" * 64,
+        qualification_evidence_digest="3" * 64,
+        qualification_expires_at=NOW + timedelta(minutes=5),
+        authorization_key_id="connection-key",
+        authorization_evidence_digest="4" * 64,
+        authorization_expires_at=NOW + timedelta(seconds=30),
+        heartbeat_job_id="heartbeat-job-1",
+        heartbeat_issued_at=NOW,
+        heartbeat_expires_at=NOW + timedelta(seconds=60),
+        heartbeat_max_age_ms=60_000,
+        hub_commit="5" * 40,
+        lil_tweak_commit=COMMIT,
+        qualification_id="rq_" + "6" * 32,
+        qualification_bundle_digest="7" * 64,
+        qualification_verified_at=NOW,
+        qualification_valid_until=NOW + timedelta(minutes=5),
+        qualification_issuer_key_id="8" * 64,
+        qualification_runner_key_id="9" * 64,
+        authorization_id="rca_" + "a" * 32,
+        authorization_sequence=1,
+        authorization_revocation_epoch=1,
+        authorization_issued_at=NOW,
+    )
+    return transport
+
+
+@pytest.mark.asyncio
+async def test_transport_runs_exact_approval_gateway_status_flow(tmp_path: Path) -> None:
+    gateway = Gateway()
+    transport = connected_transport(tmp_path, gateway)
     result = await transport.run(
         executable="git",
         args=("status", "--short"),
@@ -174,9 +213,7 @@ async def test_transport_runs_exact_approval_gateway_status_flow(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_transport_rejects_missing_approval_and_wrong_receipt_commit(tmp_path: Path) -> None:
     gateway = Gateway()
-    transport = GalorRunnerV2Transport(
-        config(tmp_path), gateway=gateway, now=lambda: NOW, poll_interval_seconds=0
-    )
+    transport = connected_transport(tmp_path, gateway)
     with pytest.raises(Exception, match="approval evidence"):
         await transport.run(
             executable="git",

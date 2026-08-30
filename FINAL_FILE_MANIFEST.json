@@ -9,18 +9,18 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "25de23cd3f231a0cb64f64a0804513c382aa868d464e707a3ee4e30d1e58235e",
+  "manifest_scope_digest": "b63232654e2a660b0de9ac2b1391b068776bfe5741f81c57707f4a07d93b6375",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 265,
+  "file_count_excluding_manifest": 272,
   "files": [
     {
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "4dd9caeaed8a48aaad845a7e3b767387c9aa5894b20577744ebb37d5d804bc50",
-      "git_blob_sha1": "c436462176b28d334f00395a44d662c90a1f1d0f",
-      "bytes": 2779
+      "sha256": "06cc629db15d6fe64202bc06de10e075275eabe56dc7b4536520abc4de23d0b7",
+      "git_blob_sha1": "c131a75b05649746f0a880431fbb82cdd1e6e858",
+      "bytes": 3305
     },
     {
       "relative_path": ".github/workflows/ci.yml",
@@ -31,12 +31,20 @@
       "bytes": 14872
     },
     {
+      "relative_path": ".github/workflows/runner-ed25519-evidence.yml",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "20c89c0418bfe4ce7c8ae6b27f34ee1ff9601e475e55033bed9adebcfe3ac371",
+      "git_blob_sha1": "bcb0bc0ea4600b02bb4c3b0296105fc39b915276",
+      "bytes": 1190
+    },
+    {
       "relative_path": ".github/workflows/runner-qualification.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2542672dcbf62471f290463c361d6e15c52bff31601ee1a3d8d528b8d3cf3e7d",
-      "git_blob_sha1": "266cca12d3b3cb83f72a05f59915fc25e8fec0cd",
-      "bytes": 17562
+      "sha256": "f65ae3b1e6ad9b9fc5518b6c9aa100acf29a0891b1f790a0701230a7dad35025",
+      "git_blob_sha1": "665aad9be392ec81bdfcb5bf333dea23375200bc",
+      "bytes": 17522
     },
     {
       "relative_path": ".gitignore",
@@ -98,8 +106,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "22d0072fd6a43af72554c820ba06c169f32b06e66023bfbb19cd1eafe006dea9",
-      "git_blob_sha1": "4c59b963ffc6c67f4bcf40a04a2f11fb8032ff00",
+      "sha256": "7688dd190c2dfdaa323305f4692a7a6c028f64e074da98b530651d33ebeaa393",
+      "git_blob_sha1": "b0e64965770c86ce2df6367dd03950692b54a1b3",
       "bytes": 2471
     },
     {
@@ -154,9 +162,9 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "3d4bc9baad6fd204aa95632a2cec102ff40679988aee89e0d8d88e56f3ae9f3f",
-      "git_blob_sha1": "9d9be714014c9c53ea851c2bc28064261d35014c",
-      "bytes": 2487
+      "sha256": "207e43b81fffc4f31b5c2e3ea732a53049fa721d0c20a317e6093225b15aaf90",
+      "git_blob_sha1": "a797ec690ff9f4f85a7981034fcc2eda1429a8a7",
+      "bytes": 2261
     },
     {
       "relative_path": "EVIDENCE_AND_EXTERNAL_ANTI_ROLLBACK.md",
@@ -866,9 +874,9 @@
       "relative_path": "liltweak/api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "c856241f404c9daed637eda2f2333c48a37913274b6f0bf3435c5e6bfe04a3ad",
-      "git_blob_sha1": "0131e1339b76b32512a9fb661690ad19a663805c",
-      "bytes": 39682
+      "sha256": "75b9096fadc109fd751e5daae9e8471b9b6f3a27d167c6817284ec6cce0f15d1",
+      "git_blob_sha1": "20fad20b89ea1e3c3326b239c2c6b651bbf82cd7",
+      "bytes": 40294
     },
     {
       "relative_path": "liltweak/approvals.py",
@@ -922,9 +930,9 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "4bcbc36ac974bc318947427ae6011c6393441c122795582e76d32ea5da30e0bd",
-      "git_blob_sha1": "00ac23e70e5444a6c70335ca8d90291d987e2c48",
-      "bytes": 22333
+      "sha256": "2210924b6054a05d88a9d8321793420ca547c90ab3ae079a7ea9fa177b8b06a3",
+      "git_blob_sha1": "831cf494834792acc8cf7e9cc69be8434b22056b",
+      "bytes": 22931
     },
     {
       "relative_path": "liltweak/context_manifest.py",
@@ -1018,9 +1026,9 @@
       "relative_path": "liltweak/galor_runner_v2.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "0e64a6f2595d1547cd868b200263265d0f0031e14cdb922e476d821b6fc521d7",
-      "git_blob_sha1": "902622493653e3ff525af2b1401f06eb63262d8c",
-      "bytes": 16301
+      "sha256": "80b92b2149493de6182596f2fcb0437dbcede2bbcb6a54282ea050db4e079225",
+      "git_blob_sha1": "d1407018a5714d0342a06770ae69183108828c30",
+      "bytes": 21103
     },
     {
       "relative_path": "liltweak/hosted_sandbox.py",
@@ -1183,6 +1191,30 @@
       "bytes": 32749
     },
     {
+      "relative_path": "liltweak/runner_connection.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "27c3a9a476d0798fc7fdf83db85a8578a1b809c9b2c4f18f6d523aae7ebd6632",
+      "git_blob_sha1": "5da16c0230f20d7177828308cecf67e203334b40",
+      "bytes": 40212
+    },
+    {
+      "relative_path": "liltweak/runner_evidence.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "c5c2b674d1eb1e6265820053554a89ea91ca67d41960e3e8e317223ccb6be17e",
+      "git_blob_sha1": "f9c3cbcc5605796d71fdd7df1c0ba28e885425ea",
+      "bytes": 16139
+    },
+    {
+      "relative_path": "liltweak/runner_gate3.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "766225731d69d43a9c5a15353a58b913ceb453f5c7c38dcdfe882a47c067f406",
+      "git_blob_sha1": "bb60e30255ee917f4e714d2e1392bd257a67576b",
+      "bytes": 35194
+    },
+    {
       "relative_path": "liltweak/runner_qualification.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1258,9 +1290,9 @@
       "relative_path": "liltweak/workbench_api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "7faadb90a39b38d5ea88bbdd5154c7f2df9554a9ee062e42eddaa6824e558a79",
-      "git_blob_sha1": "0fb4f1d6e4314a462cd5ba5f670a79453260480b",
-      "bytes": 26339
+      "sha256": "5b58b11d0ef4156e3595af4dbdeaa4f5abac308f2cfb25b09ef9e711d94db0d1",
+      "git_blob_sha1": "c247619011177d7aa3aa27160ba633e24631ac2b",
+      "bytes": 26394
     },
     {
       "relative_path": "liltweak/workbench_capabilities.py",
@@ -1282,9 +1314,9 @@
       "relative_path": "liltweak/workbench_executor.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "8b8b13d35bffef826cff3faf54d09c66e40554899b0273402a512e55f5c1676f",
-      "git_blob_sha1": "33f8cc585a115662dc494ab785b0cffa3fd2c7c1",
-      "bytes": 32713
+      "sha256": "597ed12179c0114c1e68d2f161e4cb6849b79a6ba3a308bc9276f767583d43de",
+      "git_blob_sha1": "296794c5067233efb4e18940920158591b3f55b1",
+      "bytes": 33120
     },
     {
       "relative_path": "liltweak/workbench_policy.py",
@@ -1634,9 +1666,9 @@
       "relative_path": "tests/test_galor_runner_v2.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "afa1a07f656cf1615ef60050cdf039fa2b39fff340d2b6d5cb40bcdddc0693df",
-      "git_blob_sha1": "13e73676249f3b2b6eb1598485a3efc8b98d9f84",
-      "bytes": 7477
+      "sha256": "89b2dd467a3fcfaa79258c38b3fa94e326d0c6ad86438441781a146ddbbecbcd",
+      "git_blob_sha1": "81c11ceaffee8ce35788bc98a1c27911111839d8",
+      "bytes": 9107
     },
     {
       "relative_path": "tests/test_gauntlet_concurrency.py",
@@ -1901,6 +1933,30 @@
       "sha256": "e5cd2160644c8975771a660621bb652e0c8f46788bdebdbfd5b6ae3424926ca8",
       "git_blob_sha1": "8f7f5759bd1ff597f6e6e828fc5fc36f2fc95eb1",
       "bytes": 4906
+    },
+    {
+      "relative_path": "tests/test_runner_cryptographic_evidence.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "d501d2c4fca67f40fa74576e983763d488be5348a9e8dbdbe84b8b7fc77ad2b4",
+      "git_blob_sha1": "704da9f7c7067d45e29d3b69b42b97909507d6ab",
+      "bytes": 13023
+    },
+    {
+      "relative_path": "tests/test_runner_ed25519_gate.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "bdd542859c7f5bf413c32a487fd07327f4d16e38c070e41fffaec93ebb5b217b",
+      "git_blob_sha1": "99bc20293907fce8c5cdda7edeabe4b2f4f4d567",
+      "bytes": 8769
+    },
+    {
+      "relative_path": "tests/test_runner_gate3_connection.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "26cc2ebc72b319a2c30a23873db3927aab0b9e278cb993f53ea19c4962cb8d64",
+      "git_blob_sha1": "522e2ba781bfff4537c533ce8272df3f1356c5e3",
+      "bytes": 19573
     },
     {
       "relative_path": "tests/test_runner_qualification.py",
