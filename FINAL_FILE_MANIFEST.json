@@ -9,10 +9,10 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "e8a1462c5e9a72d0887453e9be9869459eba46d2fcf6cf52f5e2007ef8fa1621",
+  "manifest_scope_digest": "a8d80762640a05d8a299905611b209bffcbf7f2b24296ba5807fda6682a556b5",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 267,
+  "file_count_excluding_manifest": 268,
   "files": [
     {
       "relative_path": ".env.example",
@@ -1917,6 +1917,14 @@
       "sha256": "f312367399a48f99cd8bf6b612b884b44a293394cbc7463ac70e97a180c66794",
       "git_blob_sha1": "3f1f7158c996ae1322a687fae8c0487e934e4cef",
       "bytes": 8544
+    },
+    {
+      "relative_path": "tests/test_runner_cryptographic_evidence.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "d501d2c4fca67f40fa74576e983763d488be5348a9e8dbdbe84b8b7fc77ad2b4",
+      "git_blob_sha1": "704da9f7c7067d45e29d3b69b42b97909507d6ab",
+      "bytes": 13023
     },
     {
       "relative_path": "tests/test_runner_qualification.py",
