@@ -1,0 +1,254 @@
+name: Apply cryptographic evidence runtime wiring
+
+on:
+  push:
+    branches:
+      - feature/runner-health-handshake-heartbeat-20260829
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-runner-crypto-evidence-wiring
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact feature revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feature/runner-health-handshake-heartbeat-20260829
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.33"
+          enable-cache: false
+
+      - name: Apply exact runtime wiring
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"expected one match in {path}, found {count}")
+              target.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_once(
+              "liltweak/galor_runner_v2.py",
+              '''    repository_id: str
+              repository_commit: str
+              result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
+          ''',
+              '''    repository_id: str
+              repository_commit: str
+              authorization_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
+              result_signing_keys: Mapping[str, str] = field(default_factory=dict, repr=False)
+          ''',
+          )
+          replace_once(
+              "liltweak/galor_runner_v2.py",
+              '''        self._connection = RunnerConnectionVerifier(
+                  gateway=self._gateway,
+                  execution_host=config.contract.execution_host,
+                  authorization_digest=config.authorization_digest,
+                  result_signing_keys=config.result_signing_keys,
+                  now=self._now,
+                  poll_interval_seconds=self._poll_interval_seconds,
+              )
+          ''',
+              '''        self._connection = RunnerConnectionVerifier(
+                  gateway=self._gateway,
+                  execution_host=config.contract.execution_host,
+                  contract_digest=config.expected_contract_digest,
+                  qualification_evidence_digest=config.qualification_evidence_digest,
+                  authorization_digest=config.authorization_digest,
+                  authorization_signing_keys=config.authorization_signing_keys,
+                  result_signing_keys=config.result_signing_keys,
+                  now=self._now,
+                  poll_interval_seconds=self._poll_interval_seconds,
+              )
+          ''',
+          )
+
+          replace_once(
+              "liltweak/config.py",
+              '''    workbench_runner_authorization_digest: str | None = None
+              workbench_runner_auth_token: str | None = field(default=None, repr=False)
+              workbench_runner_signing_keys_json: str | None = None
+          ''',
+              '''    workbench_runner_authorization_digest: str | None = None
+              workbench_runner_auth_token: str | None = field(default=None, repr=False)
+              workbench_runner_authorization_signing_keys_json: str | None = None
+              workbench_runner_signing_keys_json: str | None = None
+          ''',
+          )
+          replace_once(
+              "liltweak/config.py",
+              '''                ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
+                          ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
+          ''',
+              '''                ("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN", self.workbench_runner_auth_token),
+                          (
+                              "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON",
+                              self.workbench_runner_authorization_signing_keys_json,
+                          ),
+                          (
+                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON",
+                              self.workbench_runner_signing_keys_json,
+                          ),
+                          ("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID", self.workbench_runner_repository_id),
+          ''',
+          )
+          replace_once(
+              "liltweak/config.py",
+              '''            workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
+                          workbench_runner_signing_keys_json=_json_text_env(
+                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
+                          ),
+          ''',
+              '''            workbench_runner_auth_token=os.getenv("LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN"),
+                          workbench_runner_authorization_signing_keys_json=_json_text_env(
+                              "LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON"
+                          ),
+                          workbench_runner_signing_keys_json=_json_text_env(
+                              "LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON"
+                          ),
+          ''',
+          )
+
+          replace_once(
+              "liltweak/api.py",
+              '''from .runner_connection import parse_result_signing_keys
+          ''',
+              '''from .runner_connection import (
+                  parse_authorization_signing_keys,
+                  parse_result_signing_keys,
+              )
+          ''',
+          )
+          replace_once(
+              "liltweak/api.py",
+              '''            settings.workbench_runner_auth_token,
+                          settings.workbench_runner_signing_keys_json,
+          ''',
+              '''            settings.workbench_runner_auth_token,
+                          settings.workbench_runner_authorization_signing_keys_json,
+                          settings.workbench_runner_signing_keys_json,
+          ''',
+          )
+          replace_once(
+              "liltweak/api.py",
+              '''        authorization_digest = str(settings.workbench_runner_authorization_digest)
+                      result_signing_keys = parse_result_signing_keys(settings.workbench_runner_signing_keys_json)
+          ''',
+              '''        authorization_digest = str(settings.workbench_runner_authorization_digest)
+                      authorization_signing_keys = parse_authorization_signing_keys(
+                          settings.workbench_runner_authorization_signing_keys_json
+                      )
+                      result_signing_keys = parse_result_signing_keys(
+                          settings.workbench_runner_signing_keys_json
+                      )
+          ''',
+          )
+          replace_once(
+              "liltweak/api.py",
+              '''                authorization_digest=authorization_digest,
+                              workspace_root=settings.workbench_workspace_root,
+          ''',
+              '''                authorization_digest=authorization_digest,
+                              workspace_root=settings.workbench_workspace_root,
+                              authorization_signing_keys=authorization_signing_keys,
+          ''',
+          )
+
+          replace_once(
+              ".env.example",
+              '''LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN=
+              LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON=
+          ''',
+              '''LILTWEAK_WORKBENCH_RUNNER_AUTH_TOKEN=
+              LILTWEAK_WORKBENCH_RUNNER_AUTHORIZATION_SIGNING_KEYS_JSON=
+              LILTWEAK_WORKBENCH_RUNNER_SIGNING_KEYS_JSON=
+          ''',
+          )
+
+          replace_once(
+              "tests/test_galor_runner_v2.py",
+              '''        repository_id="lil-tweak",
+                      repository_commit=COMMIT,
+                  )
+          ''',
+              '''        repository_id="lil-tweak",
+                      repository_commit=COMMIT,
+                      authorization_signing_keys={
+                          "executor-authorization-key": "executor-authorization-secret-value"
+                      },
+                      result_signing_keys={"runner-result-key": "runner-result-secret-value"},
+                  )
+          ''',
+          )
+          PY
+
+      - name: Format changed Python files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv sync --locked --group dev --python 3.12.13
+          uv run --no-sync ruff format \
+            liltweak/runner_connection.py \
+            liltweak/galor_runner_v2.py \
+            liltweak/config.py \
+            liltweak/api.py \
+            tests/test_galor_runner_v2.py \
+            tests/test_runner_connection_probe.py \
+            tests/test_runner_cryptographic_evidence.py
+          uv run --no-sync ruff check \
+            liltweak/runner_connection.py \
+            liltweak/galor_runner_v2.py \
+            liltweak/config.py \
+            liltweak/api.py \
+            tests/test_galor_runner_v2.py \
+            tests/test_runner_connection_probe.py \
+            tests/test_runner_cryptographic_evidence.py
+
+      - name: Commit exact tree and refreshed manifest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
+          test "$GITHUB_REF_NAME" = "feature/runner-health-handshake-heartbeat-20260829"
+          git config user.name "GALOR Evidence Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/apply-crypto-evidence-wiring.yml
+          git add \
+            .env.example \
+            liltweak/runner_connection.py \
+            liltweak/galor_runner_v2.py \
+            liltweak/config.py \
+            liltweak/api.py \
+            tests/test_galor_runner_v2.py \
+            tests/test_runner_connection_probe.py \
+            tests/test_runner_cryptographic_evidence.py
+          python scripts/generate_final_manifest.py
+          git add FINAL_FILE_MANIFEST.json
+          git diff --cached --check
+          git commit -m "feat: wire cryptographic runner evidence"
+          git push origin HEAD:feature/runner-health-handshake-heartbeat-20260829
