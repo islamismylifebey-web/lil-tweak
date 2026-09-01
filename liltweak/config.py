@@ -373,8 +373,8 @@ class Settings:
                     self.private_runner_dispatch_signing_key,
                 ),
             )
-            for name, value in control_plane_values:
-                if value in {None, ""}:
+            for name, control_plane_value in control_plane_values:
+                if control_plane_value in {None, ""}:
                     raise ValueError(
                         f"{name} is required when the private runner control plane is enabled"
                     )
