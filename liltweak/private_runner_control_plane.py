@@ -39,6 +39,8 @@ class HttpPrivateRunnerControlPlaneClient:
         *,
         base_url: str,
         bearer_token: str,
+        access_client_id: str,
+        access_client_secret: str,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         parsed = urlparse(base_url)
@@ -55,8 +57,17 @@ class HttpPrivateRunnerControlPlaneClient:
             ord(character) < 33 or ord(character) == 127 for character in bearer_token
         ):
             raise ValueError("private runner control-plane bearer token is invalid")
+        for access_credential in (access_client_id, access_client_secret):
+            if not 16 <= len(access_credential) <= 1_024 or any(
+                not 33 <= ord(character) <= 126 for character in access_credential
+            ):
+                raise ValueError("Cloudflare Access service-token credential is invalid")
         self._base_url = base_url.rstrip("/")
-        self._headers = {"Authorization": f"Bearer {bearer_token}"}
+        self._headers = {
+            "Authorization": f"Bearer {bearer_token}",
+            "CF-Access-Client-Id": access_client_id,
+            "CF-Access-Client-Secret": access_client_secret,
+        }
         self._client = client
 
     def _http_client(self) -> httpx.AsyncClient:
@@ -102,6 +113,8 @@ def build_private_runner_control_plane_client(
     if (
         settings.private_runner_control_plane_url is None
         or settings.private_runner_control_plane_auth_token is None
+        or settings.private_runner_access_client_id is None
+        or settings.private_runner_access_client_secret is None
     ):
         raise PrivateRunnerControlPlaneError(
             "private runner control plane configuration is incomplete"
@@ -109,6 +122,8 @@ def build_private_runner_control_plane_client(
     return HttpPrivateRunnerControlPlaneClient(
         base_url=settings.private_runner_control_plane_url,
         bearer_token=settings.private_runner_control_plane_auth_token,
+        access_client_id=settings.private_runner_access_client_id,
+        access_client_secret=settings.private_runner_access_client_secret,
         client=client,
     )
 

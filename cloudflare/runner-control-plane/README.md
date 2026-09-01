@@ -8,7 +8,10 @@ command, command output, credential, or completion/qualification assertion.
 ## HTTP contract
 
 Every route requires `Authorization: Bearer <server-to-server token>` and
-returns `Cache-Control: no-store`.
+returns `Cache-Control: no-store`. Cloudflare Access is a separate outer gate:
+callers must also send `CF-Access-Client-Id` and `CF-Access-Client-Secret` for
+an approved service token. Access does not replace the route-specific Worker
+bearer.
 
 | Route | Caller | Request | Result |
 | --- | --- | --- | --- |
@@ -38,8 +41,13 @@ secret/configuration path:
 
 Cloudflare Access must also protect the service route. Missing or malformed
 bindings fail closed; `wrangler.jsonc` deliberately contains no values for
-them. The Worker cannot dispatch or execute work itself, and its evidence state
-is deliberately not a completion or qualification decision.
+them. Public `workers.dev` and preview URLs are disabled, so deployment does
+not expose an alternate public endpoint; an explicit Access-protected route is
+required. The Lil Tweak server receives its Access service-token credentials
+through `LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_ID` and
+`LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_SECRET`. The Worker cannot dispatch or
+execute work itself, and its evidence state is deliberately not a completion
+or qualification decision.
 
 ## Local verification
 

@@ -54,6 +54,8 @@ def test_private_runner_control_plane_is_inert_by_default(tmp_path: Path) -> Non
 
     assert configured.private_runner_control_plane_enabled is False
     assert configured.private_runner_control_plane_url is None
+    assert configured.private_runner_access_client_id is None
+    assert configured.private_runner_access_client_secret is None
     assert configured.private_runner_dispatch_signing_key is None
 
 
@@ -63,6 +65,8 @@ def _enabled_settings(configured: Settings) -> Settings:
         private_runner_control_plane_enabled=True,
         private_runner_control_plane_url="https://runner-control.invalid",
         private_runner_control_plane_auth_token="a" * 32,
+        private_runner_access_client_id="control-client-id.access",
+        private_runner_access_client_secret="s" * 32,
         private_runner_dispatch_key_id="f" * 64,
         private_runner_dispatch_signing_key=b"b" * 32,
     )
@@ -73,6 +77,8 @@ def _enabled_settings(configured: Settings) -> Settings:
     (
         ("private_runner_control_plane_url", None, "URL"),
         ("private_runner_control_plane_auth_token", None, "AUTH_TOKEN"),
+        ("private_runner_access_client_id", None, "ACCESS_CLIENT_ID"),
+        ("private_runner_access_client_secret", None, "ACCESS_CLIENT_SECRET"),
         ("private_runner_dispatch_key_id", None, "KEY_ID"),
         ("private_runner_dispatch_signing_key", None, "SIGNING_KEY"),
     ),
@@ -102,9 +108,78 @@ def test_private_runner_control_plane_rejects_non_https_endpoint(tmp_path: Path)
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("private_runner_access_client_id", "short", "ACCESS_CLIENT_ID"),
+        (
+            "private_runner_access_client_secret",
+            "unsafe-secret\r\nvalue",
+            "ACCESS_CLIENT_SECRET",
+        ),
+    ),
+)
+def test_private_runner_control_plane_rejects_unsafe_access_credentials(
+    tmp_path: Path,
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    configured = _enabled_settings(_settings(tmp_path))
+
+    with pytest.raises(ValueError, match=message):
+        replace(configured, **{field: value})
+
+
 def test_control_plane_client_factory_refuses_disabled_configuration(tmp_path: Path) -> None:
     with pytest.raises(PrivateRunnerControlPlaneError, match="disabled"):
         build_private_runner_control_plane_client(_settings(tmp_path))
+
+
+def test_access_credentials_load_from_server_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LILTWEAK_ENVIRONMENT", "test")
+    monkeypatch.setenv("LILTWEAK_AUTH_DISABLED", "true")
+    monkeypatch.setenv("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_ENABLED", "true")
+    monkeypatch.setenv(
+        "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_URL",
+        "https://runner-control.invalid",
+    )
+    monkeypatch.setenv("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN", "a" * 32)
+    monkeypatch.setenv(
+        "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_ID",
+        "control-client-id.access",
+    )
+    monkeypatch.setenv("LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_SECRET", "s" * 32)
+    monkeypatch.setenv("LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID", "f" * 64)
+    monkeypatch.setenv(
+        "LILTWEAK_PRIVATE_RUNNER_DISPATCH_SIGNING_KEY",
+        urlsafe_b64encode(b"b" * 32).decode("ascii").rstrip("="),
+    )
+
+    configured = Settings.from_env()
+
+    assert configured.private_runner_access_client_id == "control-client-id.access"
+    assert configured.private_runner_access_client_secret == "s" * 32
+
+
+@pytest.mark.parametrize(
+    ("access_client_id", "access_client_secret"),
+    (
+        ("short", "s" * 32),
+        ("control-client-id.access", "unsafe-secret\nvalue"),
+    ),
+)
+def test_http_client_rejects_unsafe_access_credentials(
+    access_client_id: str,
+    access_client_secret: str,
+) -> None:
+    with pytest.raises(ValueError, match="Access service-token"):
+        HttpPrivateRunnerControlPlaneClient(
+            base_url="https://control.invalid",
+            bearer_token="a" * 32,
+            access_client_id=access_client_id,
+            access_client_secret=access_client_secret,
+        )
 
 
 def _signed_offer(private_key: Ed25519PrivateKey):
@@ -134,6 +209,8 @@ async def test_http_client_offers_only_the_signed_typed_envelope() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         observed["url"] = str(request.url)
         observed["authorization"] = request.headers["Authorization"]
+        observed["access_client_id"] = request.headers["CF-Access-Client-Id"]
+        observed["access_client_secret"] = request.headers["CF-Access-Client-Secret"]
         observed["payload"] = json.loads(request.content)
         return httpx.Response(
             200,
@@ -152,15 +229,55 @@ async def test_http_client_offers_only_the_signed_typed_envelope() -> None:
         client = HttpPrivateRunnerControlPlaneClient(
             base_url="https://control.invalid/runner",
             bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
             client=transport,
         )
         receipt = await client.offer(attestation=offer)
 
     assert observed["url"] == "https://control.invalid/runner/v1/control/offer"
     assert observed["authorization"] == "Bearer " + "a" * 32
+    assert observed["access_client_id"] == "control-client-id.access"
+    assert observed["access_client_secret"] == "s" * 32
     assert observed["payload"] == {"attestation": offer.model_dump(mode="json")}
     assert receipt.execution_id == offer.attestation.execution_id
     assert receipt.status == "OFFERED"
+
+
+@pytest.mark.asyncio
+async def test_client_factory_wires_access_service_token_credentials(tmp_path: Path) -> None:
+    offer = _signed_offer(Ed25519PrivateKey.generate())
+    observed: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["authorization"] = request.headers.get("Authorization")
+        observed["access_client_id"] = request.headers.get("CF-Access-Client-Id")
+        observed["access_client_secret"] = request.headers.get("CF-Access-Client-Secret")
+        return httpx.Response(
+            200,
+            json={
+                "execution_id": offer.attestation.execution_id,
+                "runner_id": "galor-tweak-runner-01",
+                "status": "OFFERED",
+                "lease_digest": offer.attestation.lease_digest,
+                "contract_digest": offer.attestation.contract_digest,
+                "commands_digest": offer.attestation.commands_digest,
+                "expires_at_ms": offer.attestation.expires_at_ms,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = build_private_runner_control_plane_client(
+            _enabled_settings(_settings(tmp_path)),
+            client=transport,
+        )
+        await client.offer(attestation=offer)
+
+    assert observed == {
+        "authorization": "Bearer " + "a" * 32,
+        "access_client_id": "control-client-id.access",
+        "access_client_secret": "s" * 32,
+    }
 
 
 @pytest.mark.asyncio
@@ -175,6 +292,8 @@ async def test_http_client_rejects_a_malformed_control_plane_receipt() -> None:
         client = HttpPrivateRunnerControlPlaneClient(
             base_url="https://control.invalid",
             bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
             client=transport,
         )
         with pytest.raises(PrivateRunnerControlPlaneError, match="invalid"):
@@ -199,6 +318,8 @@ def test_issuer_binds_the_existing_contract_and_lease_to_the_server_held_key(
         private_runner_control_plane_enabled=True,
         private_runner_control_plane_url="https://control.invalid",
         private_runner_control_plane_auth_token="a" * 32,
+        private_runner_access_client_id="control-client-id.access",
+        private_runner_access_client_secret="s" * 32,
         private_runner_dispatch_key_id=dispatch_issuer_key_id(raw_public_key),
         private_runner_dispatch_signing_key=raw_private_key,
     )

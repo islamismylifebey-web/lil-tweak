@@ -178,6 +178,8 @@ class Settings:
     private_runner_control_plane_enabled: bool = False
     private_runner_control_plane_url: str | None = None
     private_runner_control_plane_auth_token: str | None = field(default=None, repr=False)
+    private_runner_access_client_id: str | None = field(default=None, repr=False)
+    private_runner_access_client_secret: str | None = field(default=None, repr=False)
     private_runner_dispatch_key_id: str | None = None
     private_runner_dispatch_signing_key: bytes | None = field(default=None, repr=False)
 
@@ -365,6 +367,14 @@ class Settings:
                     self.private_runner_control_plane_auth_token,
                 ),
                 (
+                    "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_ID",
+                    self.private_runner_access_client_id,
+                ),
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_SECRET",
+                    self.private_runner_access_client_secret,
+                ),
+                (
                     "LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID",
                     self.private_runner_dispatch_key_id,
                 ),
@@ -395,6 +405,23 @@ class Settings:
                 )
             ):
                 raise ValueError("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN is invalid")
+            access_credentials = (
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_ID",
+                    self.private_runner_access_client_id,
+                ),
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_SECRET",
+                    self.private_runner_access_client_secret,
+                ),
+            )
+            for access_name, access_value in access_credentials:
+                if (
+                    not isinstance(access_value, str)
+                    or not 16 <= len(access_value) <= 1_024
+                    or any(not 33 <= ord(character) <= 126 for character in access_value)
+                ):
+                    raise ValueError(f"{access_name} is invalid")
             if (
                 self.private_runner_dispatch_key_id is None
                 or re.fullmatch(r"[0-9a-f]{64}", self.private_runner_dispatch_key_id) is None
@@ -562,6 +589,10 @@ class Settings:
             private_runner_control_plane_url=os.getenv("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_URL"),
             private_runner_control_plane_auth_token=os.getenv(
                 "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN"
+            ),
+            private_runner_access_client_id=os.getenv("LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_ID"),
+            private_runner_access_client_secret=os.getenv(
+                "LILTWEAK_PRIVATE_RUNNER_ACCESS_CLIENT_SECRET"
             ),
             private_runner_dispatch_key_id=os.getenv("LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID"),
             private_runner_dispatch_signing_key=_key_env(
