@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "d97f0e8167e4ec136e16aa7918529f70ef8b7c5848718cd876d375f1a7b04d8d",
+  "manifest_scope_digest": "745c723a8c532120c7b970ce3fe8d123858aa05ae1f2bbbb2f71bb4e2e2a60e8",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 332,
@@ -18,9 +18,9 @@
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "e3a729ec62858152926ceae7c5c2c43f2e501b72c05dbe85436c630140f093ae",
-      "git_blob_sha1": "f4ed11795ed8eb2e959c2685d7c919444745b419",
-      "bytes": 3918
+      "sha256": "79928965dbf3dbe2e4094b83b05d7ddb4e7eb331ffd3850ebcf339722751e4d8",
+      "git_blob_sha1": "0f8413f8a7117dd1c1b9bcaba41aa07a5caa0d46",
+      "bytes": 4105
     },
     {
       "relative_path": ".github/workflows/ci.yml",
@@ -586,9 +586,9 @@
       "relative_path": "cloudflare/runner-control-plane/README.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b651999859d5d124a721f5a18750703cfb7b10e73c352644c58e7bf2de80499f",
-      "git_blob_sha1": "69124c8629dd9f3410664e690e0bae4456fe6e4c",
-      "bytes": 2849
+      "sha256": "f9c50cd5abc830df414bec465558760b51543c2524c2687c8ee54c6233de5321",
+      "git_blob_sha1": "f553a3fab92ffef66b7b5cd6ec6f58d682a48280",
+      "bytes": 3387
     },
     {
       "relative_path": "cloudflare/runner-control-plane/package-lock.json",
@@ -698,9 +698,9 @@
       "relative_path": "cloudflare/runner-control-plane/wrangler.jsonc",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "cad1fc748093ff6c0d2100fca57b9780325d01f5366f2f5063e7e2b570642680",
-      "git_blob_sha1": "1e8db375c7644f2764b4b2cb3e045ce4113aa4f3",
-      "bytes": 426
+      "sha256": "cfd06e69882a5449a063451ba273fd5d3d0d0c2d048e8efda539cd2d7dc81057",
+      "git_blob_sha1": "0b22de222c941fddb566efd7df08ad412c135ce4",
+      "bytes": 475
     },
     {
       "relative_path": "docs/agent-interactions.png",
@@ -1082,9 +1082,9 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f916d2b510a39f8bed0888987b22bd8b608306ebd02b5f45dc38450ab7085625",
-      "git_blob_sha1": "4f1c43e413ef18a1cc9d1453388546456a7068bd",
-      "bytes": 26520
+      "sha256": "279d6b120bad6331d2c344631c05e6334d89ca15ddc69395aceac1b987823a2e",
+      "git_blob_sha1": "f82a17047e1e9d0078b7a90c3777b33e78ae9ca5",
+      "bytes": 28000
     },
     {
       "relative_path": "liltweak/context_manifest.py",
@@ -1274,9 +1274,9 @@
       "relative_path": "liltweak/private_runner_control_plane.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "09a0a795e2f5f8f699425d29918792b1816357a4d4035959bc0b69992affda7f",
-      "git_blob_sha1": "62517e2e320174e242ccdfda3d58baf8e6e46cfc",
-      "bytes": 8903
+      "sha256": "dd28a4150f9c47c828da96a7097e4cbaf672bfe812b19764d49d67f27a6b0985",
+      "git_blob_sha1": "190848e4e493cd8a56f927b4d616a443765e0254",
+      "bytes": 9700
     },
     {
       "relative_path": "liltweak/project_workspace.py",
@@ -2210,9 +2210,9 @@
       "relative_path": "tests/test_private_runner_control_plane.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "fe51429190e175ebe08bf5dabe3fd9ff48547e4d7ea63406149fbadb21d140de",
-      "git_blob_sha1": "d11b6d600167407267bf4be022c28f31ca592138",
-      "bytes": 10666
+      "sha256": "5f9e96e43b7040de55de621fb61639c7015df1cec5be3c7f3472584f108b6f81",
+      "git_blob_sha1": "43a4fba975e100ddcc3054503c4093a92939500b",
+      "bytes": 15521
     },
     {
       "relative_path": "tests/test_private_workbench_launcher.py",
