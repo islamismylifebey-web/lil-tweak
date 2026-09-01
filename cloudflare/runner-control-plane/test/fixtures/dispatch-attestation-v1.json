@@ -1,0 +1,22 @@
+{
+  "public_key": "lMlSloB5d4lAJyilQ3-4DUMDdpchrp9t3z1Ca1FMXco",
+  "key_id": "074f0a35e573dadb5d3230bdd28472f6fc4c2488dcecc7ea4f61af5f605db0d1",
+  "attestation": {
+    "key_id": "074f0a35e573dadb5d3230bdd28472f6fc4c2488dcecc7ea4f61af5f605db0d1",
+    "attestation": {
+      "schema_version": "lil-tweak.dispatch-attestation/v1",
+      "execution_id": "golden-fixture-001",
+      "runner_id": "galor-tweak-runner-01",
+      "runner_role": "role-tweak-runner",
+      "lease_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "contract_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "commands_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+      "approval_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+      "policy_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+      "attempt_nonce": "lTs2aBPnd7EUB7ycqxh0ZZ8jQ49GivIpZ_ywESeHfq8",
+      "issued_at_ms": 1735689600000,
+      "expires_at_ms": 1735689900000
+    },
+    "signature": "vGf_dmjmSNPeNp-58iGtvP79PA15O3ft8Rr_0EAUs5USBWlpzsm2URa9T8CbFVtJVSJUBpZBCejTKIfdW3j9AA"
+  }
+}

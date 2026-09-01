@@ -174,6 +174,12 @@ class Settings:
     workbench_runner_signing_keys_json: str | None = None
     workbench_runner_repository_id: str | None = None
     workbench_runner_repository_commit: str | None = None
+    # Intent only: activation remains dependent on separate live runner qualification.
+    private_runner_control_plane_enabled: bool = False
+    private_runner_control_plane_url: str | None = None
+    private_runner_control_plane_auth_token: str | None = field(default=None, repr=False)
+    private_runner_dispatch_key_id: str | None = None
+    private_runner_dispatch_signing_key: bytes | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         supported_environments = {
@@ -348,6 +354,59 @@ class Settings:
                 raise ValueError(
                     "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT must be an immutable Git SHA"
                 )
+        if self.private_runner_control_plane_enabled:
+            control_plane_values: tuple[tuple[str, object | None], ...] = (
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_URL",
+                    self.private_runner_control_plane_url,
+                ),
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN",
+                    self.private_runner_control_plane_auth_token,
+                ),
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID",
+                    self.private_runner_dispatch_key_id,
+                ),
+                (
+                    "LILTWEAK_PRIVATE_RUNNER_DISPATCH_SIGNING_KEY",
+                    self.private_runner_dispatch_signing_key,
+                ),
+            )
+            for name, value in control_plane_values:
+                if value in {None, ""}:
+                    raise ValueError(
+                        f"{name} is required when the private runner control plane is enabled"
+                    )
+            if (
+                self.private_runner_control_plane_url is None
+                or re.fullmatch(
+                    r"https://[^/\s?#]+(?:/[^?#\s]*)?",
+                    self.private_runner_control_plane_url,
+                )
+                is None
+            ):
+                raise ValueError("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_URL must be an HTTPS URL")
+            if self.private_runner_control_plane_auth_token is None or (
+                len(self.private_runner_control_plane_auth_token) < 16
+                or any(
+                    ord(character) < 33 or ord(character) == 127
+                    for character in self.private_runner_control_plane_auth_token
+                )
+            ):
+                raise ValueError("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN is invalid")
+            if (
+                self.private_runner_dispatch_key_id is None
+                or re.fullmatch(r"[0-9a-f]{64}", self.private_runner_dispatch_key_id) is None
+            ):
+                raise ValueError(
+                    "LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID must be a lowercase SHA-256 digest"
+                )
+            if (
+                not isinstance(self.private_runner_dispatch_signing_key, bytes)
+                or len(self.private_runner_dispatch_signing_key) != 32
+            ):
+                raise ValueError("LILTWEAK_PRIVATE_RUNNER_DISPATCH_SIGNING_KEY is invalid")
         if (
             self.live_model_enabled
             and self.creator_signing_key is None
@@ -495,5 +554,17 @@ class Settings:
             workbench_runner_repository_id=os.getenv("LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_ID"),
             workbench_runner_repository_commit=os.getenv(
                 "LILTWEAK_WORKBENCH_RUNNER_REPOSITORY_COMMIT"
+            ),
+            private_runner_control_plane_enabled=_bool_env(
+                "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_ENABLED",
+                False,
+            ),
+            private_runner_control_plane_url=os.getenv("LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_URL"),
+            private_runner_control_plane_auth_token=os.getenv(
+                "LILTWEAK_PRIVATE_RUNNER_CONTROL_PLANE_AUTH_TOKEN"
+            ),
+            private_runner_dispatch_key_id=os.getenv("LILTWEAK_PRIVATE_RUNNER_DISPATCH_KEY_ID"),
+            private_runner_dispatch_signing_key=_key_env(
+                "LILTWEAK_PRIVATE_RUNNER_DISPATCH_SIGNING_KEY"
             ),
         )

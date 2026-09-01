@@ -249,6 +249,12 @@ class Gate3RunnerConnectionVerifier:
         return fresh
 
     @property
+    def contract_digest(self) -> str:
+        """Expose the immutable Gate 3 contract commitment for a pinned consumer."""
+
+        return self._contract_digest
+
+    @property
     def disconnect_reason(self) -> str:
         return self._disconnect_reason
 
