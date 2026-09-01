@@ -1,0 +1,1 @@
+"""GitHub resource provider adapters."""

@@ -9,10 +9,10 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "b63232654e2a660b0de9ac2b1391b068776bfe5741f81c57707f4a07d93b6375",
+  "manifest_scope_digest": "bbad300fe748c70a1d82f0166d7aaa74d43def2a0041c82015af5bd943c563fe",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 272,
+  "file_count_excluding_manifest": 307,
   "files": [
     {
       "relative_path": ".env.example",
@@ -106,8 +106,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "7688dd190c2dfdaa323305f4692a7a6c028f64e074da98b530651d33ebeaa393",
-      "git_blob_sha1": "b0e64965770c86ce2df6367dd03950692b54a1b3",
+      "sha256": "a6d2d5b7c4649940d609e447dd60f2ef72af7601048bd74c3039d8fc223812cd",
+      "git_blob_sha1": "9f5fe5e576534644c4a8052ed4d5368dd42b7543",
       "bytes": 2471
     },
     {
@@ -162,8 +162,8 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "207e43b81fffc4f31b5c2e3ea732a53049fa721d0c20a317e6093225b15aaf90",
-      "git_blob_sha1": "a797ec690ff9f4f85a7981034fcc2eda1429a8a7",
+      "sha256": "c4b1884cd3ff8bd029077457cddf0e965eed7df3e0711d007d31a91f3f842765",
+      "git_blob_sha1": "efe617dd4c634f18fbd9ea8d5ba2788bdc4dbd40",
       "bytes": 2261
     },
     {
@@ -735,6 +735,14 @@
       "bytes": 1960
     },
     {
+      "relative_path": "docs/resource-director-v1.md",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "0e8d3841fc32d4a05f519d3c181939bee0c74e1273024a98e96aa8f5926da76c",
+      "git_blob_sha1": "f29450eba00c22675062860c5ccbf1d2c5b1297b",
+      "bytes": 2903
+    },
+    {
       "relative_path": "docs/security-boundaries.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1127,6 +1135,94 @@
       "bytes": 15793
     },
     {
+      "relative_path": "liltweak/providers/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "799537c2d41919fa8aa79ce3767733c088ad12e2a65bafe995862ff0069dffd2",
+      "git_blob_sha1": "be470449159a91570c7c05965a470421d1a3cc60",
+      "bytes": 67
+    },
+    {
+      "relative_path": "liltweak/providers/cloudflare/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "9119bbec0180ed16fde73132a362e9c2b57d0ac79d2a7c42d595ab929fbe7528",
+      "git_blob_sha1": "500ac5673ae9ff004baa718611e3df8e1cd0d4f8",
+      "bytes": 49
+    },
+    {
+      "relative_path": "liltweak/providers/cloudflare/workflows.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "a53b45cc7c14656a2a1ae5477fb07df78c29f82ab5a9896030fd2a866e1e803b",
+      "git_blob_sha1": "1cf20540003731b728f9e6e1759abd56d1047901",
+      "bytes": 649
+    },
+    {
+      "relative_path": "liltweak/providers/contracts.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "229e0cd85d66293c46ae0b84fc4e16dfc44a7ccd32d21917e0fc52a261d38dd6",
+      "git_blob_sha1": "907e47dd16e281fff81930e8cc2406029cbbb147",
+      "bytes": 4809
+    },
+    {
+      "relative_path": "liltweak/providers/github/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "25a3f0121d26986d96d5af44e4df82f0fe888c2d99a19c77b05b5182bf71f7e4",
+      "git_blob_sha1": "ce2a0d943fd4bdebde94d3765d46ed1b9d812faa",
+      "bytes": 41
+    },
+    {
+      "relative_path": "liltweak/providers/github/actions.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "1212c20b014df6f08142cdc2d705e06fea33fd238ffc8cd02dc60c57a380cd8e",
+      "git_blob_sha1": "ae1907406128e568b63bcc7dedb347fb708297e8",
+      "bytes": 12241
+    },
+    {
+      "relative_path": "liltweak/providers/github/codespaces.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "563261472d843a8221f7602b6edf5a91e72d40ab8a79fc4a2753b0aec18835fd",
+      "git_blob_sha1": "04bf4ed6ce97b929ad93b379a66c348f51f74634",
+      "bytes": 542
+    },
+    {
+      "relative_path": "liltweak/providers/github/contracts.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "350feffd9941e83b697de626612ef02e4aa75277bcadaf1af0ef7b26948c2036",
+      "git_blob_sha1": "649841483645c389ef27d21183af7b0020d12092",
+      "bytes": 2426
+    },
+    {
+      "relative_path": "liltweak/providers/scaffold.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "01a2a8b733dea8294ecb28dbb32c3566788764d77b37cd7680db62b28481c68f",
+      "git_blob_sha1": "46c0e168906482af26e4eb23b4bdc4c474a72e9f",
+      "bytes": 3426
+    },
+    {
+      "relative_path": "liltweak/providers/vercel/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "cb67fd0849ae6b020b6e4eab5367a5952e9b884ec82993a5da4eebb55f7f2d8b",
+      "git_blob_sha1": "3008c7a1e0e7fb5211da27bf4658db5e5f857720",
+      "bytes": 45
+    },
+    {
+      "relative_path": "liltweak/providers/vercel/sandbox.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "9f7a290e1af34601d416fd38045c36099e20307047559d050ab7523a9b6b6e66",
+      "git_blob_sha1": "49ea9d04e11b86c340074311749533c4b5924f85",
+      "bytes": 475
+    },
+    {
       "relative_path": "liltweak/reasoning_contract.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1189,6 +1285,86 @@
       "sha256": "3377ebf28e7286453df576974f967351317c2fb6743df2f8988df4d244564c2f",
       "git_blob_sha1": "c3d00db495e2f5fb793bd4bcd85b0f3ffe3453ce",
       "bytes": 32749
+    },
+    {
+      "relative_path": "liltweak/resource/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "354938a46541c9a08c1484da0c4c80dc4c86b0fb55ebf54fb9cd12f62a12aa09",
+      "git_blob_sha1": "dd4eea39c4a749cd7f657ae960f6a798d753acec",
+      "bytes": 75
+    },
+    {
+      "relative_path": "liltweak/resource/budget.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "67bcdef141418f88af15198c057a7127e4f898bcab51046446a4fe68216f0918",
+      "git_blob_sha1": "c8ce475aed4b2894deaf461cb38a310a07d4baea",
+      "bytes": 6140
+    },
+    {
+      "relative_path": "liltweak/resource/catalog.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "7bb46ceb28970c4ced1e0cb380fce6ec3d58d3553c022d86ece57553eb2139e1",
+      "git_blob_sha1": "23306daf1cb55a74e7a3de9fea79c7d3d59ecdeb",
+      "bytes": 1153
+    },
+    {
+      "relative_path": "liltweak/resource/classifier.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "89de762614ce73046af5c43503b3048f42053d5149795b3aa7ade226d9f8cad9",
+      "git_blob_sha1": "ae9e72c1c5f16e2f5be3de1d0e879dc7110c61cf",
+      "bytes": 2732
+    },
+    {
+      "relative_path": "liltweak/resource/contracts.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "bb8dce9fa96a4f9453a816dd418658ef419e2b5587a0592eff78b192769821a2",
+      "git_blob_sha1": "dd9be3ed6c1efa5c0b037cd54545f2e3f79a4b4a",
+      "bytes": 24256
+    },
+    {
+      "relative_path": "liltweak/resource/director.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "c42d309482afdf8f7aa87c24f780de3a38f634b491fbb10d59b3321adf815ef8",
+      "git_blob_sha1": "af17090bc370df1003f64a56db396cf0e9bc4424",
+      "bytes": 5084
+    },
+    {
+      "relative_path": "liltweak/resource/estimator.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "abcd48837de87ab43b6da73637aabb7e716ed0f288c8b3fe9bded22eb6ccbb75",
+      "git_blob_sha1": "1b8a50a206683040fb62812cd543459b9e151057",
+      "bytes": 2309
+    },
+    {
+      "relative_path": "liltweak/resource/health.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "bdb74c4c1e8414b5a17ecd0deb459fe7a122a378e8953dae2c2dc13d8a5a3313",
+      "git_blob_sha1": "887a2dee10d911ae6dca5bbeabb06c1dd0ff63cf",
+      "bytes": 3317
+    },
+    {
+      "relative_path": "liltweak/resource/leases.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "012a55142963ffb903482e201390902805c1e3005d85ebbf57d9d8aa5bf7d5f5",
+      "git_blob_sha1": "51a9188fcd5a67b7910cf44182fb4eb46f3c30a6",
+      "bytes": 9707
+    },
+    {
+      "relative_path": "liltweak/resource/scheduler.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "31e3e36e96b3614d20ca53d030772fc08d21bb0931d1be97490398c35920acc0",
+      "git_blob_sha1": "e8d7ba3fdaa185c0a1ba85fe78ca0f76794289cf",
+      "bytes": 12053
     },
     {
       "relative_path": "liltweak/runner_connection.py",
@@ -1527,6 +1703,14 @@
       "bytes": 2972
     },
     {
+      "relative_path": "tests/resource_provider_helpers.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "2e397719171475b975285de79b66ee033a08ac12bc84fa3e62697df163b56267",
+      "git_blob_sha1": "3da6a38f59c77901d45a733810e659d43606e366",
+      "bytes": 3312
+    },
+    {
       "relative_path": "tests/test_api.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1557,6 +1741,14 @@
       "sha256": "c911f3407a85ebdfe7e39689ab24e0afe88987a319a087dcf1b231cc445712b7",
       "git_blob_sha1": "f8468c3c11342f32ad79600db19067a5389154e1",
       "bytes": 25680
+    },
+    {
+      "relative_path": "tests/test_cloudflare_provider.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "08658e8c75904196fa114ea3a4d08e953f0582504b8d3c24189e5dde14ba6b6b",
+      "git_blob_sha1": "8bbd448c805b433de52993315989a11141de0779",
+      "bytes": 1481
     },
     {
       "relative_path": "tests/test_cognitive_pipeline.py",
@@ -1639,6 +1831,14 @@
       "bytes": 2799
     },
     {
+      "relative_path": "tests/test_execution_lease.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "def711f5be01251b10448ef836dfd72504d740922ee02219c6ebbb7ee82fa09e",
+      "git_blob_sha1": "1afdd169276b2c42f6cda3e4fdd70d06a2685730",
+      "bytes": 7214
+    },
+    {
       "relative_path": "tests/test_external_checkpoint.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1685,6 +1885,14 @@
       "sha256": "c13d69f9d64521584faed89d1e580eaaaa72be970509d576de53b5d756fd6add",
       "git_blob_sha1": "203ab819ac35ce6de52b7c8f0bcf74d64c0fcbe0",
       "bytes": 15363
+    },
+    {
+      "relative_path": "tests/test_github_provider.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "d5f80c6bcf48a3d25c87cb78f009ee40c214d3d202c1ef8cf13254fb6d1590cd",
+      "git_blob_sha1": "f9fe01c87eee5707589bc6aad316c623c8dcc84e",
+      "bytes": 13688
     },
     {
       "relative_path": "tests/test_hosted_sandbox.py",
@@ -1935,6 +2143,70 @@
       "bytes": 4906
     },
     {
+      "relative_path": "tests/test_resource_budget.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "00cf76832c6e00bd5557c922e527b560e583575c6bd55068abbfb41513b7c5db",
+      "git_blob_sha1": "4d6c563e8cd0e75e1ee968eb4aa0b1fe33d1b216",
+      "bytes": 2949
+    },
+    {
+      "relative_path": "tests/test_resource_catalog.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "c42f9825157cb3cdc2438854db892e9872dc2590dedbdb605b6ad60163538330",
+      "git_blob_sha1": "08f0f2c3e1afb9a2022a37a942ac5be09259f9cb",
+      "bytes": 2179
+    },
+    {
+      "relative_path": "tests/test_resource_classifier.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "7774ba13fc5a920522f6451f5bc1b5c78c35eddb33462b32d4b2fa6a9a906f8f",
+      "git_blob_sha1": "189d4a40bb98b76a8c042d1ed82ba194fdcbff8c",
+      "bytes": 2971
+    },
+    {
+      "relative_path": "tests/test_resource_contracts.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b9a033f324b296c12da7be129653e12ad7c03fdcfc3919a200bbd0e7aff7db13",
+      "git_blob_sha1": "472a792c763c0db9691ef90548f7768b11292e04",
+      "bytes": 9644
+    },
+    {
+      "relative_path": "tests/test_resource_director_shadow.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "73c6501a316db83099730063d4115f9736abcc7224ee56ae7a4cb078cab834da",
+      "git_blob_sha1": "edb8091c6aa421e74b651688f849ef4e8697aa9a",
+      "bytes": 5441
+    },
+    {
+      "relative_path": "tests/test_resource_estimator.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "fb80788bf3a082d6e10f0c8c563cde8c9b2164cb87f601919eedf75c508e7b93",
+      "git_blob_sha1": "b763491b0df5072fbf64f5cdd3295529ee1a6c24",
+      "bytes": 2840
+    },
+    {
+      "relative_path": "tests/test_resource_health.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "ab1b004dfe3f0ba80afea87244ea6eda0ae9f3cf2da462b12a9e148e6d6d6f92",
+      "git_blob_sha1": "a7724b82920fb1dd3525006a7b2812ae35f212ec",
+      "bytes": 2312
+    },
+    {
+      "relative_path": "tests/test_resource_scheduler.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "ad0343d8e067c57ac7fcccdfe45e460ea4a3235a21fcc0a1bb690a50b8f2a41d",
+      "git_blob_sha1": "dfc427e2d90db1417fdfc13c322d4196d91c41b9",
+      "bytes": 6339
+    },
+    {
       "relative_path": "tests/test_runner_cryptographic_evidence.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -2021,6 +2293,14 @@
       "sha256": "f9471490bf48d6a3f026de6a2c81589b8cd9a4711ab070a2dba83effd6e64ea6",
       "git_blob_sha1": "58a7963b9928d7bc66757ec0fc514c0f9267b137",
       "bytes": 10059
+    },
+    {
+      "relative_path": "tests/test_vercel_provider.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "554c41b3c9f587960ab9d06aaf8807e4c54068ddaf70e535e85e80a555423e64",
+      "git_blob_sha1": "43ca574e930bde5b558f777ba5f17b0957b16339",
+      "bytes": 1435
     },
     {
       "relative_path": "tests/test_workbench_agent_security.py",
