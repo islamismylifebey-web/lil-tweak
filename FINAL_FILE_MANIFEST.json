@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "3516e376d907513c60f53db1edaf8315d099f89fb5ddc1842144d92adcb368f4",
+  "manifest_scope_digest": "978a6330fa95d0f983fa3867daf8fa911c68877689543edc515198fcdd914cf1",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 371,
@@ -1290,9 +1290,9 @@
       "relative_path": "liltweak/private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "8772eb0f77549bf96a8279951ab4ef13adbd916368ad8cdfc8d38c1299cc2787",
-      "git_blob_sha1": "65f2e6b2f1d9f2ecb69fe9726c88850ed732d458",
-      "bytes": 34146
+      "sha256": "6931e2f97663f7a102dd01c5873cb6d4a6a3a717c7073d768ad4d074998f0c90",
+      "git_blob_sha1": "51a9b35ca92ec6ee053b53a8d0476653d4769084",
+      "bytes": 34672
     },
     {
       "relative_path": "liltweak/private_runner_control_plane.py",
@@ -2002,9 +2002,9 @@
       "relative_path": "scripts/private_runner_operator.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "77b799072bc26dff982b7f47f0e245f569863bf9046cc2f4010438ebe79c2a7d",
-      "git_blob_sha1": "90eb83c49e46e8d745c64396d1321e8b3b3329ef",
-      "bytes": 36921
+      "sha256": "97329a658b4ea23540078d55bdbb1e839671177a56962aab1c6ee754ec929774",
+      "git_blob_sha1": "249e9919d749b2e11abc43b32bd76a103c005d13",
+      "bytes": 42516
     },
     {
       "relative_path": "scripts/qualify_operational_provider.py",
@@ -2498,9 +2498,9 @@
       "relative_path": "tests/test_private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "0926928c411a465f06be0f5b075a87963aeb4dc5b9787286e4343eb5b5eab1e0",
-      "git_blob_sha1": "b1e7c66448797716c76e04b7e1a301a513671bc1",
-      "bytes": 18687
+      "sha256": "6947bab258e4f1c2923c2b97d283842cd5a83a46a8b7ed9900d8286010175a16",
+      "git_blob_sha1": "569fcefda988282f27e93eaa8a19b3e8822c29c5",
+      "bytes": 20786
     },
     {
       "relative_path": "tests/test_private_runner_control_plane.py",

@@ -276,7 +276,7 @@ class PrivateRunnerQualificationOrchestrator:
         source: SourceEvidence,
         approval: PrivateRunnerApproval,
         qualification: PrivateRunnerQualificationEvidence,
-        prior_job_a_verification: IndependentVerificationReceipt | None = None,
+        prior_job_a_verification: PrivateRunnerVerifiedResult | None = None,
     ) -> PrivateRunnerDispatchReceipt:
         manifest = self._validated_manifest(manifest)
         source = SourceEvidence.model_validate(source.model_dump(mode="json"))
@@ -303,7 +303,7 @@ class PrivateRunnerQualificationOrchestrator:
         if scope not in qualification.qualified_scopes:
             raise PrivateRunnerActivationError("private runner qualification scope is missing")
         if isinstance(manifest, QualificationBoundedWriteManifest):
-            self._validate_prior_job_a(prior_job_a_verification, source)
+            self._validate_prior_job_a(prior_job_a_verification, source, self._dispatches)
 
         profile = self._profile(qualification)
         requirements = self._requirements(manifest, approval)
@@ -483,17 +483,28 @@ class PrivateRunnerQualificationOrchestrator:
 
     @staticmethod
     def _validate_prior_job_a(
-        verification: IndependentVerificationReceipt | None,
+        verification: PrivateRunnerVerifiedResult | None,
         source: SourceEvidence,
+        dispatches: dict[str, PrivateRunnerDispatchReceipt],
     ) -> None:
         if (
             verification is None
             or verification.job_type != "read_only"
-            or verification.verification_outcome is not VerificationOutcome.VERIFIED
             or verification.source_commit != source.commit_sha
+            or verification.runner_evidence_digest is None
         ):
             raise PrivateRunnerActivationError(
                 "Job A independent verification is required before Job B"
+            )
+        prior_receipt = dispatches.get(verification.execution_id)
+        if (
+            prior_receipt is None
+            or prior_receipt.job_type != verification.job_type
+            or prior_receipt.source_commit != verification.source_commit
+            or prior_receipt.runner_evidence_digest != verification.runner_evidence_digest
+        ):
+            raise PrivateRunnerActivationError(
+                "Job A independent verification binding mismatch"
             )
 
     @staticmethod

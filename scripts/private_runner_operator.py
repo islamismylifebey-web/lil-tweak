@@ -21,6 +21,25 @@ RUNNER_ROLE = "role-tweak-runner"
 REMOTE_CANDIDATE_ROOT = "/var/lib/liltweak-runner/candidates"
 JOB_B_ARTIFACT_PATH = "docs/runner-qualification/galor-tweak-runner-01.md"
 JOB_B_ARTIFACT_SHA256 = "62253a2945ea498f3b206a0449e5a97a0cf5783dd7858d7a11fbb365f4c04a91"
+GITHUB_REPOSITORY = "islamismylifebey-web/lil-tweak"
+GITHUB_PR_NUMBER = 12
+GITHUB_PR_BRANCH = "feature/tweak-private-runner-control-plane-20260901"
+GITHUB_CI_WORKFLOW = ".github/workflows/ci.yml"
+GITHUB_CI_WORKFLOW_NAME = "Lil Tweak Master Builder deterministic verification"
+GITHUB_CI_JOB_NAME = "Deterministic gates after locked dependency bootstrap"
+GITHUB_CI_REQUIRED_CHECKS = frozenset(
+    {
+        "Checkout exact revision",
+        "Verify toolchain, lock, and frozen environment",
+        "Lint and format",
+        "Static type check",
+        "Tests",
+        "Deterministic offline evaluations and smoke paths",
+        "Preserve generated supply-chain evidence",
+        "Validate deterministic evidence",
+        "Source tree remained unchanged",
+    }
+)
 _EXECUTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -168,6 +187,118 @@ def _read_json(path: Path, maximum_bytes: int = 128_000) -> Any:
     if path.stat().st_size < 2 or path.stat().st_size > maximum_bytes:
         raise RuntimeError(f"bounded JSON artifact {path.name} has an invalid size")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _github_ci_evidence(*, run_id: int, head: str) -> tuple[dict[str, Any], str]:
+    if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id < 1:
+        raise RuntimeError("GitHub Job A run identity is invalid")
+    if _GIT_SHA.fullmatch(head) is None:
+        raise RuntimeError("GitHub Job A source identity is invalid")
+    run = json.loads(
+        _run(
+            [
+                "gh",
+                "api",
+                f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}",
+            ]
+        )
+    )
+    jobs_payload = json.loads(
+        _run(
+            [
+                "gh",
+                "api",
+                f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100",
+            ]
+        )
+    )
+    if not isinstance(run, dict) or not isinstance(jobs_payload, dict):
+        raise RuntimeError("GitHub Job A evidence has an invalid shape")
+    expected_url = f"https://github.com/{GITHUB_REPOSITORY}/actions/runs/{run_id}"
+    run_bindings = (
+        (run.get("id"), run_id),
+        (run.get("name"), GITHUB_CI_WORKFLOW_NAME),
+        (run.get("path"), GITHUB_CI_WORKFLOW),
+        (run.get("event"), "pull_request"),
+        (run.get("status"), "completed"),
+        (run.get("conclusion"), "success"),
+        (run.get("head_sha"), head),
+        (run.get("head_branch"), GITHUB_PR_BRANCH),
+        ((run.get("repository") or {}).get("full_name"), GITHUB_REPOSITORY),
+        ((run.get("head_repository") or {}).get("full_name"), GITHUB_REPOSITORY),
+        (run.get("html_url"), expected_url),
+    )
+    if any(observed != expected for observed, expected in run_bindings):
+        raise RuntimeError("GitHub Job A run is not the exact successful source candidate")
+    run_attempt = run.get("run_attempt")
+    if not isinstance(run_attempt, int) or isinstance(run_attempt, bool) or run_attempt < 1:
+        raise RuntimeError("GitHub Job A run attempt is invalid")
+    pull_requests = run.get("pull_requests")
+    if not isinstance(pull_requests, list) or not any(
+        isinstance(pull_request, dict)
+        and pull_request.get("number") == GITHUB_PR_NUMBER
+        and (pull_request.get("base") or {}).get("ref") == "main"
+        and (pull_request.get("head") or {}).get("ref") == GITHUB_PR_BRANCH
+        for pull_request in pull_requests
+    ):
+        raise RuntimeError("GitHub Job A run is not bound to PR #12")
+
+    jobs = jobs_payload.get("jobs")
+    if jobs_payload.get("total_count") != 1 or not isinstance(jobs, list) or len(jobs) != 1:
+        raise RuntimeError("GitHub Job A run has an unexpected job set")
+    job = jobs[0]
+    if not isinstance(job, dict):
+        raise RuntimeError("GitHub Job A run has an invalid job")
+    job_bindings = (
+        (job.get("name"), GITHUB_CI_JOB_NAME),
+        (job.get("head_sha"), head),
+        (job.get("status"), "completed"),
+        (job.get("conclusion"), "success"),
+        (job.get("run_attempt"), run_attempt),
+    )
+    job_id = job.get("id")
+    if (
+        any(observed != expected for observed, expected in job_bindings)
+        or not isinstance(job_id, int)
+        or isinstance(job_id, bool)
+        or job_id < 1
+    ):
+        raise RuntimeError("GitHub Job A run did not complete its exact successful job")
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        raise RuntimeError("GitHub Job A run lacks completed checks")
+    completed_checks = {
+        step.get("name")
+        for step in steps
+        if isinstance(step, dict)
+        and step.get("status") == "completed"
+        and step.get("conclusion") == "success"
+        and isinstance(step.get("name"), str)
+    }
+    if not GITHUB_CI_REQUIRED_CHECKS <= completed_checks:
+        raise RuntimeError("GitHub Job A run lacks required successful checks")
+
+    evidence: dict[str, Any] = {
+        "schema_version": "lil-tweak.github-independent-verification/v1",
+        "repository_id": REPOSITORY_ID,
+        "pull_request_number": GITHUB_PR_NUMBER,
+        "workflow_path": GITHUB_CI_WORKFLOW,
+        "workflow_name": GITHUB_CI_WORKFLOW_NAME,
+        "run_id": run_id,
+        "run_attempt": run_attempt,
+        "job_id": job_id,
+        "job_name": GITHUB_CI_JOB_NAME,
+        "head_sha": head,
+        "head_branch": GITHUB_PR_BRANCH,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": expected_url,
+        "completed_checks": sorted(GITHUB_CI_REQUIRED_CHECKS),
+    }
+    digest = hashlib.sha256(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return evidence, digest
 
 
 def _source_archive_digest(repo: Path, commit: str) -> str:
@@ -538,6 +669,10 @@ async def _execute(arguments: argparse.Namespace) -> dict[str, Any]:
     tree = _git(repo, "rev-parse", "HEAD^{tree}")
     if _git(repo, "status", "--porcelain=v1", "--untracked-files=all"):
         raise RuntimeError("operator refuses a dirty source checkout")
+    github_a_evidence, github_a_evidence_digest = _github_ci_evidence(
+        run_id=arguments.github_a_run_id,
+        head=head,
+    )
 
     challenge = RunnerQualificationChallenge.model_validate(
         _read_json(_single(arguments.gate3_dir, "liltweak-qualification-challenge.json"))
@@ -818,7 +953,7 @@ async def _execute(arguments: argparse.Namespace) -> dict[str, Any]:
         runner_execution_id=receipt_a.execution_id,
         source_commit=head,
         runner_evidence_digest=receipt_a.runner_evidence_digest,
-        github_evidence_digest=arguments.github_a_evidence_digest,
+        github_evidence_digest=github_a_evidence_digest,
         verification_outcome=VerificationOutcome.VERIFIED,
     )
     verified_a = orchestrator_a.accept_independent_verification(receipt_a, verification_a)
@@ -844,7 +979,7 @@ async def _execute(arguments: argparse.Namespace) -> dict[str, Any]:
         source=source,
         approval=approval_b,
         qualification=qualification_b,
-        prior_job_a_verification=verification_a,
+        prior_job_a_verification=verified_a,
     )
     receipt_b = await _collect(
         orchestrator_b,
@@ -892,6 +1027,8 @@ async def _execute(arguments: argparse.Namespace) -> dict[str, Any]:
         "gate3_qualification_id": challenge.qualification_id,
         "gate3_evidence_digest": attestation.evidence_digest,
         "job_a": {
+            "github_verification": github_a_evidence,
+            "github_evidence_digest": github_a_evidence_digest,
             "dispatch": receipt_a.model_dump(mode="json"),
             "runner_receipt": signed_receipt_a,
             "verified": verified_a.model_dump(mode="json"),
@@ -930,7 +1067,7 @@ def parser() -> argparse.ArgumentParser:
     target.add_argument("--approval-digest-a", type=_digest, required=True)
     target.add_argument("--approval-digest-b", type=_digest, required=True)
     target.add_argument("--policy-digest", type=_digest, required=True)
-    target.add_argument("--github-a-evidence-digest", type=_digest, required=True)
+    target.add_argument("--github-a-run-id", type=int, required=True)
     target.add_argument("--qualification-branch")
     target.add_argument("--maximum-execution-cost-microusd", type=int, default=50_000)
     target.add_argument("--monthly-resource-limit-microusd", type=int, default=100_000)

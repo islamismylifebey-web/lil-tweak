@@ -17,6 +17,7 @@ from liltweak.private_runner_activation import (
     PrivateRunnerApproval,
     PrivateRunnerQualificationEvidence,
     PrivateRunnerQualificationOrchestrator,
+    PrivateRunnerVerifiedResult,
     ProtectedControllerConfig,
     QualifiedRunnerScope,
     SourceEvidence,
@@ -243,6 +244,40 @@ def _recorded_runner_evidence(
     return envelope, hashlib.sha256(canonical_json(evidence).encode()).hexdigest()
 
 
+async def _accepted_job_a(
+    orchestrator: PrivateRunnerQualificationOrchestrator,
+    provider: RecordingProvider,
+) -> PrivateRunnerVerifiedResult:
+    receipt = await orchestrator.offer(
+        manifest=_manifest_a(),
+        source=_source(),
+        approval=_approval(),
+        qualification=_evidence(),
+    )
+    envelope, evidence_digest = _recorded_runner_evidence(provider)
+    provider.evidence = envelope
+    provider.status_result = ProviderOperationResult(
+        provider=ResourceProvider.SELF_HOSTED,
+        execution_id=receipt.execution_id,
+        status=ProviderExecutionStatus.RUNNING,
+        reason="evidence recorded",
+        verification_outcome=VerificationOutcome.PENDING,
+        evidence_digest=evidence_digest,
+    )
+    collected = await orchestrator.collect(receipt)
+    return orchestrator.accept_independent_verification(
+        collected,
+        IndependentVerificationReceipt(
+            job_type="read_only",
+            runner_execution_id=receipt.execution_id,
+            source_commit="f" * 40,
+            runner_evidence_digest=evidence_digest,
+            github_evidence_digest="e" * 64,
+            verification_outcome=VerificationOutcome.VERIFIED,
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_routes_exact_job_a_through_director_contract_lease_and_provider() -> None:
     provider = RecordingProvider()
@@ -306,14 +341,23 @@ async def test_job_b_is_only_the_fixed_bounded_manifest_and_needs_verified_job_a
             qualification=_evidence(),
         )
 
-    verification = IndependentVerificationReceipt(
+    fabricated = PrivateRunnerVerifiedResult(
         job_type="read_only",
-        runner_execution_id="execution-previous",
+        execution_id="execution-fabricated",
         source_commit="f" * 40,
         runner_evidence_digest="d" * 64,
         github_evidence_digest="e" * 64,
-        verification_outcome=VerificationOutcome.VERIFIED,
     )
+    with pytest.raises(PrivateRunnerActivationError, match="Job A independent verification"):
+        await orchestrator.offer(
+            manifest=_manifest_b(),
+            source=_source(),
+            approval=_approval(),
+            qualification=_evidence(),
+            prior_job_a_verification=fabricated,
+        )
+
+    verification = await _accepted_job_a(orchestrator, provider)
     receipt = await orchestrator.offer(
         manifest=_manifest_b(),
         source=_source(),
@@ -328,6 +372,29 @@ async def test_job_b_is_only_the_fixed_bounded_manifest_and_needs_verified_job_a
     assert contract.source_write_authorized is True
     assert manifest.artifact.path == "docs/runner-qualification/galor-tweak-runner-01.md"
     assert lease.secret_scope == ()
+
+
+@pytest.mark.asyncio
+async def test_job_b_rejects_any_changed_binding_from_an_accepted_job_a_result() -> None:
+    provider = RecordingProvider()
+    orchestrator = _orchestrator(provider)
+    verified = await _accepted_job_a(orchestrator, provider)
+
+    for changed in (
+        verified.model_copy(update={"execution_id": "execution-other"}),
+        verified.model_copy(update={"runner_evidence_digest": "0" * 64}),
+        verified.model_copy(update={"github_evidence_digest": "1" * 64}),
+    ):
+        with pytest.raises(PrivateRunnerActivationError, match="Job A independent verification"):
+            await orchestrator.offer(
+                manifest=_manifest_b(),
+                source=_source(),
+                approval=_approval(),
+                qualification=_evidence(),
+                prior_job_a_verification=changed,
+            )
+
+    assert len(provider.executed) == 1
 
 
 @pytest.mark.asyncio
@@ -352,23 +419,13 @@ async def test_unqualified_stale_unhealthy_or_incapable_runner_never_reaches_pro
 ) -> None:
     provider = RecordingProvider()
     manifest = _manifest_b() if message == "scope" else _manifest_a()
-    prior = None
-    if message == "scope":
-        prior = IndependentVerificationReceipt(
-            job_type="read_only",
-            runner_execution_id="execution-previous",
-            source_commit="f" * 40,
-            runner_evidence_digest="d" * 64,
-            github_evidence_digest="e" * 64,
-            verification_outcome=VerificationOutcome.VERIFIED,
-        )
     with pytest.raises(PrivateRunnerActivationError, match=message):
         await _orchestrator(provider).offer(
             manifest=manifest,
             source=_source(),
             approval=_approval(),
             qualification=evidence,
-            prior_job_a_verification=prior,
+            prior_job_a_verification=None,
         )
     assert provider.executed == []
 
