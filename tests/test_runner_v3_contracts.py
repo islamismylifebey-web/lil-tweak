@@ -4,9 +4,6 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pydantic import ValidationError
-
-from liltweak.creator_contract import content_digest
 from liltweak.providers.github.runner_v3_contracts import (
     RUNNER_V3_PROFILE_ID,
     RunnerV3Action,
@@ -20,6 +17,9 @@ from liltweak.providers.github.runner_v3_contracts import (
     RunnerV3WorkflowSnapshot,
     RunnerV3WorkspaceMode,
 )
+from pydantic import ValidationError
+
+from liltweak.creator_contract import content_digest
 
 NOW = datetime(2026, 9, 2, 16, 0, tzinfo=UTC)
 PATCH_TEXT = """diff --git a/docs/runner-v3-fixture.txt b/docs/runner-v3-fixture.txt
