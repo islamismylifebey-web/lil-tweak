@@ -1,4 +1,4 @@
-name: PR 12 exact source handoff
+name: PR 12 exact bounded finalize
 
 on:
   push:
@@ -6,38 +6,51 @@ on:
       - feature/tweak-private-runner-control-plane-20260901
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: pr12-exact-bounded-finalize
+  cancel-in-progress: false
 
 jobs:
-  package-source:
+  finalize:
+    if: "github.event.head_commit.message == 'chore: execute exact PR 12 finalize'"
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       UV_CACHE_DIR: /tmp/liltweak-uv-cache
       UV_NO_PROGRESS: "1"
       UV_LINK_MODE: copy
+      PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
+      TZ: UTC
+      LC_ALL: C.UTF-8
+      NO_COLOR: "1"
       GIT_TERMINAL_PROMPT: "0"
+      SOURCE_DATE_EPOCH: "1735689600"
+      OPENAI_API_KEY: ""
+      LILTWEAK_LIVE_MODEL_ENABLED: "false"
+      LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
 
     steps:
-      - name: Checkout exact source
+      - name: Checkout exact finalize trigger
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 0
+          fetch-depth: 2
           ref: ${{ github.sha }}
-          persist-credentials: false
+          persist-credentials: true
           clean: true
           lfs: false
           submodules: false
 
-      - name: Verify bounded source
+      - name: Verify exact bounded starting point
         shell: bash
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$GITHUB_REF" = "refs/heads/feature/tweak-private-runner-control-plane-20260901"
-          test "$(git rev-parse HEAD^)" = "c08a0aa482ec5582c20465346af0c4d3f54307f1"
-          test "$(git log -1 --pretty=%s)" = "chore: package exact PR 12 source toolchain"
+          test "$(git rev-parse HEAD^)" = "fdeda7055c8beda463129430594a5c157464eeb8"
+          test "$(git log -1 --pretty=%s)" = "chore: execute exact PR 12 finalize"
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = ".github/workflows/pr12-bounded-repair.yml"
 
       - name: Set up Python
@@ -58,37 +71,290 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          test "$(python -c 'import platform; print(platform.python_version())')" = "3.12.13"
+          uv --version | grep -Eq '^uv 0\.11\.33([[:space:]]|$)'
           uv lock --check --offline
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
           npm ci --prefix cloudflare/runner-control-plane
 
-      - name: Create credential-free exact-tree and toolchain archive
+      - name: Add regression tests and prove RED
         shell: bash
         run: |
           set -Eeuo pipefail
-          git config --local --unset-all http.https://github.com/.extraheader || true
-          git config --local --get-regexp 'http\..*extraheader' && exit 1 || true
-          staging="$RUNNER_TEMP/pr12-handoff"
-          rm -rf "$staging"
-          mkdir -p "$staging/source" "$staging/toolchain"
-          tar -cf - \
-            --exclude='.git/config' \
-            --exclude='.git/logs' \
-            --exclude='.git/hooks' \
-            . | tar -xf - -C "$staging/source"
-          cp -a /opt/hostedtoolcache/Python/3.12.13/x64 \
-            "$staging/toolchain/python-3.12.13"
-          cp "$(command -v uv)" "$staging/toolchain/uv-0.11.33"
-          printf '%s\n' "$(python --version 2>&1)" > "$staging/toolchain/python-version.txt"
-          printf '%s\n' "$(uv --version)" > "$staging/toolchain/uv-version.txt"
-          tar -czf "$RUNNER_TEMP/pr12-exact-source-toolchain.tgz" -C "$staging" .
-          test -s "$RUNNER_TEMP/pr12-exact-source-toolchain.tgz"
+          cat > tests/test_private_runner_review_regressions.py <<'PY'
+          from pathlib import Path
 
-      - name: Upload exact source, locked environments, and toolchain
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: pr12-exact-source-toolchain-${{ github.run_id }}
-          path: ${{ runner.temp }}/pr12-exact-source-toolchain.tgz
-          if-no-files-found: error
-          retention-days: 1
+          ROOT = Path(__file__).resolve().parents[1]
+
+
+          def test_control_offer_uses_one_timestamp_for_verify_and_persist() -> None:
+              source = (ROOT / "cloudflare" / "runner-control-plane" / "src" / "index.ts").read_text(
+                  encoding="utf-8"
+              )
+              start = source.index('if (request.method === "POST" && url.pathname === "/v1/control/offer") {')
+              end = source.index(
+                  'if (request.method === "POST" && url.pathname === `${runnerPrefix}/next`) {'
+              )
+              offer_block = source[start:end]
+              assert offer_block.count("Date.now()") == 1
+              assert "const requestNow = Date.now();" in offer_block
+              assert "verifyDispatchAttestation(body.attestation, env, requestNow)" in offer_block
+              assert "controlObject(env).offer(verified, body.manifest, requestNow)" in offer_block
+
+
+          def test_execution_lease_rejection_preserves_specific_reason() -> None:
+              source = (ROOT / "liltweak" / "providers" / "self_hosted" / "galor_tweak_runner.py").read_text(
+                  encoding="utf-8"
+              )
+              assert "except ExecutionLeaseError as exc:" in source
+              assert 'f"execution lease rejected: {exc}"' in source
+          PY
+          uv run --no-sync --offline ruff check tests/test_private_runner_review_regressions.py
+          uv run --no-sync --offline ruff format --check tests/test_private_runner_review_regressions.py
+          set +e
+          uv run --no-sync --offline pytest -q \
+            tests/test_private_runner_review_regressions.py > "$RUNNER_TEMP/pr12-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/pr12-red.log"
+          test "$status" -ne 0
+          grep -Eq '2 failed' "$RUNNER_TEMP/pr12-red.log"
+
+      - name: Apply only the two reviewed production fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline python - <<'PY'
+          from pathlib import Path
+
+          index_path = Path("cloudflare/runner-control-plane/src/index.ts")
+          index_source = index_path.read_text(encoding="utf-8")
+          old_verify = (
+              "    const body = parseOfferRequest(await readJson(request));\n"
+              "    const verified = await verifyDispatchAttestation(body.attestation, env, Date.now());"
+          )
+          new_verify = (
+              "    const body = parseOfferRequest(await readJson(request));\n"
+              "    const requestNow = Date.now();\n"
+              "    const verified = await verifyDispatchAttestation(body.attestation, env, requestNow);"
+          )
+          old_persist = "      await controlObject(env).offer(verified, body.manifest, Date.now()),"
+          new_persist = "      await controlObject(env).offer(verified, body.manifest, requestNow),"
+          assert index_source.count(old_verify) == 1
+          assert index_source.count(old_persist) == 1
+          index_source = index_source.replace(old_verify, new_verify, 1)
+          index_source = index_source.replace(old_persist, new_persist, 1)
+          index_path.write_text(index_source, encoding="utf-8")
+
+          provider_path = Path("liltweak/providers/self_hosted/galor_tweak_runner.py")
+          provider_source = provider_path.read_text(encoding="utf-8")
+          old_lease = '''        except ExecutionLeaseError:
+              return self._result(
+                  validated_lease.execution_id,
+                  ProviderExecutionStatus.BLOCKED,
+                  "execution lease was rejected",
+              )'''
+          new_lease = '''        except ExecutionLeaseError as exc:
+              return self._result(
+                  validated_lease.execution_id,
+                  ProviderExecutionStatus.BLOCKED,
+                  f"execution lease rejected: {exc}",
+              )'''
+          assert provider_source.count(old_lease) == 1
+          provider_source = provider_source.replace(old_lease, new_lease, 1)
+          provider_path.write_text(provider_source, encoding="utf-8")
+          PY
+
+      - name: Prove GREEN and focused private-runner suites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline pytest -q \
+            tests/test_private_runner_review_regressions.py
+          uv run --no-sync --offline pytest -q \
+            tests/test_resource_dispatch.py \
+            tests/test_private_runner_control_plane.py \
+            tests/test_private_runner_activation.py \
+            tests/test_private_runner_operator.py \
+            tests/test_host_runner_service.py \
+            tests/test_self_hosted_provider.py
+          npm run check --prefix cloudflare/runner-control-plane
+
+      - name: Remove helper and build reproducible package artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/pr12-bounded-repair.yml
+          mkdir -p "$RUNNER_TEMP/build-a" "$RUNNER_TEMP/build-b"
+          uv build --offline --out-dir "$RUNNER_TEMP/build-a"
+          uv build --offline --out-dir "$RUNNER_TEMP/build-b"
+          wheel_a="$(find "$RUNNER_TEMP/build-a" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          wheel_b="$(find "$RUNNER_TEMP/build-b" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          sdist_a="$(find "$RUNNER_TEMP/build-a" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          sdist_b="$(find "$RUNNER_TEMP/build-b" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$wheel_a"; test -n "$wheel_b"; test -n "$sdist_a"; test -n "$sdist_b"
+          cmp --silent "$wheel_a" "$wheel_b"
+          cmp --silent "$sdist_a" "$sdist_b"
+          printf 'wheel=%s\n' "$(sha256sum "$wheel_a" | cut -d' ' -f1)" >> "$GITHUB_STEP_SUMMARY"
+          printf 'sdist=%s\n' "$(sha256sum "$sdist_a" | cut -d' ' -f1)" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$wheel_a" > "$RUNNER_TEMP/wheel-path"
+          printf '%s\n' "$sdist_a" > "$RUNNER_TEMP/sdist-path"
+
+      - name: Regenerate supply-chain evidence and final manifest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          wheel="$(cat "$RUNNER_TEMP/wheel-path")"
+          sdist="$(cat "$RUNNER_TEMP/sdist-path")"
+          uv run --no-sync --offline python scripts/generate_supply_chain_artifacts.py \
+            --output-directory . \
+            --wheel-artifact "$wheel" \
+            --sdist-artifact "$sdist"
+          git add -A
+          uv run --no-sync --offline python scripts/generate_final_manifest.py
+          git add FINAL_FILE_MANIFEST.json
+          uv run --no-sync --offline python scripts/generate_final_manifest.py --check
+
+      - name: Run complete exact-tree verification
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline ruff check .
+          uv run --no-sync --offline ruff format --check .
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" \
+            uv run --no-sync --offline python -m compileall -q liltweak scripts
+          node --check web/workbench/app.js
+          node --check scripts/run_browser_acceptance.mjs
+          uv run --no-sync --offline mypy
+          uv run --no-sync --offline pytest
+          npm run check --prefix cloudflare/runner-control-plane
+
+      - name: Run deterministic evaluations and fail-closed smoke paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          results="$RUNNER_TEMP/results"
+          mkdir -p "$results"
+          capture() {
+            local name="$1"
+            shift
+            "$@" > "$results/$name.json"
+          }
+          capture local env LILTWEAK_EVAL_OUTPUT="$results/local-persisted.json" \
+            uv run --no-sync --offline python evals/run_local.py
+          capture gauntlet uv run --no-sync --offline python evals/run_gauntlet.py
+          capture engineering uv run --no-sync --offline python \
+            evals/run_engineering_trial.py --output "$results/engineering-record.json"
+          capture creator uv run --no-sync --offline python \
+            evals/run_creator_benchmark.py --output "$results/creator-record.json"
+          capture phase6 env LILTWEAK_EVAL_OUTPUT="$results/phase6-persisted.json" \
+            uv run --no-sync --offline python evals/run_phase6_offline.py
+          capture phase7 uv run --no-sync --offline python evals/run_phase7_offline.py
+          capture capability uv run --no-sync --offline python \
+            scripts/lil_tweak_capability_discovery.py
+          capture smoke uv run --no-sync --offline python main.py smoke
+          capture creator-smoke uv run --no-sync --offline python main.py creator-smoke
+          RESULTS="$results" uv run --no-sync --offline python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RESULTS"])
+
+          def load(name: str) -> dict:
+              return json.loads((root / f"{name}.json").read_text(encoding="utf-8"))
+
+          local = load("local")
+          gauntlet = load("gauntlet")
+          engineering = load("engineering")
+          creator = load("creator")
+          phase6 = load("phase6")
+          phase7 = load("phase7")
+          capability = load("capability")
+          smoke = load("smoke")
+          creator_smoke = load("creator-smoke")
+          assert local["passed"] is True
+          assert gauntlet["passed"] is True
+          assert gauntlet["live_case_count"] == 0
+          assert gauntlet["paid_planner_calls"] == 0
+          assert engineering["passed"] is True
+          assert engineering["mode"] == "offline"
+          assert engineering["call_count"] == 0
+          assert creator["passed"] is True
+          assert creator["provider_calls"] == 0
+          assert creator["tool_calls"] == 0
+          assert creator["executions"] == 0
+          assert phase6["passed"] is True
+          assert phase6["real_provider_calls"] == 0
+          assert phase6["tool_calls"] == 0
+          assert phase6["repository_executions"] == 0
+          assert phase7["all_matched"] is True
+          assert phase7["provider_calls"] == 0
+          assert phase7["paid_calls"] == 0
+          assert phase7["executions"] == 0
+          assert capability["counts"] == {"PASS": 10, "BLOCKED": 10, "FAIL": 0}
+          assert smoke["execution_connected"] is False
+          assert smoke["inspection_read_only"] is True
+          assert smoke["recovery_source_unchanged"] is True
+          assert smoke["change_source_writes_performed"] is False
+          assert smoke["evidence_valid"] is True
+          for field in (
+              "model_call_authorized",
+              "tool_use_authorized",
+              "spend_authorized",
+              "execution_authorized",
+              "execution_connected",
+          ):
+              assert creator_smoke[field] is False
+          print("All deterministic gates passed with zero paid/provider calls.")
+          PY
+
+      - name: Validate exact final staged set
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          uv run --no-sync --offline python scripts/generate_final_manifest.py --check
+          uv run --no-sync --offline python - <<'PY'
+          import json
+          from pathlib import Path
+
+          security = json.loads(Path("DEPENDENCY_SECURITY_SCAN_REPORT.json").read_text())
+          assert security["secret_scan"]["status"] == "PASSED"
+          assert security["secret_scan"]["release_findings"] == []
+          assert security["secret_scan"]["scan_blockers"] == []
+          assert security["workflow_action_pin_scan"]["status"] == "PASSED"
+          PY
+          expected="$RUNNER_TEMP/expected-files"
+          actual="$RUNNER_TEMP/actual-files"
+          cat > "$expected" <<'EOF'
+          .github/workflows/pr12-bounded-repair.yml
+          BUILD_PROVENANCE.json
+          DEPENDENCY_SECURITY_SCAN_REPORT.json
+          FINAL_FILE_MANIFEST.json
+          cloudflare/runner-control-plane/src/index.ts
+          liltweak/providers/self_hosted/galor_tweak_runner.py
+          tests/test_private_runner_review_regressions.py
+          EOF
+          git diff --cached --name-only | sort > "$actual"
+          diff -u "$expected" "$actual"
+          git diff --check
+          git diff --cached --check
+          test -z "$(git diff --name-only)"
+          test -z "$(git status --porcelain=v1 --untracked-files=all | grep '^??' || true)"
+          test -z "$(find liltweak scripts evals -type d -name __pycache__ -print -quit)"
+          test -z "$(find liltweak scripts evals -type f -name '*.py[co]' -print -quit)"
+          test ! -e evals/results/latest.json
+          test ! -e evals/results/phase6-offline-latest.json
+
+      - name: Commit and push repaired candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "Maurice Pennington Bey"
+          git config user.email "islamismylifebey@gmail.com"
+          git commit -m "fix: close private runner review findings"
+          repaired_sha="$(git rev-parse HEAD)"
+          test "$repaired_sha" != "$GITHUB_SHA"
+          git push origin HEAD:feature/tweak-private-runner-control-plane-20260901
+          printf 'repaired_sha=%s\n' "$repaired_sha" >> "$GITHUB_STEP_SUMMARY"
