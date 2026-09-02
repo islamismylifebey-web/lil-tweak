@@ -182,12 +182,18 @@ class RecordingProvider:
 
 
 def _orchestrator(provider: RecordingProvider, *, monthly_limit: int = 100_000):
+    state = {"counter": 0}
+
+    def identifier(label: str) -> str:
+        state["counter"] += 1
+        return f"{label}-{state['counter']:03d}"
+
     return PrivateRunnerQualificationOrchestrator(
         provider=provider,  # type: ignore[arg-type]
         lease_signing_key=b"L" * 32,
         resource_ledger=ResourceLedger(monthly_limit_microusd=monthly_limit),
         clock=lambda: NOW + timedelta(seconds=1),
-        identifier_factory=lambda label: f"{label}-001",
+        identifier_factory=identifier,
         nonce_factory=lambda: "1" * 64,
     )
 
@@ -366,7 +372,7 @@ async def test_job_b_is_only_the_fixed_bounded_manifest_and_needs_verified_job_a
         prior_job_a_verification=verification,
     )
 
-    contract, lease, manifest = provider.executed[0]
+    contract, lease, manifest = provider.executed[-1]
     assert receipt.job_type == "bounded_write"
     assert contract.workspace_policy is WorkspacePolicy.EPHEMERAL_WRITABLE
     assert contract.source_write_authorized is True

@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "0fcc52316ec196e4105a349b50a4472482450dd880cc586ba4fa36022f636611",
+  "manifest_scope_digest": "47c0216285959aedc0ea3f0df02c3df1d896e359d254a858f06352b85c2f4534",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 374,
@@ -1314,9 +1314,9 @@
       "relative_path": "liltweak/private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ed266d3144c67456f939eb8d3aadf76c35d53c5b155c4a77ac5c153c05c4b72c",
-      "git_blob_sha1": "f44fc4b0bc7a549f2c51c16e7525ce1f270ceca0",
-      "bytes": 34642
+      "sha256": "a80d525fe7c09097c948ac05508edc782cff13b228e951b99e8a061a48f61356",
+      "git_blob_sha1": "71da6e75d437910869642afbea6e6d71a91f7081",
+      "bytes": 35318
     },
     {
       "relative_path": "liltweak/private_runner_control_plane.py",
@@ -2522,9 +2522,9 @@
       "relative_path": "tests/test_private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "6947bab258e4f1c2923c2b97d283842cd5a83a46a8b7ed9900d8286010175a16",
-      "git_blob_sha1": "569fcefda988282f27e93eaa8a19b3e8822c29c5",
-      "bytes": 20786
+      "sha256": "194242e82c827a337701c18f07ea466a82c0385d58f166c44649ad81ae84e9e4",
+      "git_blob_sha1": "360f982e5b763bb615faad9f0fdc690f7c3c3bc8",
+      "bytes": 20916
     },
     {
       "relative_path": "tests/test_private_runner_control_plane.py",

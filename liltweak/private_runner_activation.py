@@ -268,6 +268,7 @@ class PrivateRunnerQualificationOrchestrator:
         )
         self._nonce_factory = nonce_factory or (lambda: secrets.token_hex(32))
         self._dispatches: dict[str, PrivateRunnerDispatchReceipt] = {}
+        self._job_a_verifications: dict[str, PrivateRunnerVerifiedResult] = {}
 
     async def offer(
         self,
@@ -303,7 +304,9 @@ class PrivateRunnerQualificationOrchestrator:
         if scope not in qualification.qualified_scopes:
             raise PrivateRunnerActivationError("private runner qualification scope is missing")
         if isinstance(manifest, QualificationBoundedWriteManifest):
-            self._validate_prior_job_a(prior_job_a_verification, source, self._dispatches)
+            self._validate_prior_job_a(
+                prior_job_a_verification, source, self._dispatches, self._job_a_verifications
+            )
 
         profile = self._profile(qualification)
         requirements = self._requirements(manifest, approval)
@@ -454,13 +457,15 @@ class PrivateRunnerQualificationOrchestrator:
             raise PrivateRunnerActivationError(
                 "private runner independent verification binding mismatch"
             )
-        return PrivateRunnerVerifiedResult(
+        result = PrivateRunnerVerifiedResult(
             job_type=receipt.job_type,
             execution_id=receipt.execution_id,
             source_commit=receipt.source_commit,
             runner_evidence_digest=verification.runner_evidence_digest,
             github_evidence_digest=verification.github_evidence_digest,
         )
+        self._job_a_verifications[receipt.execution_id] = result
+        return result
 
     def _known_receipt(self, receipt: PrivateRunnerDispatchReceipt) -> PrivateRunnerDispatchReceipt:
         normalized = PrivateRunnerDispatchReceipt.model_validate(receipt.model_dump(mode="json"))
@@ -486,6 +491,7 @@ class PrivateRunnerQualificationOrchestrator:
         verification: PrivateRunnerVerifiedResult | None,
         source: SourceEvidence,
         dispatches: dict[str, PrivateRunnerDispatchReceipt],
+        job_a_verifications: dict[str, PrivateRunnerVerifiedResult],
     ) -> None:
         if (
             verification is None
@@ -503,6 +509,13 @@ class PrivateRunnerQualificationOrchestrator:
             or prior_receipt.source_commit != verification.source_commit
             or prior_receipt.runner_evidence_digest != verification.runner_evidence_digest
         ):
+            raise PrivateRunnerActivationError("Job A independent verification binding mismatch")
+        prior_result = job_a_verifications.get(verification.execution_id)
+        if prior_result is None:
+            raise PrivateRunnerActivationError(
+                "Job A independent verification is required before Job B"
+            )
+        if prior_result != verification:
             raise PrivateRunnerActivationError("Job A independent verification binding mismatch")
 
     @staticmethod
