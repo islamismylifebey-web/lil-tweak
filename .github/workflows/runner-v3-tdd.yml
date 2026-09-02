@@ -16,7 +16,7 @@ jobs:
   focused:
     name: Runner V3 focused checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       UV_CACHE_DIR: /tmp/liltweak-uv-cache
       UV_NO_PROGRESS: "1"
@@ -73,17 +73,26 @@ jobs:
           uv run --no-sync --offline pytest -q \
             tests/test_runner_v3_contracts.py \
             tests/test_runner_v3_provider.py \
+            tests/test_runner_v3_executor.py \
             tests/test_execution_lease.py
           uv run --no-sync --offline ruff check \
             liltweak/providers/github/runner_v3_contracts.py \
             liltweak/providers/github/runner_v3.py \
+            liltweak/providers/github/runner_v3_executor.py \
+            scripts/runner_v3.py \
             tests/test_runner_v3_contracts.py \
-            tests/test_runner_v3_provider.py
+            tests/test_runner_v3_provider.py \
+            tests/test_runner_v3_executor.py
           uv run --no-sync --offline ruff format --check \
             liltweak/providers/github/runner_v3_contracts.py \
             liltweak/providers/github/runner_v3.py \
+            liltweak/providers/github/runner_v3_executor.py \
+            scripts/runner_v3.py \
             tests/test_runner_v3_contracts.py \
-            tests/test_runner_v3_provider.py
+            tests/test_runner_v3_provider.py \
+            tests/test_runner_v3_executor.py
           uv run --no-sync --offline mypy \
             liltweak/providers/github/runner_v3_contracts.py \
-            liltweak/providers/github/runner_v3.py
+            liltweak/providers/github/runner_v3.py \
+            liltweak/providers/github/runner_v3_executor.py \
+            scripts/runner_v3.py
