@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   finalize:
-    if: "github.event.head_commit.message == 'chore: trigger Runner V3 executor lint finalizer'"
+    if: "github.event.head_commit.message == 'chore: retry Runner V3 executor lint finalizer'"
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -48,8 +48,8 @@ jobs:
           set -Eeuo pipefail
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$GITHUB_REF" = "refs/heads/feature/runner-v3-github-first-factory-01"
-          test "$(git rev-parse HEAD^)" = "44b47d5c7e9516be9a985d8fc9bdbac4e5dd7db5"
-          test "$(git log -1 --pretty=%s)" = "chore: trigger Runner V3 executor lint finalizer"
+          test "$(git rev-parse HEAD^)" = "ac1745849eaf190d6dd912afd439d5ef81d91410"
+          test "$(git log -1 --pretty=%s)" = "chore: retry Runner V3 executor lint finalizer"
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = ".github/workflows/runner-v3-executor-lint-finalize.yml"
 
       - name: Set up Python
@@ -151,6 +151,7 @@ jobs:
           cat > "$RUNNER_TEMP/expected-files" <<'EOF'
           .github/workflows/runner-v3-executor-lint-finalize.yml
           liltweak/providers/github/runner_v3_executor.py
+          scripts/runner_v3.py
           tests/test_runner_v3_executor.py
           EOF
           git diff HEAD --name-only | sort > "$RUNNER_TEMP/actual-files"
@@ -159,6 +160,6 @@ jobs:
           git diff --cached --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add liltweak/providers/github/runner_v3_executor.py tests/test_runner_v3_executor.py
+          git add liltweak/providers/github/runner_v3_executor.py scripts/runner_v3.py tests/test_runner_v3_executor.py
           git commit -m "style: satisfy Runner V3 executor quality gates"
           git push origin HEAD:feature/runner-v3-github-first-factory-01
