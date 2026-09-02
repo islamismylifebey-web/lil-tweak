@@ -12,6 +12,8 @@ export default defineConfig({
           LIL_TWEAK_ATTESTATION_KEY_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           LIL_TWEAK_ATTESTATION_PUBLIC_KEY: inject("testAttestationPublicKey"),
           TEST_ATTESTATION_PRIVATE_KEY: inject("testAttestationPrivateKey"),
+          LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY: inject("testRunnerSigningPublicKey"),
+          TEST_RUNNER_SIGNING_PRIVATE_KEY: inject("testRunnerSigningPrivateKey"),
         },
       },
     })),

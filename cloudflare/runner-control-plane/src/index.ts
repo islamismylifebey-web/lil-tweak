@@ -6,8 +6,6 @@ import {
 } from "./attestation";
 import {
   parseCancelRequest,
-  parseClaimRequest,
-  parseEvidenceRequest,
   parseExecutionId,
   parseOfferRequest,
   type ExecutionSummary,
@@ -16,6 +14,10 @@ import {
   RunnerControlPlane,
   type ControlPlaneResult,
 } from "./runner-control-plane";
+import {
+  RunnerAuthenticationError,
+  verifyRunnerRequest,
+} from "./runner-auth";
 import { InputError } from "./validation";
 
 export interface Env {
@@ -24,6 +26,8 @@ export interface Env {
   CONTROL_PLANE_BEARER_TOKEN: string;
   /** Cloudflare secret binding: runner bearer. Never place a value in wrangler.jsonc. */
   RUNNER_BEARER_TOKEN: string;
+  /** Protected public binding for the pinned runner's raw Ed25519 signing key. */
+  LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY: string;
   /** Public, pinned Ed25519 signer identity. */
   LIL_TWEAK_ATTESTATION_KEY_ID: string;
   /** Public, base64url-encoded 32-byte Ed25519 public key. */
@@ -125,25 +129,99 @@ async function handle(request: Request, env: Env): Promise<Response> {
     }
     const body = parseOfferRequest(await readJson(request));
     const verified = await verifyDispatchAttestation(body.attestation, env, Date.now());
-    return resultResponse(await controlObject(env).offer(verified, Date.now()), 201);
+    if (
+      (await sha256Hex(canonicalJson(body.manifest))) !==
+      verified.attestation.attestation.commands_digest
+    ) {
+      throw new InputError("manifest digest does not match the signed commands digest");
+    }
+    return resultResponse(
+      await controlObject(env).offer(verified, body.manifest, Date.now()),
+      201,
+    );
+  }
+
+  if (request.method === "POST" && url.pathname === `${runnerPrefix}/next`) {
+    if (!(await hasBearer(request, env.RUNNER_BEARER_TOKEN))) {
+      return error(401, "unauthorized");
+    }
+    const poll = await verifyRunnerRequest(
+      await readJson(request),
+      "poll",
+      env.LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY,
+      Date.now(),
+    );
+    return resultResponse(
+      await controlObject(env).getNextOffer(
+        poll.request_nonce,
+        poll.issued_at_ms,
+        Date.now(),
+      ),
+      200,
+    );
   }
 
   if (request.method === "POST" && url.pathname === `${runnerPrefix}/claim`) {
     if (!(await hasBearer(request, env.RUNNER_BEARER_TOKEN))) {
       return error(401, "unauthorized");
     }
-    const claim = parseClaimRequest(await readJson(request));
-    return resultResponse(await controlObject(env).claim(claim, Date.now()), 200);
+    const claim = await verifyRunnerRequest(
+      await readJson(request),
+      "claim",
+      env.LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY,
+      Date.now(),
+    );
+    return resultResponse(
+      await controlObject(env).claim(
+        claim.payload,
+        claim.request_nonce,
+        claim.issued_at_ms,
+        Date.now(),
+      ),
+      200,
+    );
+  }
+
+  if (request.method === "POST" && url.pathname === `${runnerPrefix}/status`) {
+    if (!(await hasBearer(request, env.RUNNER_BEARER_TOKEN))) {
+      return error(401, "unauthorized");
+    }
+    const status = await verifyRunnerRequest(
+      await readJson(request),
+      "status",
+      env.LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY,
+      Date.now(),
+    );
+    return resultResponse(
+      await controlObject(env).getRunnerStatus(
+        status.payload.execution_id,
+        status.request_nonce,
+        status.issued_at_ms,
+        Date.now(),
+      ),
+      200,
+    );
   }
 
   if (request.method === "POST" && url.pathname === `${runnerPrefix}/evidence`) {
     if (!(await hasBearer(request, env.RUNNER_BEARER_TOKEN))) {
       return error(401, "unauthorized");
     }
-    const evidence = parseEvidenceRequest(await readJson(request));
-    const evidenceDigest = await sha256Hex(canonicalJson(evidence.evidence));
+    const evidence = await verifyRunnerRequest(
+      await readJson(request),
+      "evidence",
+      env.LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY,
+      Date.now(),
+    );
+    const evidenceDigest = await sha256Hex(canonicalJson(evidence.payload.evidence));
     return resultResponse(
-      await controlObject(env).recordEvidence(evidence, evidenceDigest, Date.now()),
+      await controlObject(env).recordEvidence(
+        evidence.payload,
+        evidenceDigest,
+        evidence.request_nonce,
+        evidence.issued_at_ms,
+        Date.now(),
+      ),
       202,
     );
   }
@@ -181,6 +259,9 @@ export default {
     try {
       return await handle(request, env);
     } catch (exception) {
+      if (exception instanceof RunnerAuthenticationError) {
+        return error(401, "unauthorized");
+      }
       if (exception instanceof InputError) {
         return error(400, "invalid_request");
       }

@@ -18,6 +18,10 @@ from liltweak.private_runner_control_plane import (
     PrivateRunnerControlPlaneError,
     build_private_runner_control_plane_client,
 )
+from liltweak.providers.self_hosted.qualification_manifest import (
+    QualificationReadOnlyManifest,
+    QualificationSource,
+)
 from liltweak.resource.contracts import (
     ApprovalBinding,
     HealthStatus,
@@ -182,7 +186,14 @@ def test_http_client_rejects_unsafe_access_credentials(
         )
 
 
-def _signed_offer(private_key: Ed25519PrivateKey):
+def _read_only_manifest() -> QualificationReadOnlyManifest:
+    return QualificationReadOnlyManifest(
+        source=QualificationSource(commit_sha="f" * 40, tree_sha="e" * 40),
+        timeout_seconds=900,
+    )
+
+
+def _signed_offer(private_key: Ed25519PrivateKey, *, commands_digest: str = "c" * 64):
     from liltweak.resource.dispatch import SignedDispatchAttestation
 
     now = datetime(2026, 9, 1, tzinfo=UTC)
@@ -191,7 +202,7 @@ def _signed_offer(private_key: Ed25519PrivateKey):
         execution_id="execution_001",
         lease_digest="a" * 64,
         contract_digest="b" * 64,
-        commands_digest="c" * 64,
+        commands_digest=commands_digest,
         approval_digest="d" * 64,
         policy_digest="e" * 64,
         attempt_nonce=urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("="),
@@ -203,7 +214,8 @@ def _signed_offer(private_key: Ed25519PrivateKey):
 @pytest.mark.asyncio
 async def test_http_client_offers_only_the_signed_typed_envelope() -> None:
     private_key = Ed25519PrivateKey.generate()
-    offer = _signed_offer(private_key)
+    manifest = _read_only_manifest()
+    offer = _signed_offer(private_key, commands_digest=manifest.commands_digest)
     observed: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -233,20 +245,147 @@ async def test_http_client_offers_only_the_signed_typed_envelope() -> None:
             access_client_secret="s" * 32,
             client=transport,
         )
-        receipt = await client.offer(attestation=offer)
+        receipt = await client.offer(attestation=offer, manifest=manifest)
 
     assert observed["url"] == "https://control.invalid/runner/v1/control/offer"
     assert observed["authorization"] == "Bearer " + "a" * 32
     assert observed["access_client_id"] == "control-client-id.access"
     assert observed["access_client_secret"] == "s" * 32
-    assert observed["payload"] == {"attestation": offer.model_dump(mode="json")}
+    assert observed["payload"] == {
+        "attestation": offer.model_dump(mode="json"),
+        "manifest": manifest.model_dump(mode="json"),
+    }
     assert receipt.execution_id == offer.attestation.execution_id
     assert receipt.status == "OFFERED"
 
 
 @pytest.mark.asyncio
+async def test_http_client_rejects_manifest_not_bound_to_attested_commands_digest() -> None:
+    offer = _signed_offer(Ed25519PrivateKey.generate(), commands_digest="c" * 64)
+    manifest = _read_only_manifest()
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("a digest-mismatched manifest must not be transmitted")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpPrivateRunnerControlPlaneClient(
+            base_url="https://control.invalid",
+            bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
+            client=transport,
+        )
+        with pytest.raises(PrivateRunnerControlPlaneError, match="manifest digest"):
+            await client.offer(attestation=offer, manifest=manifest)
+
+
+@pytest.mark.asyncio
+async def test_http_client_reads_typed_control_status_without_completion_inference() -> None:
+    observed: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["method"] = request.method
+        observed["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "execution_id": "execution_001",
+                "runner_id": "galor-tweak-runner-01",
+                "runner_role": "role-tweak-runner",
+                "status": "EVIDENCE_RECORDED",
+                "lease_digest": "a" * 64,
+                "contract_digest": "b" * 64,
+                "commands_digest": "c" * 64,
+                "approval_digest": "d" * 64,
+                "policy_digest": "e" * 64,
+                "expires_at_ms": 1_788_229_200_000,
+                "claim_receipt_digest": "1" * 64,
+                "evidence_digest": "2" * 64,
+                "evidence_outcome": "succeeded",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpPrivateRunnerControlPlaneClient(
+            base_url="https://control.invalid",
+            bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
+            client=transport,
+        )
+        status = await client.status("execution_001")
+
+    assert observed == {
+        "method": "GET",
+        "url": "https://control.invalid/v1/control/executions/execution_001",
+    }
+    assert status.status == "EVIDENCE_RECORDED"
+    assert status.evidence_outcome == "succeeded"
+    assert status.evidence_digest == "2" * 64
+
+
+@pytest.mark.asyncio
+async def test_http_client_posts_only_a_digest_bound_cancel_request() -> None:
+    observed: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["method"] = request.method
+        observed["url"] = str(request.url)
+        observed["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "execution_id": "execution_001",
+                "status": "CANCEL_REQUESTED",
+                "reason_digest": "9" * 64,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpPrivateRunnerControlPlaneClient(
+            base_url="https://control.invalid",
+            bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
+            client=transport,
+        )
+        receipt = await client.cancel(
+            "execution_001",
+            reason_digest="9" * 64,
+        )
+
+    assert observed == {
+        "method": "POST",
+        "url": "https://control.invalid/v1/control/executions/execution_001/cancel",
+        "payload": {"reason_digest": "9" * 64},
+    }
+    assert receipt.status == "CANCEL_REQUESTED"
+
+
+@pytest.mark.asyncio
+async def test_http_client_rejects_path_injection_before_control_request() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("an unsafe execution identity must not be transmitted")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpPrivateRunnerControlPlaneClient(
+            base_url="https://control.invalid",
+            bearer_token="a" * 32,
+            access_client_id="control-client-id.access",
+            access_client_secret="s" * 32,
+            client=transport,
+        )
+        with pytest.raises(PrivateRunnerControlPlaneError, match="execution identity"):
+            await client.status("../admin")
+
+
+@pytest.mark.asyncio
 async def test_client_factory_wires_access_service_token_credentials(tmp_path: Path) -> None:
-    offer = _signed_offer(Ed25519PrivateKey.generate())
+    manifest = _read_only_manifest()
+    offer = _signed_offer(
+        Ed25519PrivateKey.generate(),
+        commands_digest=manifest.commands_digest,
+    )
     observed: dict[str, str | None] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -271,7 +410,7 @@ async def test_client_factory_wires_access_service_token_credentials(tmp_path: P
             _enabled_settings(_settings(tmp_path)),
             client=transport,
         )
-        await client.offer(attestation=offer)
+        await client.offer(attestation=offer, manifest=manifest)
 
     assert observed == {
         "authorization": "Bearer " + "a" * 32,
@@ -283,7 +422,8 @@ async def test_client_factory_wires_access_service_token_credentials(tmp_path: P
 @pytest.mark.asyncio
 async def test_http_client_rejects_a_malformed_control_plane_receipt() -> None:
     private_key = Ed25519PrivateKey.generate()
-    offer = _signed_offer(private_key)
+    manifest = _read_only_manifest()
+    offer = _signed_offer(private_key, commands_digest=manifest.commands_digest)
 
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"status": "OFFERED"})
@@ -297,7 +437,7 @@ async def test_http_client_rejects_a_malformed_control_plane_receipt() -> None:
             client=transport,
         )
         with pytest.raises(PrivateRunnerControlPlaneError, match="invalid"):
-            await client.offer(attestation=offer)
+            await client.offer(attestation=offer, manifest=manifest)
 
 
 def test_issuer_binds_the_existing_contract_and_lease_to_the_server_held_key(

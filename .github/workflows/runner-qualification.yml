@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_commit:
-        description: Exact 40-character main commit to evaluate
+        description: Exact 40-character approved source commit to evaluate
         required: true
         type: string
       acknowledge_candidate_only:
@@ -30,6 +30,7 @@ jobs:
       repository_tree: ${{ steps.source.outputs.repository_tree }}
     env:
       EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      APPROVED_CANDIDATE_REF: refs/heads/feature/tweak-private-runner-control-plane-20260901
       ACKNOWLEDGED: ${{ inputs.acknowledge_candidate_only }}
       EXPECTED_REPOSITORY_ID: github:islamismylifebey-web/lil-tweak
       QUALIFICATION_RUNNER_ID: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_ID }}
@@ -76,7 +77,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
-          test "$GITHUB_REF" = "refs/heads/main"
+          if test "$GITHUB_REF" != "refs/heads/main"; then
+            test "$GITHUB_REF" = "$APPROVED_CANDIDATE_REF"
+          fi
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$EXPECTED_REPOSITORY_ID" = "github:$GITHUB_REPOSITORY"
           test "$ACKNOWLEDGED" = "true"
@@ -280,6 +283,7 @@ jobs:
     timeout-minutes: 10
     env:
       EXPECTED_REPOSITORY_ID: github:islamismylifebey-web/lil-tweak
+      APPROVED_CANDIDATE_REF: refs/heads/feature/tweak-private-runner-control-plane-20260901
       QUALIFICATION_RUNNER_ID: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_ID }}
       QUALIFICATION_RUNNER_PUBLIC_KEY: ${{ vars.LILTWEAK_QUALIFICATION_RUNNER_PUBLIC_KEY }}
       QUALIFICATION_IMAGE_REF: ${{ vars.LILTWEAK_QUALIFICATION_IMAGE_REF }}
@@ -336,7 +340,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
+          if test "$GITHUB_REF" != "refs/heads/main"; then
+            test "$GITHUB_REF" = "$APPROVED_CANDIDATE_REF"
+          fi
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$EXPECTED_REPOSITORY_ID" = "github:$GITHUB_REPOSITORY"
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]

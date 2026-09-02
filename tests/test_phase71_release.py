@@ -76,7 +76,13 @@ def test_distribution_declares_complete_runtime_payload_and_locked_build_tools()
     package_data = setuptools["package-data"]
     dev_dependencies = set(configuration["dependency-groups"]["dev"])
 
-    assert set(discovery["include"]) == {"docs*", "liltweak*", "migrations*", "web*"}
+    assert set(discovery["include"]) == {
+        "docs*",
+        "liltweak*",
+        "migrations*",
+        "runner*",
+        "web*",
+    }
     assert set(discovery["exclude"]) == {"evals*", "scripts*", "tests*"}
     assert set(package_data["docs"]) == {
         "creator-live-prompt.md",
@@ -208,7 +214,7 @@ def test_standard_ci_is_read_only_secretless_and_offline() -> None:
     assert all(FULL_SHA.fullmatch(item) for item in uses)
 
 
-def test_qualification_workflow_is_manual_main_only_bounded_and_dormant() -> None:
+def test_qualification_workflow_is_manual_approved_source_bounded_and_dormant() -> None:
     workflow = (ROOT / ".github" / "workflows" / "runner-qualification.yml").read_text(
         encoding="utf-8"
     )
@@ -219,7 +225,12 @@ def test_qualification_workflow_is_manual_main_only_bounded_and_dormant() -> Non
     assert "pull_request:" not in workflow
     assert "push:" not in workflow
     assert "workflow_dispatch:" in workflow
+    approved_candidate_ref = "refs/heads/feature/tweak-private-runner-control-plane-20260901"
     assert "refs/heads/main" in issue_job
+    assert approved_candidate_ref in issue_job
+    assert approved_candidate_ref in verify_job
+    assert "APPROVED_CANDIDATE_REF" in issue_job
+    assert "APPROVED_CANDIDATE_REF" in verify_job
     assert "runs-on: ubuntu-24.04" in issue_job
     assert "runs-on: ubuntu-24.04" in verify_job
     assert "environment: liltweak-runner-qualification" in issue_job

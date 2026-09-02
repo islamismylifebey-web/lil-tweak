@@ -52,6 +52,18 @@ export function integerField(
   return value;
 }
 
+export function booleanField(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): boolean {
+  const value = record[field];
+  if (typeof value !== "boolean") {
+    throw new InputError(`${label}.${field} must be a boolean`);
+  }
+  return value;
+}
+
 export function requireMatch(
   value: string,
   pattern: RegExp,

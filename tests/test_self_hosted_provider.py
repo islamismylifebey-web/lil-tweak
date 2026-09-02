@@ -8,6 +8,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from liltweak.cloudflare_runner_qualification import CloudflareRunnerQualificationProof
+from liltweak.creator_contract import content_digest
 from liltweak.providers.contracts import (
     ProviderExecutionStatus,
     VerificationOutcome,
@@ -18,7 +20,14 @@ from liltweak.providers.self_hosted.galor_tweak_runner import (
     GalorTweakRunnerConfig,
     GalorTweakRunnerGate3Config,
     GalorTweakRunnerProvider,
+    RunnerCancelReceipt,
+    RunnerExecutionSummary,
     RunnerOfferReceipt,
+)
+from liltweak.providers.self_hosted.qualification_manifest import (
+    QualificationJobManifest,
+    QualificationReadOnlyManifest,
+    QualificationSource,
 )
 from liltweak.resource.contracts import (
     ApprovalBinding,
@@ -41,26 +50,59 @@ from liltweak.resource.dispatch import (
     dispatch_issuer_key_id,
 )
 from liltweak.resource.leases import ExecutionLease
-from liltweak.runner_gate3 import Gate3RunnerConnectionProof
 
 NOW = datetime(2026, 9, 1, tzinfo=UTC)
 LEASE_SIGNING_KEY = b"T" * 32
 
 
 class FixtureDispatchClient:
-    def __init__(self, receipt: RunnerOfferReceipt) -> None:
+    def __init__(
+        self,
+        receipt: RunnerOfferReceipt,
+        *,
+        summary: RunnerExecutionSummary | None = None,
+        cancel_receipt: RunnerCancelReceipt | None = None,
+    ) -> None:
         self.receipt = receipt
         self.offers: list[SignedDispatchAttestation] = []
+        self.manifests: list[QualificationJobManifest] = []
+        self.summary = summary
+        self.status_calls: list[str] = []
+        self.cancel_receipt = cancel_receipt
+        self.cancel_calls: list[tuple[str, str]] = []
 
-    async def offer(self, *, attestation: SignedDispatchAttestation) -> RunnerOfferReceipt:
+    async def offer(
+        self,
+        *,
+        attestation: SignedDispatchAttestation,
+        manifest: QualificationJobManifest,
+    ) -> RunnerOfferReceipt:
         self.offers.append(attestation)
+        self.manifests.append(manifest)
         return self.receipt
+
+    async def status(self, execution_id: str) -> RunnerExecutionSummary:
+        self.status_calls.append(execution_id)
+        if self.summary is None:
+            raise RuntimeError("status fixture is unavailable")
+        return self.summary
+
+    async def cancel(
+        self,
+        execution_id: str,
+        *,
+        reason_digest: str,
+    ) -> RunnerCancelReceipt:
+        self.cancel_calls.append((execution_id, reason_digest))
+        if self.cancel_receipt is None:
+            raise RuntimeError("cancel fixture is unavailable")
+        return self.cancel_receipt
 
 
 class FixtureGate3Verifier:
     def __init__(
         self,
-        proof: Gate3RunnerConnectionProof | Exception,
+        proof: CloudflareRunnerQualificationProof | Exception,
         *,
         contract_digest: str = "a" * 64,
     ) -> None:
@@ -68,7 +110,7 @@ class FixtureGate3Verifier:
         self.contract_digest = contract_digest
         self.refresh_calls = 0
 
-    async def refresh(self) -> Gate3RunnerConnectionProof:
+    async def refresh(self) -> CloudflareRunnerQualificationProof:
         self.refresh_calls += 1
         if isinstance(self.proof, Exception):
             raise self.proof
@@ -101,9 +143,18 @@ def _profile() -> ResourceProfile:
     )
 
 
+def _manifest() -> QualificationReadOnlyManifest:
+    return QualificationReadOnlyManifest(
+        source=QualificationSource(commit_sha="f" * 40, tree_sha="e" * 40),
+        timeout_seconds=900,
+    )
+
+
 def _contract_and_lease(
-    *, commands_digest: str = "d" * 64
+    *, commands_digest: str | None = None
 ) -> tuple[ResourceExecutionContractV2, ExecutionLease]:
+    if commands_digest is None:
+        commands_digest = _manifest().commands_digest
     requirements = WorkloadRequirements(
         requirement_id="runner_dispatch_requirement",
         job_id="runner_dispatch_job",
@@ -208,42 +259,69 @@ def _receipt(
     )
 
 
+def _summary(
+    contract: ResourceExecutionContractV2,
+    lease: ExecutionLease,
+    *,
+    status: str = "CLAIMED",
+    evidence_outcome: str | None = None,
+) -> RunnerExecutionSummary:
+    payload: dict[str, object] = {
+        "execution_id": lease.execution_id,
+        "runner_id": GALOR_TWEAK_RUNNER_ID,
+        "runner_role": GALOR_TWEAK_RUNNER_ROLE,
+        "status": status,
+        "lease_digest": lease.lease_digest,
+        "contract_digest": contract.contract_digest,
+        "commands_digest": contract.commands_digest,
+        "approval_digest": lease.approval_digest,
+        "policy_digest": lease.policy_digest,
+        "expires_at_ms": int((NOW + timedelta(minutes=1)).timestamp() * 1_000),
+        "claim_receipt_digest": "1" * 64,
+    }
+    if status == "EVIDENCE_RECORDED":
+        payload.update(
+            evidence_digest="2" * 64,
+            evidence_outcome=evidence_outcome or "succeeded",
+        )
+    if status == "CANCEL_REQUESTED":
+        payload["cancellation_reason_digest"] = "3" * 64
+    return RunnerExecutionSummary.model_validate(payload)
+
+
 def _gate3_proof(
     *,
     runner_id: str = GALOR_TWEAK_RUNNER_ID,
     authorization_sequence: int = 5,
     authorization_revocation_epoch: int = 2,
     authorization_evidence_digest: str = "5" * 64,
-) -> Gate3RunnerConnectionProof:
-    return Gate3RunnerConnectionProof(
+) -> CloudflareRunnerQualificationProof:
+    values = dict(
         runner_id=runner_id,
-        tenant_id="owner-tenant",
-        handshake_checked_at=NOW,
-        handshake_expires_at=NOW + timedelta(seconds=30),
-        qualification_digest="1" * 64,
-        qualification_key_id="2" * 64,
+        runner_role=GALOR_TWEAK_RUNNER_ROLE,
+        repository_id="github:islamismylifebey-web/lil-tweak",
+        repository_commit="f" * 40,
+        repository_tree="e" * 40,
+        runner_key_id="2" * 64,
+        profile_spec_digest="e6d24dd720d661535a806e985153ef4801509e67b2a32b31ae9a302ce3298394",
+        qualification_id="rq_" + "1" * 32,
         qualification_evidence_digest="3" * 64,
-        qualification_expires_at=NOW + timedelta(minutes=5),
-        authorization_key_id="4" * 64,
-        authorization_evidence_digest=authorization_evidence_digest,
-        heartbeat_job_id="gate3-heartbeat",
-        heartbeat_issued_at=NOW,
-        heartbeat_expires_at=NOW + timedelta(minutes=1),
-        heartbeat_max_age_ms=60_000,
-        hub_commit="6" * 40,
-        lil_tweak_commit="f" * 40,
-        qualification_id="qualification-001",
-        qualification_bundle_digest="7" * 64,
         qualification_verified_at=NOW,
-        qualification_valid_until=NOW + timedelta(minutes=5),
-        qualification_issuer_key_id="8" * 64,
-        qualification_runner_key_id="9" * 64,
-        authorization_id="authorization-001",
+        authorization_id="lra_" + "2" * 32,
+        authorization_evidence_digest=authorization_evidence_digest,
         authorization_sequence=authorization_sequence,
         authorization_revocation_epoch=authorization_revocation_epoch,
-        authorization_issued_at=NOW,
-        authorization_expires_at=NOW + timedelta(minutes=1),
+        host_report_digest="6" * 64,
+        local_decision_digest="7" * 64,
+        cloudflare_poll_observation_digest="8" * 64,
+        cloudflare_poll_observed_at=NOW,
+        valid_until=NOW + timedelta(minutes=5),
     )
+    draft = CloudflareRunnerQualificationProof.model_construct(**values, proof_digest="0" * 64)
+    values["proof_digest"] = content_digest(draft.model_dump(mode="json", exclude={"proof_digest"}))
+    if runner_id != GALOR_TWEAK_RUNNER_ID:
+        return CloudflareRunnerQualificationProof.model_construct(**values)
+    return CloudflareRunnerQualificationProof(**values)
 
 
 def _gate3_config() -> GalorTweakRunnerGate3Config:
@@ -260,7 +338,7 @@ def _provider(
     *,
     client: FixtureDispatchClient,
     private_key: Ed25519PrivateKey,
-    gate3_proof: Gate3RunnerConnectionProof | Exception,
+    gate3_proof: CloudflareRunnerQualificationProof | Exception,
     gate3_contract_digest: str = "a" * 64,
     attestation_factory: Callable[
         [ResourceExecutionContractV2, ExecutionLease], SignedDispatchAttestation
@@ -305,7 +383,7 @@ async def test_provider_refuses_to_offer_when_fresh_gate3_evidence_is_missing() 
         gate3_proof=RuntimeError("Gate 3 evidence unavailable"),
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.BLOCKED
     assert client.offers == []
@@ -322,7 +400,7 @@ async def test_provider_refuses_a_forged_gate3_proof_for_another_runner() -> Non
         gate3_proof=_gate3_proof(runner_id="untrusted-runner"),
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.BLOCKED
     assert "Gate 3" in result.reason
@@ -340,7 +418,7 @@ async def test_provider_refuses_gate3_evidence_at_the_wrong_revocation_epoch() -
         gate3_proof=_gate3_proof(authorization_revocation_epoch=1),
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.BLOCKED
     assert "revocation" in result.reason
@@ -403,6 +481,50 @@ async def test_provider_refuses_an_empty_bounded_action_manifest_digest() -> Non
 
 
 @pytest.mark.asyncio
+async def test_provider_refuses_dispatch_without_a_typed_qualification_manifest() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+
+    result = await provider.execute(contract=contract, lease=lease)
+
+    assert result.status is ProviderExecutionStatus.BLOCKED
+    assert "typed qualification manifest" in result.reason
+    assert client.offers == []
+
+
+@pytest.mark.asyncio
+async def test_provider_refuses_manifest_bound_to_different_source() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    wrong_source = QualificationReadOnlyManifest(
+        source=QualificationSource(commit_sha="a" * 40, tree_sha="e" * 40),
+        timeout_seconds=900,
+    )
+
+    result = await provider.execute(
+        contract=contract,
+        lease=lease,
+        manifest=wrong_source,
+    )
+
+    assert result.status is ProviderExecutionStatus.BLOCKED
+    assert "source binding" in result.reason
+    assert client.offers == []
+
+
+@pytest.mark.asyncio
 async def test_provider_refuses_a_tampered_signed_dispatch_attestation() -> None:
     contract, lease = _contract_and_lease()
     private_key = Ed25519PrivateKey.generate()
@@ -427,7 +549,7 @@ async def test_provider_refuses_a_tampered_signed_dispatch_attestation() -> None
         attestation_factory=tampered_factory,
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.BLOCKED
     assert "attestation" in result.reason
@@ -447,7 +569,7 @@ async def test_provider_refuses_a_receipt_with_a_mismatched_runner_identity() ->
         gate3_proof=_gate3_proof(),
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.BLOCKED
     assert "receipt" in result.reason
@@ -465,7 +587,7 @@ async def test_provider_returns_a_structured_pending_receipt_without_a_completio
         gate3_proof=_gate3_proof(),
     )
 
-    result = await provider.execute(contract=contract, lease=lease)
+    result = await provider.execute(contract=contract, lease=lease, manifest=_manifest())
 
     assert result.status is ProviderExecutionStatus.RUNNING
     assert result.verification_outcome is VerificationOutcome.PENDING
@@ -484,3 +606,109 @@ async def test_provider_returns_a_structured_pending_receipt_without_a_completio
         "expires_at_ms": int((NOW + timedelta(minutes=1)).timestamp() * 1_000),
     }
     assert "completed" not in result.reason.casefold()
+    assert client.manifests == [_manifest()]
+
+
+@pytest.mark.asyncio
+async def test_provider_keeps_successful_runner_evidence_pending_independent_verification() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    offered = await provider.execute(
+        contract=contract,
+        lease=lease,
+        manifest=_manifest(),
+    )
+    client.summary = _summary(
+        contract,
+        lease,
+        status="EVIDENCE_RECORDED",
+        evidence_outcome="succeeded",
+    )
+
+    reconciled = await provider.status(lease.execution_id)
+
+    assert offered.status is ProviderExecutionStatus.RUNNING
+    assert reconciled.status is ProviderExecutionStatus.RUNNING
+    assert reconciled.verification_outcome is VerificationOutcome.PENDING
+    assert reconciled.evidence_digest == "2" * 64
+    assert "independent" in reconciled.reason
+    assert client.status_calls == [lease.execution_id]
+
+
+@pytest.mark.asyncio
+async def test_provider_collect_reconciles_failed_runner_evidence_fail_closed() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    await provider.execute(contract=contract, lease=lease, manifest=_manifest())
+    client.summary = _summary(
+        contract,
+        lease,
+        status="EVIDENCE_RECORDED",
+        evidence_outcome="failed",
+    )
+
+    reconciled = await provider.collect(lease.execution_id)
+
+    assert reconciled.status is ProviderExecutionStatus.FAILED
+    assert reconciled.verification_outcome is VerificationOutcome.FAILED
+    assert reconciled.evidence_digest == "2" * 64
+    assert client.status_calls == [lease.execution_id]
+
+
+@pytest.mark.asyncio
+async def test_provider_rejects_remote_status_with_a_changed_contract_binding() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    await provider.execute(contract=contract, lease=lease, manifest=_manifest())
+    client.summary = _summary(contract, lease).model_copy(update={"contract_digest": "9" * 64})
+
+    reconciled = await provider.status(lease.execution_id)
+
+    assert reconciled.status is ProviderExecutionStatus.BLOCKED
+    assert "binding mismatch" in reconciled.reason
+
+
+@pytest.mark.asyncio
+async def test_provider_cancel_requests_termination_without_claiming_it_completed() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    reason_digest = "c95b6148c51e3f0e88f9103214fab2b89ffdc4546b193582ea8b775329b783e2"
+    client = FixtureDispatchClient(
+        _receipt(contract, lease),
+        cancel_receipt=RunnerCancelReceipt(
+            execution_id=lease.execution_id,
+            reason_digest=reason_digest,
+        ),
+    )
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    await provider.execute(contract=contract, lease=lease, manifest=_manifest())
+
+    canceled = await provider.cancel(lease.execution_id)
+
+    assert client.cancel_calls == [(lease.execution_id, reason_digest)]
+    assert canceled.status is ProviderExecutionStatus.RUNNING
+    assert canceled.verification_outcome is VerificationOutcome.PENDING
+    assert "requested" in canceled.reason
+    assert "completed" not in canceled.reason

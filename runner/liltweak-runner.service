@@ -1,0 +1,30 @@
+[Unit]
+Description=Lil Tweak bounded private engineering runner
+After=network-online.target apparmor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/liltweak-runner/app
+ExecStart=/opt/liltweak-runner/venv/bin/python -m runner
+Restart=on-failure
+RestartSec=5
+UMask=0077
+Delegate=cpu memory pids
+NoNewPrivileges=no
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=no
+ReadOnlyPaths=/etc/liltweak-runner /opt/liltweak-runner /opt/liltweak-runtime
+ReadWritePaths=/var/lib/liltweak-runner /sys/fs/cgroup
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target

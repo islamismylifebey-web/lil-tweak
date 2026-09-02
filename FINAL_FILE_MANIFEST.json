@@ -9,10 +9,10 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "4e8892bc5e1e907ee9ccf806d034c39e3dc23cdf2cc36dcdbe6d2c22a86da0a9",
+  "manifest_scope_digest": "21291fa33db2b90343debdefaa4de959f53161e17cdb7077b6874fece4df5cc2",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 332,
+  "file_count_excluding_manifest": 369,
   "files": [
     {
       "relative_path": ".env.example",
@@ -42,9 +42,9 @@
       "relative_path": ".github/workflows/runner-qualification.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f65ae3b1e6ad9b9fc5518b6c9aa100acf29a0891b1f790a0701230a7dad35025",
-      "git_blob_sha1": "665aad9be392ec81bdfcb5bf333dea23375200bc",
-      "bytes": 17522
+      "sha256": "ddd97d63d2b396d0b240a02d87d7646089aa114a02d0d2b4db4759ccc5a566bd",
+      "git_blob_sha1": "dcff1370dd04b610a717f303d3eaafff44013fdc",
+      "bytes": 17883
     },
     {
       "relative_path": ".gitignore",
@@ -586,9 +586,9 @@
       "relative_path": "cloudflare/runner-control-plane/README.md",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "f9c50cd5abc830df414bec465558760b51543c2524c2687c8ee54c6233de5321",
-      "git_blob_sha1": "f553a3fab92ffef66b7b5cd6ec6f58d682a48280",
-      "bytes": 3387
+      "sha256": "0b45ce0f7f8efd6909f81b223c876ceed43e5665bd82ff12dcda9aaff69c8495",
+      "git_blob_sha1": "79a7243ca904adccab0e168b2d18253c85ca15f7",
+      "bytes": 5134
     },
     {
       "relative_path": "cloudflare/runner-control-plane/package-lock.json",
@@ -618,41 +618,49 @@
       "relative_path": "cloudflare/runner-control-plane/src/index.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2374bcbf983a16dc67c70b92ee84404904f7e9509cc58514ff8a3a99360033bd",
-      "git_blob_sha1": "d04bc5feb6cca004e69c927668407c94f5890acb",
-      "bytes": 6369
+      "sha256": "14bd40605ea217f30385a72a5d34676b5c7076309f1dd9a52dd61a125216aad2",
+      "git_blob_sha1": "41ba870d9800732e1854057a7662881412bd1962",
+      "bytes": 8440
     },
     {
       "relative_path": "cloudflare/runner-control-plane/src/protocol.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b93f6841ae6f45220daa5a5106c9a91079bfd45686b55342868fa7669e9c6fdb",
-      "git_blob_sha1": "a62398726dd8a3ae52137621a4c0c2814d41089e",
-      "bytes": 5449
+      "sha256": "cb8fe39cf8216bed9e3393caa1252f2f76aacaa9732db2928380dc6e22584f6f",
+      "git_blob_sha1": "3eaf7824d6b2b10039398135d0b4c64c6c75368d",
+      "bytes": 11956
+    },
+    {
+      "relative_path": "cloudflare/runner-control-plane/src/runner-auth.ts",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "3d8dececb70f6cfbe5d1f51f430b587f308f98156e57fba583bdc4b9b940b3eb",
+      "git_blob_sha1": "96435c5ec5c14d49a9a01a4fa2ef391913861d43",
+      "bytes": 5802
     },
     {
       "relative_path": "cloudflare/runner-control-plane/src/runner-control-plane.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "c46ade17e00d4e8767f8439bb63817dbbc4e8e093905eed6e2803dad4186762c",
-      "git_blob_sha1": "2ad5011966323efdbaf3945d58133556428c628b",
-      "bytes": 12460
+      "sha256": "1597636e7c43477f2b489565ae916a7824171b89e29e5b329f5fb3db86a7ffed",
+      "git_blob_sha1": "019aac9874fc032e89930e6db1b9b9d1d03aad3e",
+      "bytes": 17961
     },
     {
       "relative_path": "cloudflare/runner-control-plane/src/validation.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "74f39364f2af18856522e6381165821f63c325776de54f56abdd48e0eefd6d56",
-      "git_blob_sha1": "997b75e77389046d88bc867dcc424188050df1cb",
-      "bytes": 1582
+      "sha256": "0cfcffe451a47f245ed52e9a442996f00cca952737c5bd25d1c8aafa15e84c74",
+      "git_blob_sha1": "ec999e126ba679c15844daf94a428c38d76153be",
+      "bytes": 1849
     },
     {
       "relative_path": "cloudflare/runner-control-plane/test/control-plane.test.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ba007a4e117467a7f5d0e56f321188f3d6e60d15dcc9b2c66b6dc218d6974de4",
-      "git_blob_sha1": "f34fe72bfd882cfe534d4b3204ef7c1b1b6bdd96",
-      "bytes": 9479
+      "sha256": "4c4dafd35e9ca4ee58957205edc6eb4b86b8446ca9145b60751bc9b77f11403b",
+      "git_blob_sha1": "d92c7f1819f725966ff39d720d9fdaaaa4ce9fa4",
+      "bytes": 18963
     },
     {
       "relative_path": "cloudflare/runner-control-plane/test/fixtures/dispatch-attestation-v1.json",
@@ -666,9 +674,9 @@
       "relative_path": "cloudflare/runner-control-plane/test/global-setup.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "09681c7d28280c5975e1ffa279a56a7a70de4ff933fd9e6b17960607fd06d7e2",
-      "git_blob_sha1": "73cc32a5ae8ff1f514e14a479d9542a35f0496e8",
-      "bytes": 939
+      "sha256": "91011488dfb1335c976f1b9a4b86626ecf1370264bc1f5bb94d55d0b03cf039b",
+      "git_blob_sha1": "ac3fcb35fb52f90d13709d1bf579e09e47150759",
+      "bytes": 1039
     },
     {
       "relative_path": "cloudflare/runner-control-plane/tsconfig.json",
@@ -682,17 +690,17 @@
       "relative_path": "cloudflare/runner-control-plane/vitest.config.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "4ce06e8e02dbec8a34dd53f066fbcb0a65ac4c238628f96c5ab90df08e465ebf",
-      "git_blob_sha1": "735044e0d6e43fed6c95edc796791daa6471204d",
-      "bytes": 786
+      "sha256": "63c6e66dd18568c855471c6b6eb41519cba01594efc259d1c177fc70b99ad796",
+      "git_blob_sha1": "86796e18d350db3eff2d857cc9cc135beaa57cf1",
+      "bytes": 953
     },
     {
       "relative_path": "cloudflare/runner-control-plane/vitest.provided.d.ts",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "01a7eed15d7e1fa4f9a20cbf15db73bd7551564cd877ceb327c90d214dd8b9dc",
-      "git_blob_sha1": "31a60a5e78b7f372de6ebe03cc955e76f2882fba",
-      "bytes": 164
+      "sha256": "8d73033b567d1c233b648f23fc1c40c49a05840a8b45abc22e643ee934d883f6",
+      "git_blob_sha1": "1fd43e84df34401ea0dd23ee53cc71fbda98a5ca",
+      "bytes": 245
     },
     {
       "relative_path": "cloudflare/runner-control-plane/wrangler.jsonc",
@@ -1063,6 +1071,14 @@
       "bytes": 71670
     },
     {
+      "relative_path": "liltweak/cloudflare_runner_qualification.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "571fed2d63d4a95f0aa60b32ab19f58fe8626f5f0dbb58d0e7de03eceba63daf",
+      "git_blob_sha1": "c34e549ef8ccc95d77a52c9dd994bacd24bc78b1",
+      "bytes": 11574
+    },
+    {
       "relative_path": "liltweak/cognitive_contract.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -1271,12 +1287,20 @@
       "bytes": 2032
     },
     {
+      "relative_path": "liltweak/private_runner_activation.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "007376ee48e439ac5680ff52754d5c413c9ddd4add0b4158c3b7bf427ac6dde5",
+      "git_blob_sha1": "179d123402f01bf495b8ceb6b87781f85252670e",
+      "bytes": 33101
+    },
+    {
       "relative_path": "liltweak/private_runner_control_plane.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "dd28a4150f9c47c828da96a7097e4cbaf672bfe812b19764d49d67f27a6b0985",
-      "git_blob_sha1": "190848e4e493cd8a56f927b4d616a443765e0254",
-      "bytes": 9700
+      "sha256": "9b7019df1eab272db09a832772bf75fb684346a59084a90a0c8d2da4a292b3af",
+      "git_blob_sha1": "a9bb3309abce5bf484a4657f29ebc0e01cd1a1ff",
+      "bytes": 13768
     },
     {
       "relative_path": "liltweak/project_workspace.py",
@@ -1370,9 +1394,17 @@
       "relative_path": "liltweak/providers/self_hosted/galor_tweak_runner.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "3f5a9be7a667f4d7c72064bfd918fb56ed127227d52c5fa5e3ff6013d9998544",
-      "git_blob_sha1": "bd2254eb0f05a8d4b12fba5930398e524a945657",
-      "bytes": 22891
+      "sha256": "2b3d886dda2097b0fadd4ea8222af3468e67abbb32fb20cd6fcc6954b82ecbb8",
+      "git_blob_sha1": "faedf4ba08377dc80543550505da07128ccb0ce3",
+      "bytes": 32581
+    },
+    {
+      "relative_path": "liltweak/providers/self_hosted/qualification_manifest.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "fb8151feb5a639c5eec850874a6156e2b1a2f5f2ed0736de3ec3463353042161",
+      "git_blob_sha1": "020c4e3f09b69f458ba65682b9de47b5e13b593b",
+      "bytes": 3784
     },
     {
       "relative_path": "liltweak/providers/vercel/__init__.py",
@@ -1746,9 +1778,169 @@
       "relative_path": "pyproject.toml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "55db52a8e0d99dc180f62e9c485fb5a849abdce8fbe82a1739243900635d5b9a",
-      "git_blob_sha1": "b05fcae1102e267da702f8de2f88b996515542de",
-      "bytes": 1624
+      "sha256": "e3ae9da2f55be5fc68e05e42388bcab1f85d59eca7027e1d4dfe6f8e0984bd5c",
+      "git_blob_sha1": "36ed4938c5673071b63cde11e39ee4f739ca3992",
+      "bytes": 1635
+    },
+    {
+      "relative_path": "qualification/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "515f80da867ddbf34aaf682adc188e9724c057b5e564109b82484906db2e15dd",
+      "git_blob_sha1": "103c214fc1521934f64741712b4d906b1f5afa55",
+      "bytes": 57
+    },
+    {
+      "relative_path": "qualification/bin/collect",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "41da6325a28542143c77ee5aed4389725e9ceb378278199267d89923942ae58a",
+      "git_blob_sha1": "5765df7867f9369b8173d4b2afd40fee6194036d",
+      "bytes": 311
+    },
+    {
+      "relative_path": "qualification/bin/destroy",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "4d1d852ee2e5ee56337fc0bf57ad141e6c09f80f02507fd6da7282f330b5ff27",
+      "git_blob_sha1": "3f6fe02309c75fc14b230021d25307a585855768",
+      "bytes": 101
+    },
+    {
+      "relative_path": "qualification/install.sh",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "a522f1cab71e4ec71ee0fd4ff43b4f287078ccd9a3564b5480fe0adedc994b0a",
+      "git_blob_sha1": "3eea8804e1fe651cfec7ddd2e1cf239ed07a623c",
+      "bytes": 2584
+    },
+    {
+      "relative_path": "qualification/supervisor.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "fee759797b266c9bbfe09f0d7a3d4093f50116d199872378f3f8ac7d6e41c672",
+      "git_blob_sha1": "ed1f47721c65392c6f87d3b80e6366c8e44ecfb5",
+      "bytes": 67922
+    },
+    {
+      "relative_path": "runner/__init__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "5fb576dc63474659b648e79a7a1bb8e8d4fe94052229cdfa0ce53654dd75283e",
+      "git_blob_sha1": "57ad57ebb88b057e06b3827d2612c29387536b30",
+      "bytes": 51
+    },
+    {
+      "relative_path": "runner/__main__.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b38faf5f82dcc575d2b3cd8f01f5cb3cecaf9a791e933ec119df790d431ea7ea",
+      "git_blob_sha1": "8b0b63bd6141ed19f12344bbd27ad3f44965153b",
+      "bytes": 961
+    },
+    {
+      "relative_path": "runner/candidates.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "68ec5cc45f642cb54203e7d53646c88f9095b64cfcaf87775c1808173c9ef901",
+      "git_blob_sha1": "9202a208be88c3e39493ccadf4a41459252be6d2",
+      "bytes": 7547
+    },
+    {
+      "relative_path": "runner/cgroup.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b2fecd79852fdfee490ff47b8961f2b633457229c9b5b810b15438787a0de162",
+      "git_blob_sha1": "3f3ebc245562a895040d27717724f90f097d484c",
+      "bytes": 3085
+    },
+    {
+      "relative_path": "runner/client.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "6d3045cc48553c20c3cfc472aa26c6d85bb1ab8524b4ee1df3144e63553bf380",
+      "git_blob_sha1": "a6c17d0ee4d5b4f1f3733c587caf0a45cd4176af",
+      "bytes": 5268
+    },
+    {
+      "relative_path": "runner/config.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "86ae51f5befbe6c05200347b14158e4d37acc28e3d4313e3da9e3317b176c747",
+      "git_blob_sha1": "be159683f369a0482d3c5b015cd61ade581a69c3",
+      "bytes": 6452
+    },
+    {
+      "relative_path": "runner/execution.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "caeda540c3be4479c21c4dc2e128339a04e3de0b53d48c5846fed0a1da067494",
+      "git_blob_sha1": "b816203cd955d89cdbcc8725e08803628ef3c951",
+      "bytes": 21829
+    },
+    {
+      "relative_path": "runner/liltweak-runner-job.apparmor",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "31d4b60e718a98ed5560536e4b99d2e03b92b8964152fae5862a0f60d832f6b8",
+      "git_blob_sha1": "110ab55560da4ed5f93ed58991c0d794daeb12a3",
+      "bytes": 452
+    },
+    {
+      "relative_path": "runner/liltweak-runner.service",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "f7c96b6f96383923d17af0ac629832a3537a02978c1ed951bf5681ad6f54b7ec",
+      "git_blob_sha1": "44470275ec385c4b3cd7339ab5abb87f316ed6fa",
+      "bytes": 832
+    },
+    {
+      "relative_path": "runner/offer.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "ff5976d2b98eb3421a05dd357dbf6616acb51d3cb7a8e774cb8b272a2c698b27",
+      "git_blob_sha1": "b4e868feb16a756f5706d828b730418627963002",
+      "bytes": 2742
+    },
+    {
+      "relative_path": "runner/protocol.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "b05e727052b3e73f7e09aedb3f4605b93f585ce03d159237f05dfd710d8f553e",
+      "git_blob_sha1": "f70534e06718d64728cfe4a568af094fe6b26207",
+      "bytes": 6878
+    },
+    {
+      "relative_path": "runner/provision_host.sh",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "7e84a62ac6b35097e12c7ae0dc7c3945727efffd3757b7bad4ec259ef8b0d8c0",
+      "git_blob_sha1": "4b37647359fcd6a610e1e748409acfc5da70e8f9",
+      "bytes": 4948
+    },
+    {
+      "relative_path": "runner/sandbox.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "91b610b5b2e16858450dad23c8cb6525d5dd92f4df26fc6c3db6e0ba08758702",
+      "git_blob_sha1": "026f30694267227fc797dd29d25d3d9497a55154",
+      "bytes": 9455
+    },
+    {
+      "relative_path": "runner/seccomp.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "432baf971c87b3c9d44115707bbc6ca0dac0b86fc80687794238235443666762",
+      "git_blob_sha1": "d7c67baabcbd8d1869e6931090abda102a26e62b",
+      "bytes": 2412
+    },
+    {
+      "relative_path": "runner/service.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "6dd4d5604fb4df7c4c599d08a59a3a50977552ae07c34a22e21cc7a71ac648df",
+      "git_blob_sha1": "54f278729bce670fb5201b19cf087071ff1a9096",
+      "bytes": 3992
     },
     {
       "relative_path": "scripts/benchmark_reasoning_profiles.py",
@@ -1927,6 +2119,14 @@
       "bytes": 1481
     },
     {
+      "relative_path": "tests/test_cloudflare_runner_qualification.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "7855e722d1295f347b4eebfe648c665d5292c2c1dafff8c7bab7c1406d5c040a",
+      "git_blob_sha1": "039fa132d21af0324ea38f9000bc52ca9b5e6825",
+      "bytes": 9265
+    },
+    {
       "relative_path": "tests/test_cognitive_pipeline.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -2071,6 +2271,86 @@
       "bytes": 13688
     },
     {
+      "relative_path": "tests/test_host_runner_candidates.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "41ffa1c32c8740c84a2c283b46abe09227041769245da0c7b6efeff5a49a0266",
+      "git_blob_sha1": "8fe934c2ccde6e83ec97544d4f41aa14501fee91",
+      "bytes": 3907
+    },
+    {
+      "relative_path": "tests/test_host_runner_cgroup.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "428b7dd54a38bd8bb0b7910b45484b9867aa15137280dbeb01bd0e908d1a0597",
+      "git_blob_sha1": "18b0a16eae095302b0454e58edb60607efd550db",
+      "bytes": 795
+    },
+    {
+      "relative_path": "tests/test_host_runner_client.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "5426f9700437804c5df226060c95b7f033853efb1e3c445d8258944ac84d6067",
+      "git_blob_sha1": "b20c80640692331e216ab6de91516513e608b260",
+      "bytes": 3921
+    },
+    {
+      "relative_path": "tests/test_host_runner_execution.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "f30ac3d543cf58ddd1980075c278431ec45b7a516d561a56694e9b609df75706",
+      "git_blob_sha1": "9862ead661b23192f8267ae9de9af015ce9527ff",
+      "bytes": 3142
+    },
+    {
+      "relative_path": "tests/test_host_runner_offer.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "af8931b92a0c8d2290d47dbf2e29cb42d427753169ab7df4dbc81d023b50a2aa",
+      "git_blob_sha1": "3cd9f2061dce2d816370c478a273e4d9bb9b1a50",
+      "bytes": 3267
+    },
+    {
+      "relative_path": "tests/test_host_runner_protocol.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "95a4f61406cd22321bf50bb20726c5c19eba348b8f745c160fcb76046f9c7b83",
+      "git_blob_sha1": "36e7964b4d8f26f55b1bef5baf8a723e90638041",
+      "bytes": 3663
+    },
+    {
+      "relative_path": "tests/test_host_runner_qualification_tools.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "28512f7d9e1847a4ff6f4c2068e2b6c84303c6acd8f8b930baf712d3ab40996f",
+      "git_blob_sha1": "a0a0eb7160ae1316e5aee2f93c15a2c53be6063f",
+      "bytes": 8155
+    },
+    {
+      "relative_path": "tests/test_host_runner_sandbox.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "a7dfaf813047cbbdc67c4675dc705f00a2ab23ccdff3b94f6e67417cb1d58bcc",
+      "git_blob_sha1": "23f7db4402ff5bf93114127d6287dfe6dc43a54d",
+      "bytes": 4019
+    },
+    {
+      "relative_path": "tests/test_host_runner_seccomp.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "d61301110731b23e4bdbabd212fc0be4d517d0e55cc260cce6def8ff17f4950d",
+      "git_blob_sha1": "606e8f43e9bb32d32e5fa34b96d8f1c4f54ae7c5",
+      "bytes": 1707
+    },
+    {
+      "relative_path": "tests/test_host_runner_service.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "bd5b128218945c1437a57b56d036049548ac9df5e776f16d698ea1ce2023315c",
+      "git_blob_sha1": "6fbe30fb8481adfff6af38f97d0ac572a0d0d27b",
+      "bytes": 4986
+    },
+    {
       "relative_path": "tests/test_hosted_sandbox.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -2162,9 +2442,9 @@
       "relative_path": "tests/test_phase71_release.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "580d20cfc02cb663e3a27926661068ea1320857fa0b1a8646c34f1ed86d481b4",
-      "git_blob_sha1": "becbbf2772d8d2f85020fa0e75d4d3a784b5ce15",
-      "bytes": 12561
+      "sha256": "75547f104d546b6e561f931f89141a49a7a9faeed90ac61e3ea7bd423ff86804",
+      "git_blob_sha1": "cfa44cd458a61fb82791334ff2a373fabc97eba2",
+      "bytes": 12913
     },
     {
       "relative_path": "tests/test_phase7_execution.py",
@@ -2207,12 +2487,20 @@
       "bytes": 1817
     },
     {
+      "relative_path": "tests/test_private_runner_activation.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "efa9d6b05b21bb53d077075a2ced2bf426bd80fa8096e6cbae43b531944a4da0",
+      "git_blob_sha1": "a9756d15cc9499ea2c95e82e0f3061dee04cf39f",
+      "bytes": 15053
+    },
+    {
       "relative_path": "tests/test_private_runner_control_plane.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "5f9e96e43b7040de55de621fb61639c7015df1cec5be3c7f3472584f108b6f81",
-      "git_blob_sha1": "43a4fba975e100ddcc3054503c4093a92939500b",
-      "bytes": 15521
+      "sha256": "8132eafb00f4bec771cda6f8d7e84fdcd54a0671a6b63d2dd1e1bfded68ea07e",
+      "git_blob_sha1": "150a368d042a550a0ddce3864dd3506d04361c70",
+      "bytes": 20931
     },
     {
       "relative_path": "tests/test_private_workbench_launcher.py",
@@ -2439,6 +2727,14 @@
       "bytes": 3354
     },
     {
+      "relative_path": "tests/test_runner_qualification_manifest.py",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "aebd83068fc13997c3927b72280813a1364067921564321da8f35493000c8849",
+      "git_blob_sha1": "608a0f78b863833e79da39e08db210c512e0431f",
+      "bytes": 4556
+    },
+    {
       "relative_path": "tests/test_runtime_model_policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
@@ -2450,9 +2746,9 @@
       "relative_path": "tests/test_self_hosted_provider.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "296d3998ee269f5c44e8afcce961921b73385c571de82839a34c7ddb042e1276",
-      "git_blob_sha1": "2ad834a78e08222f1b61d73473a2c9077a825509",
-      "bytes": 16762
+      "sha256": "9fdd24bb730117abf573c1b4b2677ac3a9876bfbf2963084324717515370c2e0",
+      "git_blob_sha1": "3d365434554ffe413167e61f28e22131d1365b98",
+      "bytes": 24971
     },
     {
       "relative_path": "tests/test_server_bind.py",

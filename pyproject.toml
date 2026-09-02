@@ -22,7 +22,7 @@ backend-path = ["."]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["docs*", "liltweak*", "migrations*", "web*"]
+include = ["docs*", "liltweak*", "migrations*", "runner*", "web*"]
 exclude = ["evals*", "scripts*", "tests*"]
 namespaces = true
 

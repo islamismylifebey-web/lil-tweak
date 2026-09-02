@@ -1,0 +1,26 @@
+#include <tunables/global>
+
+profile liltweak-runner-job flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  deny network,
+  deny /etc/liltweak-runner/** rwklmx,
+
+  / r,
+  /** r,
+  /workspace/** rwlk,
+  /tmp/** rwlk,
+  /dev/** rw,
+  /proc/** r,
+
+  /usr/bin/prlimit rix,
+  /usr/bin/bwrap rix,
+  /usr/bin/git rix,
+  /usr/local/bin/python* rix,
+  /opt/liltweak-venv/bin/** rix,
+
+  capability,
+  mount,
+  umount,
+  pivot_root,
+}

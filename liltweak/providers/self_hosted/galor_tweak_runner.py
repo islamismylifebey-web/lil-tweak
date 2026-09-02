@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol, runtime_checkable
 
-from pydantic import Field, StrictInt, StrictStr, ValidationError
+from pydantic import Field, StrictInt, StrictStr, ValidationError, model_validator
 
+from ...cloudflare_runner_qualification import CloudflareRunnerQualificationProof
 from ...creator_contract import CreatorSchema
 from ...resource.contracts import (
     DeploymentPurpose,
@@ -26,7 +28,6 @@ from ...resource.dispatch import (
 )
 from ...resource.estimator import ResourceCostEstimate, ResourceEstimator
 from ...resource.leases import ExecutionLease, ExecutionLeaseError, ExecutionLeaseRegistry
-from ...runner_gate3 import Gate3RunnerConnectionProof
 from ..contracts import (
     ProviderCapabilities,
     ProviderExecutionStatus,
@@ -34,6 +35,11 @@ from ..contracts import (
     ProviderOperationResult,
     ProviderQualification,
     VerificationOutcome,
+)
+from .qualification_manifest import (
+    QualificationBoundedWriteManifest,
+    QualificationJobManifest,
+    QualificationReadOnlyManifest,
 )
 
 GALOR_TWEAK_RUNNER_ID = "galor-tweak-runner-01"
@@ -82,11 +88,78 @@ class RunnerOfferReceipt(CreatorSchema):
         return f"runner-offer:{self.execution_id}:{self.lease_digest[:16]}"
 
 
+class RunnerExecutionSummary(CreatorSchema):
+    """Typed controller view of one durable private-runner dispatch."""
+
+    execution_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
+    runner_id: Literal["galor-tweak-runner-01"] = "galor-tweak-runner-01"
+    runner_role: Literal["role-tweak-runner"] = "role-tweak-runner"
+    status: Literal[
+        "OFFERED",
+        "CLAIMED",
+        "EVIDENCE_RECORDED",
+        "CANCEL_REQUESTED",
+        "EXPIRED",
+    ]
+    lease_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    contract_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    commands_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    approval_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    policy_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    expires_at_ms: StrictInt = Field(ge=0)
+    claim_receipt_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
+    evidence_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
+    evidence_outcome: Literal["succeeded", "failed", "cancelled"] | None = None
+    cancellation_reason_digest: StrictStr | None = Field(
+        default=None,
+        pattern=_SHA256_PATTERN,
+    )
+
+    @model_validator(mode="after")
+    def validate_status_evidence(self) -> RunnerExecutionSummary:
+        if self.status == "CLAIMED" and self.claim_receipt_digest is None:
+            raise ValueError("claimed execution requires a claim receipt digest")
+        has_evidence = self.evidence_digest is not None or self.evidence_outcome is not None
+        if self.status == "EVIDENCE_RECORDED":
+            if self.evidence_digest is None or self.evidence_outcome is None:
+                raise ValueError("recorded execution evidence is incomplete")
+        elif has_evidence:
+            raise ValueError("execution evidence contradicts status")
+        if self.status == "CANCEL_REQUESTED":
+            if self.cancellation_reason_digest is None:
+                raise ValueError("cancellation status requires a reason digest")
+        elif self.cancellation_reason_digest is not None:
+            raise ValueError("cancellation reason contradicts status")
+        return self
+
+
+class RunnerCancelReceipt(CreatorSchema):
+    """Typed acknowledgement that cancellation was requested, not completed."""
+
+    execution_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
+    status: Literal["CANCEL_REQUESTED"] = "CANCEL_REQUESTED"
+    reason_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+
+
 @runtime_checkable
 class SelfHostedDispatchClient(Protocol):
     """The only private-runner control-plane operations this adapter may invoke."""
 
-    async def offer(self, *, attestation: SignedDispatchAttestation) -> RunnerOfferReceipt: ...
+    async def offer(
+        self,
+        *,
+        attestation: SignedDispatchAttestation,
+        manifest: QualificationJobManifest,
+    ) -> RunnerOfferReceipt: ...
+
+    async def status(self, execution_id: str) -> RunnerExecutionSummary: ...
+
+    async def cancel(
+        self,
+        execution_id: str,
+        *,
+        reason_digest: str,
+    ) -> RunnerCancelReceipt: ...
 
 
 @runtime_checkable
@@ -96,7 +169,7 @@ class Gate3ProofRefresher(Protocol):
     @property
     def contract_digest(self) -> str: ...
 
-    async def refresh(self) -> Gate3RunnerConnectionProof: ...
+    async def refresh(self) -> CloudflareRunnerQualificationProof: ...
 
 
 DispatchAttestationFactory = Callable[
@@ -108,6 +181,7 @@ DispatchAttestationFactory = Callable[
 class _DispatchRecord:
     contract: ResourceExecutionContractV2
     lease: ExecutionLease
+    manifest: QualificationJobManifest
     attestation: DispatchAttestation
     receipt: RunnerOfferReceipt
 
@@ -148,7 +222,7 @@ class GalorTweakRunnerProvider:
         self._clock = clock
         self._leases = ExecutionLeaseRegistry()
         self._records: dict[str, _DispatchRecord] = {}
-        self._gate3_proof: Gate3RunnerConnectionProof | None = None
+        self._gate3_proof: CloudflareRunnerQualificationProof | None = None
 
     def qualify(self) -> ProviderQualification:
         blocker = self._cached_gate3_proof_blocker()
@@ -182,7 +256,7 @@ class GalorTweakRunnerProvider:
             status=HealthStatus.HEALTHY,
             connected=True,
             active=True,
-            last_verified_at=proof.handshake_checked_at,
+            last_verified_at=proof.cloudflare_poll_observed_at,
         )
 
     @staticmethod
@@ -225,6 +299,7 @@ class GalorTweakRunnerProvider:
         *,
         contract: ResourceExecutionContractV2,
         lease: ExecutionLease,
+        manifest: QualificationJobManifest | None = None,
     ) -> ProviderOperationResult:
         normalized = self._normalize(contract, lease)
         if isinstance(normalized, str):
@@ -241,6 +316,13 @@ class GalorTweakRunnerProvider:
         if blocker is not None:
             return self._result(
                 validated_lease.execution_id, ProviderExecutionStatus.BLOCKED, blocker
+            )
+        normalized_manifest = self._normalize_manifest(manifest, contract=validated_contract)
+        if isinstance(normalized_manifest, str):
+            return self._result(
+                validated_lease.execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                normalized_manifest,
             )
         signed = self._issue_and_verify_attestation(validated_contract, validated_lease)
         if isinstance(signed, str):
@@ -264,7 +346,10 @@ class GalorTweakRunnerProvider:
                 "execution lease was rejected",
             )
         try:
-            response = await self._client.offer(attestation=signed_attestation)
+            response = await self._client.offer(
+                attestation=signed_attestation,
+                manifest=normalized_manifest,
+            )
         except Exception:
             return self._result(
                 validated_lease.execution_id,
@@ -279,22 +364,19 @@ class GalorTweakRunnerProvider:
         self._records[validated_lease.execution_id] = _DispatchRecord(
             contract=validated_contract,
             lease=validated_lease,
+            manifest=normalized_manifest,
             attestation=attestation,
             receipt=receipt,
         )
         return self._receipt_result(receipt)
 
     async def status(self, execution_id: str) -> ProviderOperationResult:
-        record = self._records.get(execution_id)
-        if record is None:
-            return self._result(
-                execution_id,
-                ProviderExecutionStatus.BLOCKED,
-                "private runner dispatch is unknown",
-            )
-        return self._receipt_result(record.receipt)
+        return await self._reconcile(execution_id)
 
     async def collect(self, execution_id: str) -> ProviderOperationResult:
+        return await self._reconcile(execution_id)
+
+    async def cancel(self, execution_id: str) -> ProviderOperationResult:
         record = self._records.get(execution_id)
         if record is None:
             return self._result(
@@ -302,13 +384,33 @@ class GalorTweakRunnerProvider:
                 ProviderExecutionStatus.BLOCKED,
                 "private runner dispatch is unknown",
             )
-        return self._receipt_result(record.receipt)
-
-    async def cancel(self, execution_id: str) -> ProviderOperationResult:
+        reason_digest = hashlib.sha256(
+            f"lil-tweak.private-runner-cancel/v1\n{execution_id}".encode()
+        ).hexdigest()
+        try:
+            response = await self._client.cancel(
+                execution_id,
+                reason_digest=reason_digest,
+            )
+            receipt = RunnerCancelReceipt.model_validate(response.model_dump(mode="json"))
+        except Exception:
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                "private runner control plane did not accept cancellation",
+            )
+        if receipt.execution_id != execution_id or receipt.reason_digest != reason_digest:
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                "private runner cancellation receipt binding mismatch",
+            )
         return self._result(
             execution_id,
-            ProviderExecutionStatus.BLOCKED,
-            "private runner cancellation requires a separate signed control-plane receipt",
+            ProviderExecutionStatus.RUNNING,
+            "private runner cancellation was requested; termination evidence remains pending",
+            operation_id=record.receipt.operation_id,
+            verification_outcome=VerificationOutcome.PENDING,
         )
 
     async def destroy(self, execution_id: str) -> ProviderOperationResult:
@@ -344,6 +446,124 @@ class GalorTweakRunnerProvider:
             return "resource contract or execution lease is invalid"
         return validated_contract, validated_lease
 
+    def _normalize_manifest(
+        self,
+        manifest: QualificationJobManifest | None,
+        *,
+        contract: ResourceExecutionContractV2,
+    ) -> QualificationJobManifest | str:
+        try:
+            if isinstance(manifest, QualificationReadOnlyManifest):
+                validated: QualificationJobManifest = QualificationReadOnlyManifest.model_validate(
+                    manifest.model_dump(mode="json")
+                )
+            elif isinstance(manifest, QualificationBoundedWriteManifest):
+                validated = QualificationBoundedWriteManifest.model_validate(
+                    manifest.model_dump(mode="json")
+                )
+            else:
+                return "private runner dispatch requires a typed qualification manifest"
+        except (AttributeError, ValidationError):
+            return "private runner qualification manifest is invalid"
+        source = validated.source
+        if (
+            f"github:{source.repository}" != contract.source.repository_id
+            or source.commit_sha != contract.source.source_commit
+            or source.tree_sha != contract.source.source_tree
+        ):
+            return "private runner qualification manifest source binding mismatch"
+        if validated.commands_digest != contract.commands_digest:
+            return "private runner qualification manifest commands digest mismatch"
+        return validated
+
+    async def _reconcile(self, execution_id: str) -> ProviderOperationResult:
+        record = self._records.get(execution_id)
+        if record is None:
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                "private runner dispatch is unknown",
+            )
+        try:
+            response = await self._client.status(execution_id)
+            summary = RunnerExecutionSummary.model_validate(response.model_dump(mode="json"))
+        except Exception:
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                "private runner control-plane status could not be reconciled",
+            )
+        bindings = (
+            (summary.runner_id, self._config.runner_id),
+            (summary.runner_role, self._config.role),
+            (summary.execution_id, record.lease.execution_id),
+            (summary.lease_digest, record.lease.lease_digest),
+            (summary.contract_digest, record.contract.contract_digest),
+            (summary.commands_digest, record.manifest.commands_digest),
+            (summary.approval_digest, record.lease.approval_digest),
+            (summary.policy_digest, record.lease.policy_digest),
+            (summary.expires_at_ms, record.receipt.expires_at_ms),
+        )
+        if any(observed != expected for observed, expected in bindings):
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                "private runner control-plane status binding mismatch",
+            )
+        operation_id = record.receipt.operation_id
+        if summary.status in {"OFFERED", "CLAIMED"}:
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.RUNNING,
+                "private runner dispatch remains in bounded execution",
+                operation_id=operation_id,
+                verification_outcome=VerificationOutcome.PENDING,
+            )
+        if summary.status == "CANCEL_REQUESTED":
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.RUNNING,
+                "private runner cancellation is requested; termination evidence remains pending",
+                operation_id=operation_id,
+                verification_outcome=VerificationOutcome.PENDING,
+            )
+        if summary.status == "EXPIRED":
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.FAILED,
+                "private runner dispatch expired without verified completion",
+                operation_id=operation_id,
+                verification_outcome=VerificationOutcome.FAILED,
+            )
+        if summary.evidence_outcome == "succeeded":
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.RUNNING,
+                (
+                    "private runner evidence is recorded; "
+                    "independent GitHub verification remains pending"
+                ),
+                operation_id=operation_id,
+                verification_outcome=VerificationOutcome.PENDING,
+                evidence_digest=summary.evidence_digest,
+            )
+        if summary.evidence_outcome == "cancelled":
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.CANCELED,
+                "private runner supplied bounded cancellation evidence",
+                operation_id=operation_id,
+                evidence_digest=summary.evidence_digest,
+            )
+        return self._result(
+            execution_id,
+            ProviderExecutionStatus.FAILED,
+            "private runner supplied failed execution evidence",
+            operation_id=operation_id,
+            verification_outcome=VerificationOutcome.FAILED,
+            evidence_digest=summary.evidence_digest,
+        )
+
     async def _refresh_gate3_proof(
         self,
         contract: ResourceExecutionContractV2,
@@ -361,7 +581,7 @@ class GalorTweakRunnerProvider:
             return (
                 "fresh cryptographically verified Gate 3 runner connection evidence is unavailable"
             )
-        if not isinstance(proof, Gate3RunnerConnectionProof):
+        if not isinstance(proof, CloudflareRunnerQualificationProof):
             return "Gate 3 verifier did not return a typed runner connection proof"
         blocker = self._gate3_proof_blocker(proof, contract=contract, lease=lease)
         if blocker is not None:
@@ -377,7 +597,7 @@ class GalorTweakRunnerProvider:
 
     def _gate3_proof_blocker(
         self,
-        proof: Gate3RunnerConnectionProof,
+        proof: CloudflareRunnerQualificationProof,
         *,
         contract: ResourceExecutionContractV2 | None,
         lease: ExecutionLease | None,
@@ -409,7 +629,7 @@ class GalorTweakRunnerProvider:
             return "Gate 3 runner connection proof qualification evidence does not match"
         if proof.authorization_evidence_digest != self._gate3_config.authorization_digest:
             return "Gate 3 runner connection proof authorization evidence does not match"
-        if contract is not None and proof.lil_tweak_commit != contract.source.source_commit:
+        if contract is not None and proof.repository_commit != contract.source.source_commit:
             return "Gate 3 runner connection proof is not pinned to the immutable source commit"
         return None
 

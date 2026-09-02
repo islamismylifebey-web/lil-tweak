@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+case "${GITHUB_RUN_ID:-}" in *[!0-9]*|'') exit 64 ;; esac
+case "${GITHUB_RUN_ATTEMPT:-}" in *[!0-9]*|'') exit 64 ;; esac
+
+exec /usr/bin/sudo -n /opt/liltweak-qualification/libexec/supervisor collect \
+  --github-run-id "$GITHUB_RUN_ID" \
+  --github-run-attempt "$GITHUB_RUN_ATTEMPT" \
+  "$@"

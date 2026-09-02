@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -14,7 +15,14 @@ from pydantic import ValidationError
 from .config import Settings
 from .providers.self_hosted.galor_tweak_runner import (
     GALOR_TWEAK_RUNNER_ID,
+    RunnerCancelReceipt,
+    RunnerExecutionSummary,
     RunnerOfferReceipt,
+)
+from .providers.self_hosted.qualification_manifest import (
+    QualificationBoundedWriteManifest,
+    QualificationJobManifest,
+    QualificationReadOnlyManifest,
 )
 from .resource.contracts import ResourceExecutionContractV2, ResourceProvider, ResourceType
 from .resource.dispatch import (
@@ -25,6 +33,8 @@ from .resource.dispatch import (
 from .resource.leases import ExecutionLease
 
 _MAX_ATTESTATION_LIFETIME = timedelta(minutes=5)
+_SAFE_EXECUTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class PrivateRunnerControlPlaneError(RuntimeError):
@@ -32,7 +42,7 @@ class PrivateRunnerControlPlaneError(RuntimeError):
 
 
 class HttpPrivateRunnerControlPlaneClient:
-    """Server-side-only typed offer client; it has no shell, secret, or completion API."""
+    """Server-side typed controller client; it exposes no shell or completion API."""
 
     def __init__(
         self,
@@ -75,15 +85,42 @@ class HttpPrivateRunnerControlPlaneClient:
             self._client = httpx.AsyncClient()
         return self._client
 
-    async def offer(self, *, attestation: SignedDispatchAttestation) -> RunnerOfferReceipt:
+    async def offer(
+        self,
+        *,
+        attestation: SignedDispatchAttestation,
+        manifest: QualificationJobManifest,
+    ) -> RunnerOfferReceipt:
         try:
             envelope = SignedDispatchAttestation.model_validate(attestation.model_dump(mode="json"))
         except (AttributeError, ValidationError) as exc:
             raise PrivateRunnerControlPlaneError("signed private runner offer is invalid") from exc
         try:
+            if isinstance(manifest, QualificationReadOnlyManifest):
+                bounded_manifest: QualificationJobManifest = (
+                    QualificationReadOnlyManifest.model_validate(manifest.model_dump(mode="json"))
+                )
+            elif isinstance(manifest, QualificationBoundedWriteManifest):
+                bounded_manifest = QualificationBoundedWriteManifest.model_validate(
+                    manifest.model_dump(mode="json")
+                )
+            else:
+                raise TypeError("unsupported qualification manifest")
+        except (AttributeError, TypeError, ValidationError) as exc:
+            raise PrivateRunnerControlPlaneError(
+                "private runner qualification manifest is invalid"
+            ) from exc
+        if bounded_manifest.commands_digest != envelope.attestation.commands_digest:
+            raise PrivateRunnerControlPlaneError(
+                "private runner qualification manifest digest does not match the attestation"
+            )
+        try:
             response = await self._http_client().post(
                 f"{self._base_url}/v1/control/offer",
-                json={"attestation": envelope.model_dump(mode="json")},
+                json={
+                    "attestation": envelope.model_dump(mode="json"),
+                    "manifest": bounded_manifest.model_dump(mode="json"),
+                },
                 headers=self._headers,
                 timeout=15.0,
             )
@@ -99,6 +136,64 @@ class HttpPrivateRunnerControlPlaneClient:
             raise PrivateRunnerControlPlaneError(
                 "private runner control plane returned an invalid offer receipt"
             ) from exc
+
+    async def status(self, execution_id: str) -> RunnerExecutionSummary:
+        execution_id = self._validated_execution_id(execution_id)
+        try:
+            response = await self._http_client().get(
+                f"{self._base_url}/v1/control/executions/{execution_id}",
+                headers=self._headers,
+                timeout=15.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise PrivateRunnerControlPlaneError(
+                "private runner control plane status is unavailable"
+            ) from exc
+        try:
+            payload: Any = response.json()
+            return RunnerExecutionSummary.model_validate(payload)
+        except (ValidationError, ValueError, TypeError) as exc:
+            raise PrivateRunnerControlPlaneError(
+                "private runner control plane returned an invalid execution status"
+            ) from exc
+
+    async def cancel(
+        self,
+        execution_id: str,
+        *,
+        reason_digest: str,
+    ) -> RunnerCancelReceipt:
+        execution_id = self._validated_execution_id(execution_id)
+        if not isinstance(reason_digest, str) or _SHA256.fullmatch(reason_digest) is None:
+            raise PrivateRunnerControlPlaneError(
+                "private runner cancellation reason digest is invalid"
+            )
+        try:
+            response = await self._http_client().post(
+                f"{self._base_url}/v1/control/executions/{execution_id}/cancel",
+                json={"reason_digest": reason_digest},
+                headers=self._headers,
+                timeout=15.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise PrivateRunnerControlPlaneError(
+                "private runner control plane did not accept cancellation"
+            ) from exc
+        try:
+            payload: Any = response.json()
+            return RunnerCancelReceipt.model_validate(payload)
+        except (ValidationError, ValueError, TypeError) as exc:
+            raise PrivateRunnerControlPlaneError(
+                "private runner control plane returned an invalid cancellation receipt"
+            ) from exc
+
+    @staticmethod
+    def _validated_execution_id(execution_id: str) -> str:
+        if not isinstance(execution_id, str) or _SAFE_EXECUTION_ID.fullmatch(execution_id) is None:
+            raise PrivateRunnerControlPlaneError("private runner execution identity is invalid")
+        return execution_id
 
 
 def build_private_runner_control_plane_client(

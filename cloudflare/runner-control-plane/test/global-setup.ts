@@ -13,20 +13,22 @@ function base64Url(bytes: Uint8Array): string {
 }
 
 export default async function ({ provide }: SetupContext): Promise<void> {
-  const keyPair = await webcrypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"],
-  );
-  if (!("publicKey" in keyPair)) {
-    throw new Error("Ed25519 key generation did not produce a key pair");
+  for (const prefix of ["testAttestation", "testRunnerSigning"] as const) {
+    const keyPair = await webcrypto.subtle.generateKey(
+      { name: "Ed25519" },
+      true,
+      ["sign", "verify"],
+    );
+    if (!("publicKey" in keyPair)) {
+      throw new Error("Ed25519 key generation did not produce a key pair");
+    }
+    const publicKey = new Uint8Array(
+      await webcrypto.subtle.exportKey("raw", keyPair.publicKey),
+    );
+    const privateKey = new Uint8Array(
+      await webcrypto.subtle.exportKey("pkcs8", keyPair.privateKey),
+    );
+    provide(`${prefix}PublicKey`, base64Url(publicKey));
+    provide(`${prefix}PrivateKey`, base64Url(privateKey));
   }
-  const publicKey = new Uint8Array(
-    await webcrypto.subtle.exportKey("raw", keyPair.publicKey),
-  );
-  const privateKey = new Uint8Array(
-    await webcrypto.subtle.exportKey("pkcs8", keyPair.privateKey),
-  );
-  provide("testAttestationPublicKey", base64Url(publicKey));
-  provide("testAttestationPrivateKey", base64Url(privateKey));
 }

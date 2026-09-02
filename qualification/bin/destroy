@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+exec /usr/bin/sudo -n /opt/liltweak-qualification/libexec/supervisor destroy "$@"

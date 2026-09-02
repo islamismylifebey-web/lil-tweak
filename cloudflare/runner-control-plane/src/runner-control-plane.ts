@@ -4,6 +4,7 @@ import {
   PINNED_RUNNER_ID,
   PINNED_RUNNER_ROLE,
   sha256Hex,
+  type SignedDispatchAttestation,
   type VerifiedDispatchAttestation,
 } from "./attestation";
 import type {
@@ -15,9 +16,12 @@ import type {
   ExecutionStatus,
   ExecutionSummary,
   OfferSummary,
+  RunnerOfferSummary,
   RunnerEvidence,
+  RunnerJobManifest,
 } from "./protocol";
 import type { Env } from "./index";
+import { MAX_RUNNER_REQUEST_SKEW_MS, type RunnerOperation } from "./runner-auth";
 
 type FailureCode = "not_found" | "conflict" | "expired";
 export type ControlPlaneResult<T> =
@@ -35,6 +39,8 @@ interface ExecutionRow extends Record<string, string | number | null> {
   policy_digest: string;
   attempt_nonce: string;
   attestation_digest: string;
+  attestation_json: string | null;
+  manifest_json: string | null;
   issued_at_ms: number;
   expires_at_ms: number;
   status: ExecutionStatus;
@@ -68,6 +74,8 @@ export class RunnerControlPlane extends DurableObject<Env> {
           policy_digest TEXT NOT NULL,
           attempt_nonce TEXT NOT NULL UNIQUE,
           attestation_digest TEXT NOT NULL UNIQUE,
+          attestation_json TEXT,
+          manifest_json TEXT,
           issued_at_ms INTEGER NOT NULL,
           expires_at_ms INTEGER NOT NULL,
           status TEXT NOT NULL CHECK(status IN ('OFFERED', 'CLAIMED', 'EVIDENCE_RECORDED', 'CANCEL_REQUESTED', 'EXPIRED')),
@@ -80,8 +88,31 @@ export class RunnerControlPlane extends DurableObject<Env> {
           updated_at_ms INTEGER NOT NULL
         )
       `);
+      const columns = new Set(
+        this.ctx.storage.sql
+          .exec<{ name: string }>("PRAGMA table_info(executions)")
+          .toArray()
+          .map((column) => column.name),
+      );
+      if (!columns.has("attestation_json")) {
+        this.ctx.storage.sql.exec("ALTER TABLE executions ADD COLUMN attestation_json TEXT");
+      }
+      if (!columns.has("manifest_json")) {
+        this.ctx.storage.sql.exec("ALTER TABLE executions ADD COLUMN manifest_json TEXT");
+      }
       this.ctx.storage.sql.exec(
         "CREATE INDEX IF NOT EXISTS idx_executions_expiry ON executions(expires_at_ms)",
+      );
+      this.ctx.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS runner_request_nonces (
+          request_nonce TEXT PRIMARY KEY,
+          operation TEXT NOT NULL CHECK(operation IN ('poll', 'claim', 'status', 'evidence')),
+          issued_at_ms INTEGER NOT NULL,
+          consumed_at_ms INTEGER NOT NULL
+        )
+      `);
+      this.ctx.storage.sql.exec(
+        "CREATE INDEX IF NOT EXISTS idx_runner_request_nonces_consumed ON runner_request_nonces(consumed_at_ms)",
       );
     });
   }
@@ -92,7 +123,8 @@ export class RunnerControlPlane extends DurableObject<Env> {
         .exec<ExecutionRow>(
           `SELECT execution_id, runner_id, runner_role, lease_digest, contract_digest,
                   commands_digest, approval_digest, policy_digest, attempt_nonce,
-                  attestation_digest, issued_at_ms, expires_at_ms, status, claimed_at_ms,
+                  attestation_digest, attestation_json, manifest_json,
+                  issued_at_ms, expires_at_ms, status, claimed_at_ms,
                   nonce_consumed_at_ms,
                   claim_receipt_digest, evidence_digest, evidence_outcome,
                   cancellation_reason_digest, updated_at_ms
@@ -116,6 +148,37 @@ export class RunnerControlPlane extends DurableObject<Env> {
       return { ...row, status: "EXPIRED", updated_at_ms: nowMs };
     }
     return row;
+  }
+
+  private consumeRunnerRequestNonce(
+    requestNonce: string,
+    operation: RunnerOperation,
+    issuedAtMs: number,
+    nowMs: number,
+  ): boolean {
+    this.ctx.storage.sql.exec(
+      "DELETE FROM runner_request_nonces WHERE consumed_at_ms < ?",
+      nowMs - 2 * MAX_RUNNER_REQUEST_SKEW_MS,
+    );
+    const existing = this.ctx.storage.sql
+      .exec<{ request_nonce: string }>(
+        "SELECT request_nonce FROM runner_request_nonces WHERE request_nonce = ?",
+        requestNonce,
+      )
+      .toArray()[0];
+    if (existing !== undefined) {
+      return false;
+    }
+    this.ctx.storage.sql.exec(
+      `INSERT INTO runner_request_nonces
+       (request_nonce, operation, issued_at_ms, consumed_at_ms)
+       VALUES (?, ?, ?, ?)`,
+      requestNonce,
+      operation,
+      issuedAtMs,
+      nowMs,
+    );
+    return true;
   }
 
   private summary(row: ExecutionRow): ExecutionSummary {
@@ -148,6 +211,7 @@ export class RunnerControlPlane extends DurableObject<Env> {
 
   async offer(
     verified: VerifiedDispatchAttestation,
+    manifest: RunnerJobManifest,
     nowMs: number,
   ): Promise<ControlPlaneResult<OfferSummary>> {
     const { attestation: payload } = verified.attestation;
@@ -171,8 +235,9 @@ export class RunnerControlPlane extends DurableObject<Env> {
         `INSERT INTO executions (
           execution_id, runner_id, runner_role, lease_digest, contract_digest,
           commands_digest, approval_digest, policy_digest, attempt_nonce,
-          attestation_digest, issued_at_ms, expires_at_ms, status, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OFFERED', ?)`,
+          attestation_digest, attestation_json, manifest_json,
+          issued_at_ms, expires_at_ms, status, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OFFERED', ?)`,
         payload.execution_id,
         PINNED_RUNNER_ID,
         PINNED_RUNNER_ROLE,
@@ -183,6 +248,8 @@ export class RunnerControlPlane extends DurableObject<Env> {
         payload.policy_digest,
         payload.attempt_nonce,
         verified.attestation_digest,
+        canonicalJson(verified.attestation),
+        canonicalJson(manifest),
         payload.issued_at_ms,
         payload.expires_at_ms,
         nowMs,
@@ -203,8 +270,64 @@ export class RunnerControlPlane extends DurableObject<Env> {
     return result;
   }
 
+  async getNextOffer(
+    requestNonce: string,
+    issuedAtMs: number,
+    nowMs: number,
+  ): Promise<ControlPlaneResult<RunnerOfferSummary>> {
+    let result: ControlPlaneResult<RunnerOfferSummary> = {
+      ok: false,
+      error: "not_found",
+    };
+    this.ctx.storage.transactionSync(() => {
+      if (!this.consumeRunnerRequestNonce(requestNonce, "poll", issuedAtMs, nowMs)) {
+        result = { ok: false, error: "conflict" };
+        return;
+      }
+      this.ctx.storage.sql.exec(
+        `UPDATE executions
+         SET status = 'EXPIRED', updated_at_ms = ?
+         WHERE status = 'OFFERED' AND expires_at_ms <= ?`,
+        nowMs,
+        nowMs,
+      );
+      const row = this.ctx.storage.sql
+        .exec<ExecutionRow>(
+          `SELECT execution_id, runner_id, runner_role, lease_digest, contract_digest,
+                  commands_digest, approval_digest, policy_digest, attempt_nonce,
+                  attestation_digest, attestation_json, manifest_json,
+                  issued_at_ms, expires_at_ms, status, claimed_at_ms,
+                  nonce_consumed_at_ms, claim_receipt_digest, evidence_digest,
+                  evidence_outcome, cancellation_reason_digest, updated_at_ms
+           FROM executions
+           WHERE status = 'OFFERED' AND expires_at_ms > ?
+             AND attestation_json IS NOT NULL AND manifest_json IS NOT NULL
+           ORDER BY issued_at_ms, execution_id
+           LIMIT 1`,
+          nowMs,
+        )
+        .toArray()[0];
+      if (row === undefined || row.attestation_json === null || row.manifest_json === null) {
+        return;
+      }
+      result = {
+        ok: true,
+        value: {
+          execution_id: row.execution_id,
+          status: "OFFERED",
+          expires_at_ms: row.expires_at_ms,
+          attestation: JSON.parse(row.attestation_json) as SignedDispatchAttestation,
+          manifest: JSON.parse(row.manifest_json) as RunnerJobManifest,
+        },
+      };
+    });
+    return result;
+  }
+
   async claim(
     request: ClaimRequest,
+    requestNonce: string,
+    issuedAtMs: number,
     nowMs: number,
   ): Promise<ControlPlaneResult<ClaimSummary>> {
     const receiptDigest = await sha256Hex(
@@ -221,6 +344,10 @@ export class RunnerControlPlane extends DurableObject<Env> {
       error: "conflict",
     };
     this.ctx.storage.transactionSync(() => {
+      if (!this.consumeRunnerRequestNonce(requestNonce, "claim", issuedAtMs, nowMs)) {
+        result = { ok: false, error: "conflict" };
+        return;
+      }
       const selected = this.selectExecution(request.execution_id);
       if (selected === undefined) {
         result = { ok: false, error: "not_found" };
@@ -272,6 +399,8 @@ export class RunnerControlPlane extends DurableObject<Env> {
   async recordEvidence(
     request: EvidenceRequest,
     evidenceDigest: string,
+    requestNonce: string,
+    issuedAtMs: number,
     nowMs: number,
   ): Promise<ControlPlaneResult<EvidenceSummary>> {
     let result: ControlPlaneResult<EvidenceSummary> = {
@@ -279,6 +408,10 @@ export class RunnerControlPlane extends DurableObject<Env> {
       error: "conflict",
     };
     this.ctx.storage.transactionSync(() => {
+      if (!this.consumeRunnerRequestNonce(requestNonce, "evidence", issuedAtMs, nowMs)) {
+        result = { ok: false, error: "conflict" };
+        return;
+      }
       const selected = this.selectExecution(request.execution_id);
       if (selected === undefined) {
         result = { ok: false, error: "not_found" };
@@ -327,6 +460,31 @@ export class RunnerControlPlane extends DurableObject<Env> {
       error: "not_found",
     };
     this.ctx.storage.transactionSync(() => {
+      const selected = this.selectExecution(executionId);
+      if (selected === undefined) {
+        result = { ok: false, error: "not_found" };
+        return;
+      }
+      result = { ok: true, value: this.summary(this.updateExpiry(selected, nowMs)) };
+    });
+    return result;
+  }
+
+  async getRunnerStatus(
+    executionId: string,
+    requestNonce: string,
+    issuedAtMs: number,
+    nowMs: number,
+  ): Promise<ControlPlaneResult<ExecutionSummary>> {
+    let result: ControlPlaneResult<ExecutionSummary> = {
+      ok: false,
+      error: "not_found",
+    };
+    this.ctx.storage.transactionSync(() => {
+      if (!this.consumeRunnerRequestNonce(requestNonce, "status", issuedAtMs, nowMs)) {
+        result = { ok: false, error: "conflict" };
+        return;
+      }
       const selected = this.selectExecution(executionId);
       if (selected === undefined) {
         result = { ok: false, error: "not_found" };
