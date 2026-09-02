@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "21291fa33db2b90343debdefaa4de959f53161e17cdb7077b6874fece4df5cc2",
+  "manifest_scope_digest": "78ea15a21f427fc1d6715790ea7eda1540e7298984ca445927f88f397e82ba47",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 369,
@@ -42,9 +42,9 @@
       "relative_path": ".github/workflows/runner-qualification.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "ddd97d63d2b396d0b240a02d87d7646089aa114a02d0d2b4db4759ccc5a566bd",
-      "git_blob_sha1": "dcff1370dd04b610a717f303d3eaafff44013fdc",
-      "bytes": 17883
+      "sha256": "3ce7be1a92926f3e6a36b80ece3f9809c6ca3e8643042b6c14e6a3034839b4d2",
+      "git_blob_sha1": "a835b9e696135fdcf866ab4f95771a87d577ef19",
+      "bytes": 17917
     },
     {
       "relative_path": ".gitignore",
@@ -1810,17 +1810,17 @@
       "relative_path": "qualification/install.sh",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a522f1cab71e4ec71ee0fd4ff43b4f287078ccd9a3564b5480fe0adedc994b0a",
-      "git_blob_sha1": "3eea8804e1fe651cfec7ddd2e1cf239ed07a623c",
-      "bytes": 2584
+      "sha256": "97a2b75a10cd35370c4d9c107569b00f413f1b3f44c6a9429a21772d851c18e5",
+      "git_blob_sha1": "a456a97d63209c6ff8f8ba5505c7878417187f4b",
+      "bytes": 2583
     },
     {
       "relative_path": "qualification/supervisor.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "fee759797b266c9bbfe09f0d7a3d4093f50116d199872378f3f8ac7d6e41c672",
-      "git_blob_sha1": "ed1f47721c65392c6f87d3b80e6366c8e44ecfb5",
-      "bytes": 67922
+      "sha256": "598cf6ae6f54822e28fa657a0a220576796724ed43ebd7bc8d36f039eacefbd2",
+      "git_blob_sha1": "b6978300b9d9e7831752c3d47b5291f20771bced",
+      "bytes": 68927
     },
     {
       "relative_path": "runner/__init__.py",
@@ -1850,9 +1850,9 @@
       "relative_path": "runner/cgroup.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "b2fecd79852fdfee490ff47b8961f2b633457229c9b5b810b15438787a0de162",
-      "git_blob_sha1": "3f3ebc245562a895040d27717724f90f097d484c",
-      "bytes": 3085
+      "sha256": "c57701ff44bb51df2c5f1fd6ea1be05a68fbd7b153a2ada87695c892249b97fe",
+      "git_blob_sha1": "38bc2943fd659e8aae0d1719bbb2c7944572359f",
+      "bytes": 3425
     },
     {
       "relative_path": "runner/client.py",
@@ -1874,17 +1874,17 @@
       "relative_path": "runner/execution.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "caeda540c3be4479c21c4dc2e128339a04e3de0b53d48c5846fed0a1da067494",
-      "git_blob_sha1": "b816203cd955d89cdbcc8725e08803628ef3c951",
-      "bytes": 21829
+      "sha256": "51d06f42c454081b11cb454d5aa9bbbdceee06cb5b5ddf091db8bd7a3d08dadb",
+      "git_blob_sha1": "cf06962962d9b210ce310d21e125cca3288ecabc",
+      "bytes": 21814
     },
     {
       "relative_path": "runner/liltweak-runner-job.apparmor",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "31d4b60e718a98ed5560536e4b99d2e03b92b8964152fae5862a0f60d832f6b8",
-      "git_blob_sha1": "110ab55560da4ed5f93ed58991c0d794daeb12a3",
-      "bytes": 452
+      "sha256": "cace384ef595ab5c4d370851b1f8e0724542f6a9634247b21a9ebd7f9469d150",
+      "git_blob_sha1": "12b15cc425e6af26fd32c86bc0b95c1ee6641120",
+      "bytes": 657
     },
     {
       "relative_path": "runner/liltweak-runner.service",
@@ -1914,17 +1914,17 @@
       "relative_path": "runner/provision_host.sh",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "7e84a62ac6b35097e12c7ae0dc7c3945727efffd3757b7bad4ec259ef8b0d8c0",
-      "git_blob_sha1": "4b37647359fcd6a610e1e748409acfc5da70e8f9",
-      "bytes": 4948
+      "sha256": "c9cd13c6e0e4bad95b09b689a43ae7883835d118c70744c5cba22693d5ecacca",
+      "git_blob_sha1": "ced61560ef1310100371c2c9d52509b55f3e6dc6",
+      "bytes": 5638
     },
     {
       "relative_path": "runner/sandbox.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "91b610b5b2e16858450dad23c8cb6525d5dd92f4df26fc6c3db6e0ba08758702",
-      "git_blob_sha1": "026f30694267227fc797dd29d25d3d9497a55154",
-      "bytes": 9455
+      "sha256": "deb2b8c48442ea489ee17859a6dd1248f7a16bcdeaaa307d1db58de64caa7d4e",
+      "git_blob_sha1": "034f5b6caaa5324da53aa3c8fe979a057f15bfec",
+      "bytes": 9685
     },
     {
       "relative_path": "runner/seccomp.py",
@@ -2282,9 +2282,9 @@
       "relative_path": "tests/test_host_runner_cgroup.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "428b7dd54a38bd8bb0b7910b45484b9867aa15137280dbeb01bd0e908d1a0597",
-      "git_blob_sha1": "18b0a16eae095302b0454e58edb60607efd550db",
-      "bytes": 795
+      "sha256": "403f7c619cd52019128d6fe7fc24056a46c3a295811e8cfd4a65ced4f28c4e3c",
+      "git_blob_sha1": "86199fe0d563ad3901c179d5d8a4562fc88207b4",
+      "bytes": 2117
     },
     {
       "relative_path": "tests/test_host_runner_client.py",
@@ -2322,17 +2322,17 @@
       "relative_path": "tests/test_host_runner_qualification_tools.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "28512f7d9e1847a4ff6f4c2068e2b6c84303c6acd8f8b930baf712d3ab40996f",
-      "git_blob_sha1": "a0a0eb7160ae1316e5aee2f93c15a2c53be6063f",
-      "bytes": 8155
+      "sha256": "9f8bfeb7a48242671e9a093a1ccf44fbb1045d4522c63d524ad972f31c3286df",
+      "git_blob_sha1": "e46351d8296102dc271ac9a14d98e00119ac6e4e",
+      "bytes": 8966
     },
     {
       "relative_path": "tests/test_host_runner_sandbox.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a7dfaf813047cbbdc67c4675dc705f00a2ab23ccdff3b94f6e67417cb1d58bcc",
-      "git_blob_sha1": "23f7db4402ff5bf93114127d6287dfe6dc43a54d",
-      "bytes": 4019
+      "sha256": "fa4a88cc629de7136bf6f8b71d2699e8f0a966917194c61ce60c730114e5736e",
+      "git_blob_sha1": "fa621c24dc796de45fedb771d25681d39893b0c1",
+      "bytes": 4261
     },
     {
       "relative_path": "tests/test_host_runner_seccomp.py",
