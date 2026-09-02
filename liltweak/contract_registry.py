@@ -279,9 +279,7 @@ class ContractRegistryStore:
         if kind not in self._KINDS:
             raise ContractRegistryError("unknown registry record kind")
         value = (
-            asdict(payload)
-            if is_dataclass(payload) and not isinstance(payload, type)
-            else payload
+            asdict(payload) if is_dataclass(payload) and not isinstance(payload, type) else payload
         )
         self._connection.execute(
             "INSERT INTO contract_registry_events"
