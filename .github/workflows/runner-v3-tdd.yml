@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  contracts:
-    name: Runner V3 contract checks
+  focused:
+    name: Runner V3 focused checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -66,16 +66,24 @@ jobs:
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
 
-      - name: Run Runner V3 contract checks
+      - name: Run Runner V3 focused tests
         shell: bash
         run: |
           set -Eeuo pipefail
-          uv run --no-sync --offline pytest -q tests/test_runner_v3_contracts.py
+          uv run --no-sync --offline pytest -q \
+            tests/test_runner_v3_contracts.py \
+            tests/test_runner_v3_provider.py \
+            tests/test_execution_lease.py
           uv run --no-sync --offline ruff check \
             liltweak/providers/github/runner_v3_contracts.py \
-            tests/test_runner_v3_contracts.py
+            liltweak/providers/github/runner_v3.py \
+            tests/test_runner_v3_contracts.py \
+            tests/test_runner_v3_provider.py
           uv run --no-sync --offline ruff format --check \
             liltweak/providers/github/runner_v3_contracts.py \
-            tests/test_runner_v3_contracts.py
+            liltweak/providers/github/runner_v3.py \
+            tests/test_runner_v3_contracts.py \
+            tests/test_runner_v3_provider.py
           uv run --no-sync --offline mypy \
-            liltweak/providers/github/runner_v3_contracts.py
+            liltweak/providers/github/runner_v3_contracts.py \
+            liltweak/providers/github/runner_v3.py
