@@ -65,9 +65,7 @@ class RunnerV3Outcome(StrEnum):
 
 
 class RunnerV3Patch(CreatorSchema):
-    schema_version: Literal["lil-tweak.runner-v3-patch/v1"] = (
-        "lil-tweak.runner-v3-patch/v1"
-    )
+    schema_version: Literal["lil-tweak.runner-v3-patch/v1"] = "lil-tweak.runner-v3-patch/v1"
     text: StrictStr = Field(min_length=1)
     patch_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
     authorized_paths: tuple[StrictStr, ...] = Field(
@@ -107,14 +105,10 @@ class RunnerV3Patch(CreatorSchema):
 
 
 class RunnerV3JobManifest(CreatorSchema):
-    schema_version: Literal["lil-tweak.runner-v3-job/v1"] = (
-        "lil-tweak.runner-v3-job/v1"
-    )
+    schema_version: Literal["lil-tweak.runner-v3-job/v1"] = "lil-tweak.runner-v3-job/v1"
     execution_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
     attempt_nonce: StrictStr = Field(pattern=_SHA256_PATTERN)
-    runner_profile_id: Literal["galor-tweak-runner-v3-github-01"] = (
-        RUNNER_V3_PROFILE_ID
-    )
+    runner_profile_id: Literal["galor-tweak-runner-v3-github-01"] = RUNNER_V3_PROFILE_ID
     repository_id: StrictStr = Field(pattern=_REPOSITORY_PATTERN)
     source_commit: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
     source_tree: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
@@ -217,9 +211,7 @@ class RunnerV3JobManifest(CreatorSchema):
                 raise ValueError("Runner V3 patch mode requires a patch")
             if RunnerV3Action.GIT_DIFF not in self.actions:
                 raise ValueError("Runner V3 patch mode requires git_diff evidence")
-        expected = content_digest(
-            self.model_dump(mode="json", exclude={"manifest_digest"})
-        )
+        expected = content_digest(self.model_dump(mode="json", exclude={"manifest_digest"}))
         if not secrets.compare_digest(self.manifest_digest, expected):
             raise ValueError("Runner V3 manifest digest mismatch")
         return self
@@ -261,9 +253,7 @@ class RunnerV3HostCapacity(CreatorSchema):
 
 
 class RunnerV3Receipt(CreatorSchema):
-    schema_version: Literal["lil-tweak.runner-v3-receipt/v1"] = (
-        "lil-tweak.runner-v3-receipt/v1"
-    )
+    schema_version: Literal["lil-tweak.runner-v3-receipt/v1"] = "lil-tweak.runner-v3-receipt/v1"
     execution_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
     runner_profile_id: Literal["galor-tweak-runner-v3-github-01"]
     repository_id: StrictStr = Field(pattern=_REPOSITORY_PATTERN)
@@ -350,9 +340,7 @@ class RunnerV3Receipt(CreatorSchema):
             step.outcome is not RunnerV3Outcome.SUCCEEDED for step in self.steps
         ):
             raise ValueError("successful Runner V3 receipt cannot contain a failed step")
-        expected = content_digest(
-            self.model_dump(mode="json", exclude={"receipt_digest"})
-        )
+        expected = content_digest(self.model_dump(mode="json", exclude={"receipt_digest"}))
         if not secrets.compare_digest(self.receipt_digest, expected):
             raise ValueError("Runner V3 receipt digest mismatch")
         return self
@@ -362,9 +350,7 @@ class RunnerV3ProviderConfig(CreatorSchema):
     provider_role: Literal["builder"] = "builder"
     repository_id: StrictStr = Field(pattern=_REPOSITORY_PATTERN)
     workflow_path: StrictStr = Field(pattern=_WORKFLOW_PATTERN)
-    runner_profile_id: Literal["galor-tweak-runner-v3-github-01"] = (
-        RUNNER_V3_PROFILE_ID
-    )
+    runner_profile_id: Literal["galor-tweak-runner-v3-github-01"] = RUNNER_V3_PROFILE_ID
     maximum_state_age_seconds: StrictInt = Field(default=300, ge=1, le=3_600)
 
 
