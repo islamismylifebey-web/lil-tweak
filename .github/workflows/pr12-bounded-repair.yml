@@ -1,4 +1,4 @@
-name: PR 12 bounded one-use repair
+name: PR 12 exact source handoff
 
 on:
   push:
@@ -6,51 +6,38 @@ on:
       - feature/tweak-private-runner-control-plane-20260901
 
 permissions:
-  contents: write
-
-concurrency:
-  group: pr12-bounded-one-use-repair
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  repair:
-    if: github.event.head_commit.message == 'chore: run bounded PR 12 repair'
+  package-source:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 20
     env:
       UV_CACHE_DIR: /tmp/liltweak-uv-cache
       UV_NO_PROGRESS: "1"
       UV_LINK_MODE: copy
-      PYTHONHASHSEED: "0"
       PYTHONDONTWRITEBYTECODE: "1"
-      TZ: UTC
-      LC_ALL: C.UTF-8
-      NO_COLOR: "1"
       GIT_TERMINAL_PROMPT: "0"
-      SOURCE_DATE_EPOCH: "1735689600"
-      OPENAI_API_KEY: ""
-      LILTWEAK_LIVE_MODEL_ENABLED: "false"
-      LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
 
     steps:
-      - name: Checkout exact repair trigger
+      - name: Checkout exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           ref: ${{ github.sha }}
-          persist-credentials: true
+          persist-credentials: false
           clean: true
           lfs: false
           submodules: false
 
-      - name: Verify one-use scope
+      - name: Verify bounded source
         shell: bash
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$GITHUB_REF" = "refs/heads/feature/tweak-private-runner-control-plane-20260901"
-          test "$(git rev-parse HEAD^)" = "ba1b19fdd62798e36edb5498138cbe99a7892b1e"
-          test "$(git log -1 --pretty=%s)" = "chore: run bounded PR 12 repair"
+          test "$(git rev-parse HEAD^)" = "fb5065574f27c2ad081ffb9b30c47348c95bae74"
+          test "$(git log -1 --pretty=%s)" = "chore: package exact PR 12 source"
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = ".github/workflows/pr12-bounded-repair.yml"
 
       - name: Set up Python
@@ -67,180 +54,32 @@ jobs:
           download-from-astral-mirror: "false"
           add-problem-matchers: "false"
 
-      - name: Install locked development environment
+      - name: Install exact locked environments
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(python -c 'import platform; print(platform.python_version())')" = "3.12.13"
-          uv --version | grep -Eq '^uv 0\.11\.33([[:space:]]|$)'
           uv lock --check --offline
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
+          npm ci --prefix cloudflare/runner-control-plane
 
-      - name: Add regression tests and prove RED
+      - name: Create credential-free exact-tree archive
         shell: bash
         run: |
           set -Eeuo pipefail
-          cat > tests/test_private_runner_review_regressions.py <<'PY'
-          from pathlib import Path
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git config --local --get-regexp 'http\..*extraheader' && exit 1 || true
+          tar -czf "$RUNNER_TEMP/pr12-exact-source.tgz" \
+            --exclude='.git/config' \
+            --exclude='.git/logs' \
+            --exclude='.git/hooks' \
+            .
+          test -s "$RUNNER_TEMP/pr12-exact-source.tgz"
 
-
-          ROOT = Path(__file__).resolve().parents[1]
-
-
-          def test_control_offer_uses_one_timestamp_for_verify_and_persist() -> None:
-              source = (
-                  ROOT / "cloudflare" / "runner-control-plane" / "src" / "index.ts"
-              ).read_text(encoding="utf-8")
-              start = source.index(
-                  'if (request.method === "POST" && url.pathname === "/v1/control/offer") {'
-              )
-              end = source.index(
-                  'if (request.method === "POST" && url.pathname === `${runnerPrefix}/next`) {'
-              )
-              offer_block = source[start:end]
-              assert offer_block.count("Date.now()") == 1
-              assert "const requestNow = Date.now();" in offer_block
-              assert (
-                  "verifyDispatchAttestation(body.attestation, env, requestNow)"
-                  in offer_block
-              )
-              assert (
-                  "controlObject(env).offer(verified, body.manifest, requestNow)"
-                  in offer_block
-              )
-
-
-          def test_execution_lease_rejection_preserves_specific_reason() -> None:
-              source = (
-                  ROOT
-                  / "liltweak"
-                  / "providers"
-                  / "self_hosted"
-                  / "galor_tweak_runner.py"
-              ).read_text(encoding="utf-8")
-              assert "except ExecutionLeaseError as exc:" in source
-              assert 'f"execution lease rejected: {exc}"' in source
-          PY
-          set +e
-          uv run --no-sync --offline pytest -q \
-            tests/test_private_runner_review_regressions.py > /tmp/pr12-red.log 2>&1
-          status=$?
-          set -e
-          cat /tmp/pr12-red.log
-          test "$status" -ne 0
-          grep -Eq '2 failed' /tmp/pr12-red.log
-
-      - name: Apply only the reviewed production fixes
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          uv run --no-sync --offline python - <<'PY'
-          from pathlib import Path
-
-          index_path = Path("cloudflare/runner-control-plane/src/index.ts")
-          index_source = index_path.read_text(encoding="utf-8")
-          old_verify = (
-              "    const body = parseOfferRequest(await readJson(request));\n"
-              "    const verified = await verifyDispatchAttestation(body.attestation, env, Date.now());"
-          )
-          new_verify = (
-              "    const body = parseOfferRequest(await readJson(request));\n"
-              "    const requestNow = Date.now();\n"
-              "    const verified = await verifyDispatchAttestation(body.attestation, env, requestNow);"
-          )
-          old_persist = "      await controlObject(env).offer(verified, body.manifest, Date.now()),"
-          new_persist = "      await controlObject(env).offer(verified, body.manifest, requestNow),"
-          assert index_source.count(old_verify) == 1
-          assert index_source.count(old_persist) == 1
-          index_source = index_source.replace(old_verify, new_verify, 1)
-          index_source = index_source.replace(old_persist, new_persist, 1)
-          index_path.write_text(index_source, encoding="utf-8")
-
-          provider_path = Path("liltweak/providers/self_hosted/galor_tweak_runner.py")
-          provider_source = provider_path.read_text(encoding="utf-8")
-          old_lease = '''        except ExecutionLeaseError:
-              return self._result(
-                  validated_lease.execution_id,
-                  ProviderExecutionStatus.BLOCKED,
-                  "execution lease was rejected",
-              )'''
-          new_lease = '''        except ExecutionLeaseError as exc:
-              return self._result(
-                  validated_lease.execution_id,
-                  ProviderExecutionStatus.BLOCKED,
-                  f"execution lease rejected: {exc}",
-              )'''
-          assert provider_source.count(old_lease) == 1
-          provider_source = provider_source.replace(old_lease, new_lease, 1)
-          provider_path.write_text(provider_source, encoding="utf-8")
-          PY
-
-      - name: Prove GREEN and run focused private-runner suites
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          uv run --no-sync --offline pytest -q \
-            tests/test_private_runner_review_regressions.py
-          uv run --no-sync --offline pytest -q \
-            tests/test_resource_dispatch.py \
-            tests/test_private_runner_control_plane.py \
-            tests/test_private_runner_activation.py \
-            tests/test_private_runner_operator.py \
-            tests/test_host_runner_service.py \
-            tests/test_self_hosted_provider.py
-
-      - name: Verify Cloudflare control-plane package
-        shell: bash
-        working-directory: cloudflare/runner-control-plane
-        run: |
-          set -Eeuo pipefail
-          npm ci
-          npm run check
-
-      - name: Remove one-use workflow and regenerate deterministic evidence
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          git rm .github/workflows/pr12-bounded-repair.yml
-          rm -rf "$RUNNER_TEMP/pr12-build"
-          mkdir -p "$RUNNER_TEMP/pr12-build"
-          uv build --offline --out-dir "$RUNNER_TEMP/pr12-build"
-          wheel_artifact="$(find "$RUNNER_TEMP/pr12-build" -maxdepth 1 -type f -name '*.whl' -print -quit)"
-          sdist_artifact="$(find "$RUNNER_TEMP/pr12-build" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
-          test -n "$wheel_artifact"
-          test -n "$sdist_artifact"
-          uv run --no-sync --offline python scripts/generate_supply_chain_artifacts.py \
-            --output-directory . \
-            --wheel-artifact "$wheel_artifact" \
-            --sdist-artifact "$sdist_artifact"
-          git add -A
-          uv run --no-sync --offline python scripts/generate_final_manifest.py
-          git add FINAL_FILE_MANIFEST.json
-          uv run --no-sync --offline python scripts/generate_final_manifest.py --check
-
-      - name: Run complete local verification before commit
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          uv run --no-sync --offline ruff check .
-          uv run --no-sync --offline ruff format --check .
-          uv run --no-sync --offline mypy
-          uv run --no-sync --offline pytest
-          uv run --no-sync --offline python scripts/generate_final_manifest.py --check
-          git diff --check
-          git diff --cached --check
-          test -z "$(git diff --name-only)"
-          test -z "$(git status --porcelain=v1 --untracked-files=all | grep '^??' || true)"
-
-      - name: Commit and push exact repaired candidate
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          git config user.name "Maurice Pennington Bey"
-          git config user.email "islamismylifebey@gmail.com"
-          git commit -m "fix: close private runner review findings"
-          repaired_sha="$(git rev-parse HEAD)"
-          test "$repaired_sha" != "$GITHUB_SHA"
-          git push origin HEAD:feature/tweak-private-runner-control-plane-20260901
-          printf 'repaired_sha=%s\n' "$repaired_sha" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload exact source and locked environments
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr12-exact-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr12-exact-source.tgz
+          if-no-files-found: error
+          retention-days: 1
