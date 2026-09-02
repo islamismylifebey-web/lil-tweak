@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "78ea15a21f427fc1d6715790ea7eda1540e7298984ca445927f88f397e82ba47",
+  "manifest_scope_digest": "b9b03ef45b2ef48f7873c2fd01e86b461be6062458f7bcfa7057e8f8aae8aa9a",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 369,
@@ -1074,9 +1074,9 @@
       "relative_path": "liltweak/cloudflare_runner_qualification.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "571fed2d63d4a95f0aa60b32ab19f58fe8626f5f0dbb58d0e7de03eceba63daf",
-      "git_blob_sha1": "c34e549ef8ccc95d77a52c9dd994bacd24bc78b1",
-      "bytes": 11574
+      "sha256": "4ae085645980d9335b8bf474230f5080318dd4109c2f8fc730d5485b84e9cd74",
+      "git_blob_sha1": "02ffadcf0874bbe4b1e5abf9aa03f7b9a227522f",
+      "bytes": 11763
     },
     {
       "relative_path": "liltweak/cognitive_contract.py",
@@ -1290,9 +1290,9 @@
       "relative_path": "liltweak/private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "007376ee48e439ac5680ff52754d5c413c9ddd4add0b4158c3b7bf427ac6dde5",
-      "git_blob_sha1": "179d123402f01bf495b8ceb6b87781f85252670e",
-      "bytes": 33101
+      "sha256": "ace0386a1d965a7c18c93563dace74a4c9571db781b6c689a897d3d283739d96",
+      "git_blob_sha1": "ad9f9ee50f3aa0a4de2a0ca531622e4187e895cf",
+      "bytes": 33456
     },
     {
       "relative_path": "liltweak/private_runner_control_plane.py",

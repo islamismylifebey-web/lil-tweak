@@ -19,10 +19,14 @@ from .runner_qualification import (
     runner_key_id,
 )
 
-_RUNNER_ID = "galor-tweak-runner-01"
-_RUNNER_ROLE = "role-tweak-runner"
-_REPOSITORY_ID = "github:islamismylifebey-web/lil-tweak"
-_ENDPOINT = "https://runner-control.liltweak.galorweb.works"
+_RUNNER_ID: Literal["galor-tweak-runner-01"] = "galor-tweak-runner-01"
+_RUNNER_ROLE: Literal["role-tweak-runner"] = "role-tweak-runner"
+_REPOSITORY_ID: Literal["github:islamismylifebey-web/lil-tweak"] = (
+    "github:islamismylifebey-web/lil-tweak"
+)
+_ENDPOINT: Literal["https://runner-control.liltweak.galorweb.works"] = (
+    "https://runner-control.liltweak.galorweb.works"
+)
 _PROFILE_DIGEST = "e6d24dd720d661535a806e985153ef4801509e67b2a32b31ae9a302ce3298394"
 _SHA256 = r"^[0-9a-f]{64}$"
 _B64_NONCE = r"^[A-Za-z0-9_-]{43}$"

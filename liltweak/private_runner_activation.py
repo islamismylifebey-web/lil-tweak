@@ -80,9 +80,14 @@ from .resource.leases import ExecutionLease
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _OBJECT_ID_PATTERN = r"^[0-9a-f]{40}$"
 _DPAPI_ENTROPY = b"lil-tweak-runner-control-plane-v1"
-_CONTROL_PLANE_ENDPOINT = "https://runner-control.liltweak.galorweb.works"
-_REPOSITORY_ID = "github:islamismylifebey-web/lil-tweak"
-_RUNNER_ROLE = "role-tweak-runner"
+_CONTROL_PLANE_ENDPOINT: Literal["https://runner-control.liltweak.galorweb.works"] = (
+    "https://runner-control.liltweak.galorweb.works"
+)
+_REPOSITORY_ID: Literal["github:islamismylifebey-web/lil-tweak"] = (
+    "github:islamismylifebey-web/lil-tweak"
+)
+_RUNNER_ROLE: Literal["role-tweak-runner"] = "role-tweak-runner"
+_RUNNER_ID: Literal["galor-tweak-runner-01"] = "galor-tweak-runner-01"
 
 _GALOR_TWEAK_PROFILE_SPEC = {
     "schema_version": "galor-tweak-runner-profile-spec/v1",
@@ -123,7 +128,7 @@ class PrivateRunnerQualificationEvidence(CreatorSchema):
     schema_version: Literal["lil-tweak.private-runner-qualification-input/v1"] = (
         "lil-tweak.private-runner-qualification-input/v1"
     )
-    runner_id: Literal["galor-tweak-runner-01"] = GALOR_TWEAK_RUNNER_ID
+    runner_id: Literal["galor-tweak-runner-01"] = _RUNNER_ID
     runner_role: Literal["role-tweak-runner"] = _RUNNER_ROLE
     repository_id: Literal["github:islamismylifebey-web/lil-tweak"] = _REPOSITORY_ID
     profile_spec_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
@@ -193,7 +198,7 @@ class PrivateRunnerDispatchReceipt(CreatorSchema):
         "lil-tweak.private-runner-dispatch-receipt/v1"
     )
     job_type: Literal["read_only", "bounded_write"]
-    runner_profile_id: Literal["galor-tweak-runner-01"] = GALOR_TWEAK_RUNNER_ID
+    runner_profile_id: Literal["galor-tweak-runner-01"] = _RUNNER_ID
     execution_id: StrictStr
     source_commit: StrictStr = Field(pattern=_OBJECT_ID_PATTERN)
     route_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
@@ -675,8 +680,11 @@ def _decrypt_dpapi(payload: bytes) -> bytes:
     encrypted, encrypted_buffer = blob(payload)
     entropy, entropy_buffer = blob(_DPAPI_ENTROPY)
     decrypted = DataBlob()
-    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if not callable(win_dll):
+        raise PrivateRunnerActivationError("DPAPI controller bundle requires Windows")
+    crypt32 = win_dll("crypt32", use_last_error=True)
+    kernel32 = win_dll("kernel32", use_last_error=True)
     ok = crypt32.CryptUnprotectData(
         ctypes.byref(encrypted),
         None,
