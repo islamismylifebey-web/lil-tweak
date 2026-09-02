@@ -275,7 +275,7 @@ def _github_ci_evidence(*, run_id: int, head: str) -> tuple[dict[str, Any], str]
         and step.get("conclusion") == "success"
         and isinstance(step.get("name"), str)
     }
-    if not GITHUB_CI_REQUIRED_CHECKS <= completed_checks:
+    if not completed_checks >= GITHUB_CI_REQUIRED_CHECKS:
         raise RuntimeError("GitHub Job A run lacks required successful checks")
 
     evidence: dict[str, Any] = {
