@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   contracts:
-    name: Runner V3 contract tests
+    name: Runner V3 contract checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -66,8 +66,16 @@ jobs:
           uv sync --locked --group dev --python 3.12.13
           uv sync --check --offline --group dev --python 3.12.13
 
-      - name: Run Runner V3 contract tests
+      - name: Run Runner V3 contract checks
         shell: bash
         run: |
           set -Eeuo pipefail
           uv run --no-sync --offline pytest -q tests/test_runner_v3_contracts.py
+          uv run --no-sync --offline ruff check \
+            liltweak/providers/github/runner_v3_contracts.py \
+            tests/test_runner_v3_contracts.py
+          uv run --no-sync --offline ruff format --check \
+            liltweak/providers/github/runner_v3_contracts.py \
+            tests/test_runner_v3_contracts.py
+          uv run --no-sync --offline mypy \
+            liltweak/providers/github/runner_v3_contracts.py
