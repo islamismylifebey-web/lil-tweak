@@ -375,6 +375,7 @@ def test_protected_controller_config_loader_never_exposes_private_values(tmp_pat
     }
     path = tmp_path / "controller.dpapi"
     path.write_bytes(b"encrypted")
+    path.chmod(0o600)
     config = load_protected_controller_config(
         path,
         decrypt=lambda _: __import__("json").dumps(payload).encode(),

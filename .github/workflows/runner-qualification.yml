@@ -154,7 +154,7 @@ jobs:
       DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
       CHALLENGE_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-challenge.json
       ISSUER_PUBLIC_KEY_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-issuer.json
-      ATTESTATION_PATH: ${{ github.workspace }}/liltweak-qualification-attestation.json
+      ATTESTATION_PATH: ${{ github.workspace }}/liltweak-qualification-attestation-${{ github.run_id }}-${{ github.run_attempt }}.json
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
@@ -294,7 +294,7 @@ jobs:
       DESTROYER_SHA256: ${{ vars.LILTWEAK_DESTROYER_SHA256 }}
       CHALLENGE_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-challenge.json
       ISSUER_PUBLIC_KEY_PATH: ${{ github.workspace }}/phase71-challenge/liltweak-qualification-issuer.json
-      ATTESTATION_PATH: ${{ github.workspace }}/phase71-attestation/liltweak-qualification-attestation.json
+      ATTESTATION_PATH: ${{ github.workspace }}/phase71-attestation/liltweak-qualification-attestation-${{ github.run_id }}-${{ github.run_attempt }}.json
       DECISION_PATH: ${{ github.workspace }}/liltweak-qualification-decision.json
       OPENAI_API_KEY: ""
       LILTWEAK_LIVE_MODEL_ENABLED: "false"
