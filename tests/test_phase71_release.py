@@ -286,7 +286,9 @@ def test_qualification_workflow_is_manual_approved_source_bounded_and_dormant() 
     assert "actions/download-artifact@" in collect_job
     assert "actions/download-artifact@" in verify_job
     assert "path: ${{ env.ATTESTATION_PATH }}" in collect_job
-    assert "path: ${{ github.workspace }}/liltweak-qualification-attestation.json" not in collect_job
+    assert (
+        "path: ${{ github.workspace }}/liltweak-qualification-attestation.json" not in collect_job
+    )
     assert "--issuer-public-key-file" in verify_job
     assert "--runner-public-key-b64" in verify_job
     uses = [
