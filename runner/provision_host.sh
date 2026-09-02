@@ -43,6 +43,7 @@ runtime_tmp="$(mktemp -d /opt/liltweak-runtime/.rootfs.XXXXXX)"
 container_id=''
 cleanup() {
   if [[ -n "$container_id" ]]; then docker rm -f "$container_id" >/dev/null 2>&1 || true; fi
+  if mountpoint -q "$runtime_tmp/opt/liltweak-runner/app"; then umount "$runtime_tmp/opt/liltweak-runner/app"; fi
   if mountpoint -q "$runtime_tmp/opt/liltweak-runtime"; then umount "$runtime_tmp/opt/liltweak-runtime"; fi
   rm -rf -- "$runtime_tmp"
 }
@@ -52,7 +53,8 @@ container_id="$(docker create "$image_ref")"
 docker export "$container_id" | tar -xpf - -C "$runtime_tmp"
 docker rm "$container_id" >/dev/null
 container_id=''
-mkdir -p "$runtime_tmp/usr/bin" "$runtime_tmp/opt/liltweak-runtime"
+rm -rf /opt/liltweak-runtime/venv
+mkdir -p "$runtime_tmp/usr/bin" "$runtime_tmp/opt/liltweak-runtime" "$runtime_tmp/opt/liltweak-runner/app"
 ln -sfn /usr/local/bin/python3 "$runtime_tmp/usr/bin/python3"
 resolver_source=/etc/resolv.conf
 if [[ -f /run/systemd/resolve/resolv.conf ]]; then
@@ -61,9 +63,10 @@ fi
 rm -f "$runtime_tmp/etc/resolv.conf"
 install -o root -g root -m 0644 "$resolver_source" "$runtime_tmp/etc/resolv.conf"
 mount --bind /opt/liltweak-runtime "$runtime_tmp/opt/liltweak-runtime"
-chroot "$runtime_tmp" /bin/sh -ceu 'apt-get update; apt-get install -y --no-install-recommends ca-certificates git; rm -rf /var/lib/apt/lists/*; python3 -m venv /opt/liltweak-runtime/venv'
+mount --bind /opt/liltweak-runner/app "$runtime_tmp/opt/liltweak-runner/app"
+chroot "$runtime_tmp" /bin/sh -ceu 'apt-get update; apt-get install -y --no-install-recommends ca-certificates git; rm -rf /var/lib/apt/lists/*; python3 -m venv /opt/liltweak-runtime/venv; /opt/liltweak-runtime/venv/bin/pip install --disable-pip-version-check --no-input /opt/liltweak-runner/app "pytest>=8.4,<9" "ruff>=0.12,<1"'
+umount "$runtime_tmp/opt/liltweak-runner/app"
 umount "$runtime_tmp/opt/liltweak-runtime"
-/opt/liltweak-runtime/venv/bin/pip install --disable-pip-version-check --no-input /opt/liltweak-runner/app 'pytest>=8.4,<9' 'ruff>=0.12,<1'
 
 rm -rf /opt/liltweak-runtime/rootfs
 mv "$runtime_tmp" /opt/liltweak-runtime/rootfs
