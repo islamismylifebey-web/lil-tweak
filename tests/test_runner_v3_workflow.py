@@ -78,7 +78,7 @@ def test_runner_v3_workflow_is_read_only_and_headless() -> None:
     assert inputs["acknowledge_builder_only"]["default"] is False
     assert job["runs-on"] == "ubuntu-24.04"
     assert job["timeout-minutes"] == 30
-    assert job["permissions"] == {}
+    assert "permissions" not in job
     assert job["env"]["RUNNER_V3_PROFILE_ID"] == RUNNER_V3_PROFILE_ID
     assert job["env"]["RUNNER_V3_OUTPUT_DIR"] == (
         "${{ runner.temp }}/runner-v3-output"
