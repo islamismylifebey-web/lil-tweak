@@ -55,6 +55,7 @@ docker rm "$container_id" >/dev/null
 container_id=''
 rm -rf /opt/liltweak-runtime/venv
 mkdir -p "$runtime_tmp/usr/bin" "$runtime_tmp/opt/liltweak-runtime" "$runtime_tmp/opt/liltweak-runner/app"
+install -d -o root -g root -m 0555 "$runtime_tmp/source" "$runtime_tmp/workspace"
 ln -sfn /usr/local/bin/python3 "$runtime_tmp/usr/bin/python3"
 resolver_source=/etc/resolv.conf
 if [[ -f /run/systemd/resolve/resolv.conf ]]; then
@@ -89,6 +90,7 @@ os.write(fd, (json.dumps(data, sort_keys=True, separators=(',',':'))+'\n').encod
 os.close(fd)
 PY
 chown -R root:root /opt/liltweak-runner /opt/liltweak-runtime
+chmod 0755 /opt/liltweak-runtime/rootfs
 chmod 0444 /opt/liltweak-runtime/rootfs/.liltweak-rootfs-manifest.json
 install -o root -g root -m 0644 /opt/liltweak-runner/app/runner/liltweak-runner.service /etc/systemd/system/liltweak-runner.service
 systemctl daemon-reload

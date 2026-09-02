@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import runner.cgroup as cgroup_module
 from runner.cgroup import CgroupManager, _current_service_cgroup
 
 
@@ -13,8 +15,30 @@ def test_current_service_cgroup_stays_under_unified_root(monkeypatch) -> None:
 
     monkeypatch.setattr(Path, "read_text", fake_read_text)
 
-    assert _current_service_cgroup() == Path(
-        "/sys/fs/cgroup/system.slice/liltweak-runner.service"
+    assert _current_service_cgroup() == Path("/sys/fs/cgroup/system.slice/liltweak-runner.service")
+
+
+def test_cgroup_manager_moves_daemon_to_leaf_before_enabling_controllers(
+    monkeypatch, tmp_path: Path
+) -> None:
+    service = tmp_path / "service"
+    service.mkdir()
+    real_write = cgroup_module._write
+
+    def checked_write(path: Path, value: str) -> None:
+        if path == service / "cgroup.subtree_control":
+            assert (service / "liltweak-daemon" / "cgroup.procs").read_text() == (
+                f"{os.getpid()}\n"
+            )
+        real_write(path, value)
+
+    monkeypatch.setattr(cgroup_module, "_write", checked_write)
+
+    CgroupManager(service_cgroup=service)
+
+    assert (service / "cgroup.subtree_control").read_text() == "+cpu +memory +pids\n"
+    assert (service / "liltweak-jobs" / "cgroup.subtree_control").read_text() == (
+        "+cpu +memory +pids\n"
     )
 
 

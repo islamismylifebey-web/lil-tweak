@@ -3,18 +3,22 @@
 profile liltweak-runner-job flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
-  deny network,
+  # Bubblewrap needs NETLINK_ROUTE to initialize the isolated loopback device.
+  # The sandboxed payload is still denied every socket syscall by seccomp.
+  network netlink raw,
   deny /etc/liltweak-runner/** rwklmx,
 
-  / r,
-  /** r,
+  / rm,
+  /** rm,
   /workspace/** rwlk,
   /tmp/** rwlk,
   /dev/** rw,
+  /newroot/** rw,
   /proc/** r,
 
   /usr/bin/prlimit rix,
   /usr/bin/bwrap rix,
+  /usr/bin/setpriv rix,
   /usr/bin/git rix,
   /usr/local/bin/python* rix,
   /opt/liltweak-venv/bin/** rix,

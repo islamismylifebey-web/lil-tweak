@@ -539,9 +539,11 @@ def build_sandbox_command(
         "/usr/bin/bwrap",
         "--die-with-parent",
         "--new-session",
-        "--unshare-all",
-        "--cap-drop",
-        "ALL",
+        "--unshare-ipc",
+        "--unshare-pid",
+        "--unshare-net",
+        "--unshare-uts",
+        "--unshare-cgroup",
         "--ro-bind",
         ROOTFS.as_posix(),
         "/",
@@ -553,13 +555,9 @@ def build_sandbox_command(
         "/tmp",
         "--tmpfs",
         "/run",
-        "--dir",
-        "/source",
         "--ro-bind",
         source.as_posix(),
         "/source",
-        "--dir",
-        "/workspace",
         "--bind",
         workspace.as_posix(),
         "/workspace",
@@ -575,12 +573,17 @@ def build_sandbox_command(
         "--setenv",
         "LILTWEAK_QUALIFICATION_SANDBOX",
         "1",
-        "--uid",
-        str(sandbox_uid),
-        "--gid",
-        str(sandbox_gid),
         "--seccomp",
         str(seccomp_fd),
+        "--",
+        "/usr/bin/setpriv",
+        f"--reuid={sandbox_uid}",
+        f"--regid={sandbox_gid}",
+        "--clear-groups",
+        "--bounding-set=-all",
+        "--inh-caps=-all",
+        "--ambient-caps=-all",
+        "--no-new-privs",
         "--",
         "/usr/local/bin/python3",
         "-I",
@@ -892,6 +895,9 @@ def _prepare_source(session: Path, challenge: dict[str, object]) -> tuple[Path, 
 
 
 _STATIC_PROBE = r"""import errno, json, os, pathlib, socket, stat
+def visible(path):
+    try: return pathlib.Path(path).exists()
+    except OSError: return False
 def denied(family, address):
     try:
         sock = socket.socket(family, socket.SOCK_STREAM)
@@ -939,7 +945,7 @@ for root, dirs, files in os.walk('/run'):
 source_ro, source_errno = write_denied('/source/.qualification-write')
 root_ro, root_errno = write_denied('/.qualification-write')
 git_metadata = any(path.name == '.git' for path in pathlib.Path('/source').rglob('.git'))
-credential_paths = [p for p in ('/root/.ssh','/root/.gitconfig','/etc/liltweak-runner') if pathlib.Path(p).exists()]
+credential_paths = [p for p in ('/root/.ssh','/root/.gitconfig','/etc/liltweak-runner') if visible(p)]
 credential_env = sorted(key for key in os.environ if any(word in key.upper() for word in ('TOKEN','SECRET','PASSWORD','SSH_AUTH_SOCK','OPENAI_API_KEY')))
 block_devices = []
 for path in pathlib.Path('/dev').iterdir():
@@ -947,7 +953,7 @@ for path in pathlib.Path('/dev').iterdir():
         if stat.S_ISBLK(path.stat().st_mode): block_devices.append(path.name)
     except OSError:
         pass
-container_sockets = [p for p in ('/var/run/docker.sock','/run/containerd/containerd.sock','/run/podman/podman.sock') if pathlib.Path(p).exists()]
+container_sockets = [p for p in ('/var/run/docker.sock','/run/containerd/containerd.sock','/run/podman/podman.sock') if visible(p)]
 visible_mounts = pathlib.Path('/proc/self/mountinfo').read_text(encoding='utf-8').splitlines()
 result = {
  'ipv4': ipv4, 'ipv4_errno': ipv4_errno, 'ipv6': ipv6, 'ipv6_errno': ipv6_errno,
@@ -963,7 +969,7 @@ result = {
  'workspace_initial': sorted(p.name for p in pathlib.Path('/workspace').iterdir()),
  'block_devices': block_devices, 'container_sockets': container_sockets,
  'ssh_agent': os.environ.get('SSH_AUTH_SOCK'), 'host_marker_seen': marker_seen,
- 'control_state': pathlib.Path('/var/lib/liltweak-runner').exists() or pathlib.Path('/etc/liltweak-runner/credentials.json').exists(),
+ 'control_state': visible('/var/lib/liltweak-runner') or visible('/etc/liltweak-runner/credentials.json'),
  'mounts_digest': __import__('hashlib').sha256('\n'.join(visible_mounts).encode()).hexdigest(),
 }
 print(json.dumps(result, sort_keys=True, separators=(',', ':')))
@@ -1037,13 +1043,28 @@ def _kill_cgroup(path: Path) -> None:
         time.sleep(0.02)
 
 
+def _prepare_cgroup_root(root: Path = CGROUP_ROOT) -> None:
+    root.mkdir(mode=0o700, exist_ok=True)
+    required = {"cpu", "memory", "pids"}
+    available = set((root / "cgroup.controllers").read_text(encoding="ascii").split())
+    if not required.issubset(available):
+        raise QualificationError("required cgroup controllers are unavailable")
+    (root / "cgroup.subtree_control").write_text("+cpu +memory +pids\n", encoding="ascii")
+    enabled = {
+        value.lstrip("+-")
+        for value in (root / "cgroup.subtree_control").read_text(encoding="ascii").split()
+    }
+    if not required.issubset(enabled):
+        raise QualificationError("required cgroup controllers are not delegated")
+
+
 class SandboxRunner:
     def __init__(self, *, session: Path, source: Path, config: HostConfig) -> None:
         self.session = session
         self.source = source
         self.config = config
         self.results: list[SandboxResult] = []
-        CGROUP_ROOT.mkdir(mode=0o700, exist_ok=True)
+        _prepare_cgroup_root()
 
     def run(self, name: str, program: str, *, timeout: float = 5.0) -> SandboxResult:
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name):
@@ -1277,7 +1298,7 @@ def _run_probe_suite(
     )
     output = runner.run(
         "output",
-        "import os\nblock=b'x'*4096\nwhile True: os.write(1,block)",
+        "import errno,os\nblock=b'x'*4096\ntry:\n while True: os.write(1,block)\nexcept OSError as exc:\n os._exit(27 if exc.errno==errno.EFBIG else 1)",
         timeout=3,
     )
     cancel = runner.run("cancel", "import time; time.sleep(60)", timeout=0.4)
@@ -1608,7 +1629,9 @@ def _destroy_all_sessions() -> dict[str, bool]:
     for child in list(sessions.iterdir()):
         if child.is_dir() and not child.is_symlink():
             shutil.rmtree(child, ignore_errors=True)
-    cgroups_absent = not CGROUP_ROOT.exists() or not any(CGROUP_ROOT.iterdir())
+    cgroups_absent = not CGROUP_ROOT.exists() or not any(
+        child.is_dir() for child in CGROUP_ROOT.iterdir()
+    )
     sessions_absent = not any(sessions.iterdir())
     mountinfo = Path("/proc/self/mountinfo").read_text(encoding="utf-8", errors="strict")
     mounts_absent = str(sessions) not in mountinfo

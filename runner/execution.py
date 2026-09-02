@@ -42,10 +42,7 @@ KNOWN_HOSTS_PATH = Path("/etc/liltweak-runner/github_known_hosts")
 SECCOMP_PATH = Path("/opt/liltweak-runner/seccomp.bpf")
 SECCOMP_SHA256 = "50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"
 REPOSITORY_URL = "git@github.com:islamismylifebey-web/lil-tweak.git"
-ROOTFS_IMAGE_REF = (
-    "python@sha256:"
-    "229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
-)
+ROOTFS_IMAGE_REF = "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
 
 
 class ExecutionSecurityError(RuntimeError):

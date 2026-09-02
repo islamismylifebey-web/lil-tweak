@@ -16,6 +16,7 @@ from qualification.supervisor import (
     HostConfig,
     Observation,
     QualificationError,
+    _prepare_cgroup_root,
     build_attestation,
     build_sandbox_command,
     canonical_json,
@@ -23,6 +24,20 @@ from qualification.supervisor import (
     validate_challenge,
     validate_output_path,
 )
+
+
+def test_prepare_cgroup_root_enables_required_controllers(tmp_path: Path) -> None:
+    root = tmp_path / "qualification"
+    root.mkdir()
+    (root / "cgroup.controllers").write_text("cpu io memory pids\n", encoding="ascii")
+    (root / "cgroup.subtree_control").write_text("", encoding="ascii")
+
+    _prepare_cgroup_root(root)
+
+    assert set(
+        value.lstrip("+-")
+        for value in (root / "cgroup.subtree_control").read_text(encoding="ascii").split()
+    ) == {"cpu", "memory", "pids"}
 
 
 def _raw_public(private: Ed25519PrivateKey) -> bytes:
@@ -179,11 +194,17 @@ def test_sandbox_command_reuses_shared_pinned_runtime_and_is_execution_disconnec
     )
     assert "/opt/liltweak-runtime/rootfs" in command
     assert "/opt/liltweak-runtime/venv" not in command
-    assert "--unshare-all" in command
+    for namespace in ("ipc", "pid", "net", "uts", "cgroup"):
+        assert f"--unshare-{namespace}" in command
+    assert "--unshare-all" not in command
+    assert "--unshare-user" not in command
     assert "--share-net" not in command
     assert "--seccomp\n9" in joined
-    assert "--uid\n17001" in joined
-    assert "--gid\n17001" in joined
+    assert "/usr/bin/setpriv" in command
+    assert "--reuid=17001" in command
+    assert "--regid=17001" in command
+    assert "--bounding-set=-all" in command
+    assert "--no-new-privs" in command
     assert "--ro-bind\n/var/lib/liltweak-qualification/rq_b/source\n/source" in joined
     assert joined.index("/usr/bin/aa-exec") < joined.index("/usr/bin/bwrap")
     assert joined.index("/usr/bin/prlimit") < joined.index("/usr/bin/bwrap")

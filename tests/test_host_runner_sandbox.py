@@ -40,15 +40,21 @@ def test_sandbox_command_uses_pinned_rootfs_mac_seccomp_nonroot_and_no_network()
         "/usr/bin/prlimit",
         "--cpu=1800",
     )
-    assert "--unshare-all" in command
+    for namespace in ("ipc", "pid", "net", "uts", "cgroup"):
+        assert f"--unshare-{namespace}" in command
+    assert "--unshare-all" not in command
+    assert "--unshare-user" not in command
     assert command[command.index("--ro-bind") : command.index("--ro-bind") + 3] == (
         "--ro-bind",
         "/opt/liltweak-runtime/rootfs",
         "/",
     )
     assert command[command.index("--seccomp") + 1] == "9"
-    assert command[command.index("--uid") + 1] == "17001"
-    assert command[command.index("--gid") + 1] == "17001"
+    assert "/usr/bin/setpriv" in command
+    assert "--reuid=17001" in command
+    assert "--regid=17001" in command
+    assert "--bounding-set=-all" in command
+    assert "--no-new-privs" in command
     assert "--share-net" not in command
     assert "Seccomp" in "\n".join(command)
     assert "/proc/self/attr/current" in "\n".join(command)

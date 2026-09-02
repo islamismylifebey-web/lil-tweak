@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import time
 from contextlib import suppress
@@ -64,8 +65,13 @@ class CgroupManager:
         self._service = service_cgroup or _current_service_cgroup()
         if not self._service.is_dir() or self._service.is_symlink():
             raise CgroupError("service cgroup is invalid")
+        daemon = self._service / "liltweak-daemon"
+        daemon.mkdir(mode=0o700, exist_ok=True)
+        _write(daemon / "cgroup.procs", f"{os.getpid()}\n")
+        _write(self._service / "cgroup.subtree_control", "+cpu +memory +pids\n")
         self._jobs = self._service / "liltweak-jobs"
         self._jobs.mkdir(mode=0o700, exist_ok=True)
+        _write(self._jobs / "cgroup.subtree_control", "+cpu +memory +pids\n")
 
     def create(self, execution_id: str) -> CgroupJob:
         if not _EXECUTION_ID.fullmatch(execution_id):
