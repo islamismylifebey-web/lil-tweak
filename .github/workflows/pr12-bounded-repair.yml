@@ -11,7 +11,7 @@ permissions:
 jobs:
   package-source:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       UV_CACHE_DIR: /tmp/liltweak-uv-cache
       UV_NO_PROGRESS: "1"
@@ -36,8 +36,8 @@ jobs:
           set -Eeuo pipefail
           test "$GITHUB_REPOSITORY" = "islamismylifebey-web/lil-tweak"
           test "$GITHUB_REF" = "refs/heads/feature/tweak-private-runner-control-plane-20260901"
-          test "$(git rev-parse HEAD^)" = "fb5065574f27c2ad081ffb9b30c47348c95bae74"
-          test "$(git log -1 --pretty=%s)" = "chore: package exact PR 12 source"
+          test "$(git rev-parse HEAD^)" = "c08a0aa482ec5582c20465346af0c4d3f54307f1"
+          test "$(git log -1 --pretty=%s)" = "chore: package exact PR 12 source toolchain"
           test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = ".github/workflows/pr12-bounded-repair.yml"
 
       - name: Set up Python
@@ -63,23 +63,32 @@ jobs:
           uv sync --check --offline --group dev --python 3.12.13
           npm ci --prefix cloudflare/runner-control-plane
 
-      - name: Create credential-free exact-tree archive
+      - name: Create credential-free exact-tree and toolchain archive
         shell: bash
         run: |
           set -Eeuo pipefail
           git config --local --unset-all http.https://github.com/.extraheader || true
           git config --local --get-regexp 'http\..*extraheader' && exit 1 || true
-          tar -czf "$RUNNER_TEMP/pr12-exact-source.tgz" \
+          staging="$RUNNER_TEMP/pr12-handoff"
+          rm -rf "$staging"
+          mkdir -p "$staging/source" "$staging/toolchain"
+          tar -cf - \
             --exclude='.git/config' \
             --exclude='.git/logs' \
             --exclude='.git/hooks' \
-            .
-          test -s "$RUNNER_TEMP/pr12-exact-source.tgz"
+            . | tar -xf - -C "$staging/source"
+          cp -a /opt/hostedtoolcache/Python/3.12.13/x64 \
+            "$staging/toolchain/python-3.12.13"
+          cp "$(command -v uv)" "$staging/toolchain/uv-0.11.33"
+          printf '%s\n' "$(python --version 2>&1)" > "$staging/toolchain/python-version.txt"
+          printf '%s\n' "$(uv --version)" > "$staging/toolchain/uv-version.txt"
+          tar -czf "$RUNNER_TEMP/pr12-exact-source-toolchain.tgz" -C "$staging" .
+          test -s "$RUNNER_TEMP/pr12-exact-source-toolchain.tgz"
 
-      - name: Upload exact source and locked environments
+      - name: Upload exact source, locked environments, and toolchain
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: pr12-exact-source-${{ github.run_id }}
-          path: ${{ runner.temp }}/pr12-exact-source.tgz
+          name: pr12-exact-source-toolchain-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr12-exact-source-toolchain.tgz
           if-no-files-found: error
           retention-days: 1
