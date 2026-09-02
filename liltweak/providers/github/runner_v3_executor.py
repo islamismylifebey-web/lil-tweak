@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -95,12 +96,8 @@ def _git(
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RunnerV3ExecutionError("Runner V3 Git inspection failed") from exc
-    if (
-        check
-        and (
-            result.returncode != 0
-            or len(result.stdout) + len(result.stderr) > _MAX_GIT_OUTPUT
-        )
+    if check and (
+        result.returncode != 0 or len(result.stdout) + len(result.stderr) > _MAX_GIT_OUTPUT
     ):
         raise RunnerV3ExecutionError("Runner V3 Git inspection failed")
     return result.stdout
@@ -136,17 +133,13 @@ def _status_entries(workspace: Path) -> tuple[tuple[str, str], ...]:
         try:
             record = records[index].decode("utf-8", errors="strict")
         except UnicodeDecodeError as exc:
-            raise RunnerV3ExecutionError(
-                "Runner V3 workspace contains a non-UTF-8 path"
-            ) from exc
+            raise RunnerV3ExecutionError("Runner V3 workspace contains a non-UTF-8 path") from exc
         if len(record) < 4 or record[2] != " ":
             raise RunnerV3ExecutionError("Runner V3 Git status is malformed")
         code = record[:2]
         path = record[3:]
         if "R" in code or "C" in code:
-            raise RunnerV3ExecutionError(
-                "Runner V3 does not accept runtime renames or copies"
-            )
+            raise RunnerV3ExecutionError("Runner V3 does not accept runtime renames or copies")
         _safe_path(path)
         entries.append((code, path))
         index += 1
@@ -167,25 +160,17 @@ def _assert_regular_target(workspace: Path, relative: str) -> None:
             continue
         metadata = cursor.lstat()
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-            raise RunnerV3ExecutionError(
-                "Runner V3 patch target has an unsafe parent"
-            )
+            raise RunnerV3ExecutionError("Runner V3 patch target has an unsafe parent")
     target = workspace / relative
     if target.is_symlink():
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch cannot target a symlink or gitlink"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch cannot target a symlink or gitlink")
     if target.exists() and not stat.S_ISREG(target.lstat().st_mode):
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch target must be a regular file"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch target must be a regular file")
     tracked = _git_text(workspace, "ls-files", "-s", "--", relative)
     if tracked:
         mode = tracked.split(maxsplit=1)[0]
         if mode in {"120000", "160000"}:
-            raise RunnerV3ExecutionError(
-                "Runner V3 patch cannot target a symlink or gitlink"
-            )
+            raise RunnerV3ExecutionError("Runner V3 patch cannot target a symlink or gitlink")
 
 
 def _parse_patch_paths(text: str) -> tuple[str, ...]:
@@ -210,17 +195,11 @@ def _parse_patch_paths(text: str) -> tuple[str, ...]:
                 "Runner V3 patch cannot rename, copy, change mode, or contain binary data"
             )
         if line.startswith(("new file mode 120000", "deleted file mode 120000")):
-            raise RunnerV3ExecutionError(
-                "Runner V3 patch cannot create a symlink or gitlink"
-            )
+            raise RunnerV3ExecutionError("Runner V3 patch cannot create a symlink or gitlink")
         if line.startswith(("new file mode 160000", "deleted file mode 160000")):
-            raise RunnerV3ExecutionError(
-                "Runner V3 patch cannot create a symlink or gitlink"
-            )
+            raise RunnerV3ExecutionError("Runner V3 patch cannot create a symlink or gitlink")
         if line.startswith("index ") and line.endswith((" 120000", " 160000")):
-            raise RunnerV3ExecutionError(
-                "Runner V3 patch cannot create a symlink or gitlink"
-            )
+            raise RunnerV3ExecutionError("Runner V3 patch cannot create a symlink or gitlink")
         if line.startswith("diff --git "):
             in_hunk = False
             fields = line.split(" ")
@@ -232,9 +211,7 @@ def _parse_patch_paths(text: str) -> tuple[str, ...]:
                 or '"' in line
                 or "\t" in line
             ):
-                raise RunnerV3ExecutionError(
-                    "Runner V3 patch has an unsafe diff header"
-                )
+                raise RunnerV3ExecutionError("Runner V3 patch has an unsafe diff header")
             path = fields[2][2:]
             _safe_path(path)
             paths.append(path)
@@ -252,20 +229,14 @@ def _parse_patch_paths(text: str) -> tuple[str, ...]:
                 or "\t" in marker
                 or " " in marker
             ):
-                raise RunnerV3ExecutionError(
-                    "Runner V3 patch has an unsafe file marker"
-                )
+                raise RunnerV3ExecutionError("Runner V3 patch has an unsafe file marker")
             path = marker[2:]
             _safe_path(path)
             file_markers.append(path)
     if not paths or len(set(paths)) != len(paths):
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch must contain unique normal file diffs"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch must contain unique normal file diffs")
     if any(path not in paths for path in file_markers):
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch file markers do not match its diff headers"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch file markers do not match its diff headers")
     return tuple(paths)
 
 
@@ -278,9 +249,7 @@ def _check_patch(
         return ()
     paths = _parse_patch_paths(patch.text)
     if set(paths) != set(patch.authorized_paths):
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch touched paths do not match authorized paths"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch touched paths do not match authorized paths")
     for path in paths:
         _assert_regular_target(workspace, path)
     _git(
@@ -308,24 +277,18 @@ def _apply_patch(workspace: Path, manifest: RunnerV3JobManifest) -> None:
     for path in patch.authorized_paths:
         _assert_regular_target(workspace, path)
     if set(_changed_paths(workspace)) != set(patch.authorized_paths):
-        raise RunnerV3ExecutionError(
-            "Runner V3 applied patch does not match authorized paths"
-        )
+        raise RunnerV3ExecutionError("Runner V3 applied patch does not match authorized paths")
 
 
 def _path_fingerprint(workspace: Path, relative: str) -> str:
     target = workspace / relative
     if target.is_symlink():
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch produced a symlink or gitlink"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch produced a symlink or gitlink")
     if not target.exists():
         return hashlib.sha256(b"deleted").hexdigest()
     metadata = target.lstat()
     if not stat.S_ISREG(metadata.st_mode):
-        raise RunnerV3ExecutionError(
-            "Runner V3 patch produced a non-regular target"
-        )
+        raise RunnerV3ExecutionError("Runner V3 patch produced a non-regular target")
     digest = hashlib.sha256()
     digest.update(f"{stat.S_IMODE(metadata.st_mode):o}\0{metadata.st_size}\0".encode())
     with target.open("rb") as stream:
@@ -351,9 +314,7 @@ def _actual_patch(workspace: Path, entries: tuple[tuple[str, str], ...]) -> byte
     for path in untracked:
         metadata = (workspace / path).lstat()
         if metadata.st_size > MAX_RUNNER_V3_PATCH_BYTES:
-            raise RunnerV3ExecutionError(
-                "Runner V3 changed file exceeds the evidence patch limit"
-            )
+            raise RunnerV3ExecutionError("Runner V3 changed file exceeds the evidence patch limit")
     if untracked:
         _git(workspace, "add", "-N", "--", *untracked)
     try:
@@ -370,13 +331,9 @@ def _actual_patch(workspace: Path, entries: tuple[tuple[str, str], ...]) -> byte
         if untracked:
             _git(workspace, "reset", "-q", "--", *untracked)
     if not patch:
-        raise RunnerV3ExecutionError(
-            "Runner V3 could not preserve changed-workspace evidence"
-        )
+        raise RunnerV3ExecutionError("Runner V3 could not preserve changed-workspace evidence")
     if len(patch) + 1 > MAX_RUNNER_V3_PATCH_BYTES:
-        raise RunnerV3ExecutionError(
-            "Runner V3 candidate patch exceeds the evidence limit"
-        )
+        raise RunnerV3ExecutionError("Runner V3 candidate patch exceeds the evidence limit")
     return patch.rstrip(b"\n") + b"\n"
 
 
@@ -392,9 +349,7 @@ def _host_capacity(workspace: Path) -> RunnerV3HostCapacity:
     if memory_mb < 128:
         try:
             memory_mb = (
-                int(os.sysconf("SC_PHYS_PAGES"))
-                * int(os.sysconf("SC_PAGE_SIZE"))
-                // 1_048_576
+                int(os.sysconf("SC_PHYS_PAGES")) * int(os.sysconf("SC_PAGE_SIZE")) // 1_048_576
             )
         except (OSError, ValueError):
             memory_mb = 128
@@ -402,11 +357,7 @@ def _host_capacity(workspace: Path) -> RunnerV3HostCapacity:
     runner_os = os.environ.get("RUNNER_OS") or platform.system() or "unknown"
     runner_arch = os.environ.get("RUNNER_ARCH") or platform.machine() or "unknown"
     runner_name = os.environ.get("RUNNER_NAME") or "local-runner-v3"
-    runner_label = (
-        os.environ.get("RUNNER_V3_LABEL")
-        or os.environ.get("ImageOS")
-        or "local"
-    )
+    runner_label = os.environ.get("RUNNER_V3_LABEL") or os.environ.get("IMAGEOS") or "local"
     return RunnerV3HostCapacity(
         cpu_count=max(1, os.cpu_count() or 1),
         memory_mb=max(128, memory_mb),
@@ -473,10 +424,8 @@ def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
-        try:
+        with suppress(ProcessLookupError):
             process.kill()
-        except ProcessLookupError:
-            pass
 
 
 def _fixed_command(
@@ -527,9 +476,7 @@ def _fixed_command(
     try:
         return commands[action]
     except KeyError as exc:
-        raise RunnerV3ExecutionError(
-            "Runner V3 action has no fixed executable mapping"
-        ) from exc
+        raise RunnerV3ExecutionError("Runner V3 action has no fixed executable mapping") from exc
 
 
 def _run_process(
@@ -576,9 +523,7 @@ def _run_process(
                 cancelled = cancellation_requested()
             except Exception as exc:
                 _kill_process_group(process)
-                raise RunnerV3ExecutionError(
-                    "Runner V3 cancellation check failed"
-                ) from exc
+                raise RunnerV3ExecutionError("Runner V3 cancellation check failed") from exc
             if cancelled:
                 forced_exit = 130
                 _kill_process_group(process)
@@ -622,9 +567,7 @@ def _run_process(
         exit_code = forced_exit
         if exit_code is None:
             exit_code = (
-                min(255, 128 + abs(return_code))
-                if return_code < 0
-                else min(255, return_code)
+                min(255, 128 + abs(return_code)) if return_code < 0 else min(255, return_code)
             )
         return _CommandResult(
             exit_code=exit_code,
@@ -642,17 +585,13 @@ def _write_new(path: Path, content: bytes) -> None:
     try:
         descriptor = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise RunnerV3ExecutionError(
-            "Runner V3 evidence path is not safely writable"
-        ) from exc
+        raise RunnerV3ExecutionError("Runner V3 evidence path is not safely writable") from exc
     try:
         view = memoryview(content)
         while view:
             written = os.write(descriptor, view)
             if written <= 0:
-                raise RunnerV3ExecutionError(
-                    "Runner V3 evidence write was incomplete"
-                )
+                raise RunnerV3ExecutionError("Runner V3 evidence write was incomplete")
             view = view[written:]
         os.fsync(descriptor)
     finally:
@@ -660,7 +599,7 @@ def _write_new(path: Path, content: bytes) -> None:
 
 
 def _write_json(path: Path, value: Mapping[str, object]) -> None:
-    _write_new(path, f"{canonical_json(value)}\n".encode("utf-8"))
+    _write_new(path, f"{canonical_json(value)}\n".encode())
 
 
 def _step_receipt(
@@ -711,9 +650,7 @@ class RunnerV3Executor:
     ) -> None:
         if poll_interval_seconds <= 0 or poll_interval_seconds > 1:
             raise ValueError("Runner V3 poll interval must be between zero and one")
-        self._clock: Callable[[], datetime] = clock or (
-            lambda: datetime.now(UTC)
-        )
+        self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(UTC))
         self._poll_interval_seconds: float = poll_interval_seconds
 
     def execute(
@@ -731,17 +668,10 @@ class RunnerV3Executor:
             output_directory,
         )
         source_commit, source_tree = _source_identity(workspace)
-        if (
-            source_commit != validated.source_commit
-            or source_tree != validated.source_tree
-        ):
-            raise RunnerV3ExecutionError(
-                "Runner V3 source does not match the exact manifest"
-            )
+        if source_commit != validated.source_commit or source_tree != validated.source_tree:
+            raise RunnerV3ExecutionError("Runner V3 source does not match the exact manifest")
         if _changed_paths(workspace):
-            raise RunnerV3ExecutionError(
-                "Runner V3 source workspace is not initially clean"
-            )
+            raise RunnerV3ExecutionError("Runner V3 source workspace is not initially clean")
         patch_paths = _check_patch(workspace, validated)
         capacity = _host_capacity(workspace)
 
@@ -857,53 +787,33 @@ class RunnerV3Executor:
         manifest: RunnerV3JobManifest,
     ) -> RunnerV3JobManifest:
         if not isinstance(manifest, RunnerV3JobManifest):
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest has an invalid schema"
-            )
+            raise RunnerV3ExecutionError("Runner V3 manifest has an invalid schema")
         try:
-            validated = RunnerV3JobManifest.model_validate(
-                manifest.model_dump(mode="python")
-            )
+            validated = RunnerV3JobManifest.model_validate(manifest.model_dump(mode="python"))
         except ValidationError as exc:
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest digest or schema is invalid"
-            ) from exc
+            raise RunnerV3ExecutionError("Runner V3 manifest digest or schema is invalid") from exc
         now = self._clock()
         if now.tzinfo is None or now.utcoffset() is None:
-            raise RunnerV3ExecutionError(
-                "Runner V3 executor clock must be timezone-aware"
-            )
+            raise RunnerV3ExecutionError("Runner V3 executor clock must be timezone-aware")
         if now < validated.issued_at or now >= validated.expires_at:
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest is not within its validity window"
-            )
+            raise RunnerV3ExecutionError("Runner V3 manifest is not within its validity window")
         if validated.actions[0] is not RunnerV3Action.INSPECT_SOURCE:
-            raise RunnerV3ExecutionError(
-                "Runner V3 must execute inspect_source first"
-            )
+            raise RunnerV3ExecutionError("Runner V3 must execute inspect_source first")
         return validated
 
     @staticmethod
     def _validate_workspace(workspace: Path) -> Path:
         if workspace.is_symlink():
-            raise RunnerV3ExecutionError(
-                "Runner V3 workspace cannot be a symlink"
-            )
+            raise RunnerV3ExecutionError("Runner V3 workspace cannot be a symlink")
         try:
             resolved = workspace.resolve(strict=True)
         except OSError as exc:
-            raise RunnerV3ExecutionError(
-                "Runner V3 workspace does not exist"
-            ) from exc
+            raise RunnerV3ExecutionError("Runner V3 workspace does not exist") from exc
         if not resolved.is_dir():
-            raise RunnerV3ExecutionError(
-                "Runner V3 workspace must be a directory"
-            )
+            raise RunnerV3ExecutionError("Runner V3 workspace must be a directory")
         inside = _git_text(resolved, "rev-parse", "--is-inside-work-tree")
         if inside != "true":
-            raise RunnerV3ExecutionError(
-                "Runner V3 workspace is not a Git checkout"
-            )
+            raise RunnerV3ExecutionError("Runner V3 workspace is not a Git checkout")
         return resolved
 
     @staticmethod
@@ -912,9 +822,7 @@ class RunnerV3Executor:
         output_directory: Path,
     ) -> Path:
         if output_directory.exists() or output_directory.is_symlink():
-            raise RunnerV3ExecutionError(
-                "Runner V3 output directory must not already exist"
-            )
+            raise RunnerV3ExecutionError("Runner V3 output directory must not already exist")
         resolved = output_directory.resolve(strict=False)
         if resolved == workspace or workspace in resolved.parents:
             raise RunnerV3ExecutionError(
@@ -936,11 +844,7 @@ class RunnerV3Executor:
             return _CommandResult(124, b"", b"Runner V3 execution timed out\n")
         commit, tree = _source_identity(workspace)
         changed = _changed_paths(workspace)
-        matched = (
-            commit == manifest.source_commit
-            and tree == manifest.source_tree
-            and not changed
-        )
+        matched = commit == manifest.source_commit and tree == manifest.source_tree and not changed
         payload = {
             "source_commit": commit,
             "source_tree": tree,
@@ -949,7 +853,7 @@ class RunnerV3Executor:
         }
         return _CommandResult(
             0 if matched else 70,
-            f"{canonical_json(payload)}\n".encode("utf-8"),
+            f"{canonical_json(payload)}\n".encode(),
             b"" if matched else b"Runner V3 exact source check failed\n",
         )
 
@@ -965,10 +869,13 @@ class RunnerV3Executor:
             return False
         if set(_changed_paths(workspace)) != set(patch.authorized_paths):
             return False
-        return _patch_fingerprints(
-            workspace,
-            tuple(sorted(patch.authorized_paths)),
-        ) == patch_fingerprints
+        return (
+            _patch_fingerprints(
+                workspace,
+                tuple(sorted(patch.authorized_paths)),
+            )
+            == patch_fingerprints
+        )
 
     def _git_diff(
         self,
@@ -991,9 +898,7 @@ class RunnerV3Executor:
         ):
             patch_contract = manifest.patch
             if patch_contract is None:
-                raise RunnerV3ExecutionError(
-                    "Runner V3 patch evidence contract is missing"
-                )
+                raise RunnerV3ExecutionError("Runner V3 patch evidence contract is missing")
             patch = patch_contract.text.encode("utf-8")
             return self._bounded_internal_output(
                 manifest,
@@ -1090,9 +995,7 @@ class RunnerV3Executor:
         ):
             patch_contract = manifest.patch
             if patch_contract is None:
-                raise RunnerV3ExecutionError(
-                    "Runner V3 patch evidence contract is missing"
-                )
+                raise RunnerV3ExecutionError("Runner V3 patch evidence contract is missing")
             return patch_contract.text.encode("utf-8")
         return _actual_patch(workspace, entries)
 
@@ -1106,10 +1009,7 @@ class RunnerV3Executor:
         patch_fingerprints: dict[str, str] | None,
         workspace: Path,
     ) -> bool:
-        if (
-            final_commit != manifest.source_commit
-            or final_tree != manifest.source_tree
-        ):
+        if final_commit != manifest.source_commit or final_tree != manifest.source_tree:
             return False
         if manifest.workspace_mode is RunnerV3WorkspaceMode.READ_ONLY:
             return not changed_paths
@@ -1118,10 +1018,13 @@ class RunnerV3Executor:
             return False
         if set(changed_paths) != set(patch.authorized_paths):
             return False
-        return _patch_fingerprints(
-            workspace,
-            tuple(sorted(patch.authorized_paths)),
-        ) == patch_fingerprints
+        return (
+            _patch_fingerprints(
+                workspace,
+                tuple(sorted(patch.authorized_paths)),
+            )
+            == patch_fingerprints
+        )
 
     @staticmethod
     def _outcome(

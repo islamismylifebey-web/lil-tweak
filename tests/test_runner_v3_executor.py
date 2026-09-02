@@ -35,9 +35,7 @@ def _git(repository: Path, *arguments: str, check: bool = True) -> str:
         text=True,
     )
     if check and result.returncode != 0:
-        raise AssertionError(
-            f"git {' '.join(arguments)} failed: {result.stdout}\n{result.stderr}"
-        )
+        raise AssertionError(f"git {' '.join(arguments)} failed: {result.stdout}\n{result.stderr}")
     return result.stdout.strip()
 
 
@@ -51,9 +49,7 @@ def _repository(
     tmp_path: Path,
     *,
     sample_test: str = (
-        "from liltweak.value import VALUE\n\n"
-        "def test_value() -> None:\n"
-        "    assert VALUE == 1\n"
+        "from liltweak.value import VALUE\n\ndef test_value() -> None:\n    assert VALUE == 1\n"
     ),
 ) -> Path:
     repository = tmp_path / "repository"
@@ -120,8 +116,7 @@ def _patch(
     authorized_paths: tuple[str, ...] | None = None,
 ) -> RunnerV3Patch:
     originals = {
-        relative: (repository / relative).read_text(encoding="utf-8")
-        for relative in changes
+        relative: (repository / relative).read_text(encoding="utf-8") for relative in changes
     }
     for relative, content in changes.items():
         _write(repository, relative, content)
@@ -201,11 +196,7 @@ def test_source_mismatch_fails_before_any_action(
 ) -> None:
     repository = _repository(tmp_path)
     output = tmp_path / "evidence"
-    values = (
-        {"source_commit": "0" * 40}
-        if binding == "commit"
-        else {"source_tree": "0" * 40}
-    )
+    values = {"source_commit": "0" * 40} if binding == "commit" else {"source_tree": "0" * 40}
     manifest = _manifest(repository, **values)
 
     with pytest.raises(RunnerV3ExecutionError, match="source"):
@@ -293,7 +284,7 @@ index 0000000..257cc56
         patch=patch,
     )
 
-    with pytest.raises(RunnerV3ExecutionError, match="symlink|gitlink"):
+    with pytest.raises(RunnerV3ExecutionError, match=r"symlink|gitlink"):
         _executor().execute(
             manifest,
             workspace=repository,
@@ -304,11 +295,9 @@ index 0000000..257cc56
 
 def test_executor_revalidates_forged_manifest_digest(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
-    manifest = _manifest(repository).model_copy(
-        update={"manifest_digest": "0" * 64}
-    )
+    manifest = _manifest(repository).model_copy(update={"manifest_digest": "0" * 64})
 
-    with pytest.raises(RunnerV3ExecutionError, match="digest|schema"):
+    with pytest.raises(RunnerV3ExecutionError, match=r"digest|schema"):
         _executor().execute(
             manifest,
             workspace=repository,
@@ -324,7 +313,7 @@ def test_executor_requires_source_inspection_as_first_action(tmp_path: Path) -> 
         actions=(RunnerV3Action.GIT_DIFF, RunnerV3Action.INSPECT_SOURCE),
     )
 
-    with pytest.raises(RunnerV3ExecutionError, match="inspect_source.*first"):
+    with pytest.raises(RunnerV3ExecutionError, match=r"inspect_source.*first"):
         _executor().execute(
             manifest,
             workspace=repository,
@@ -368,11 +357,7 @@ def test_failing_step_short_circuits_later_actions(tmp_path: Path) -> None:
 def test_global_timeout_kills_the_process_group(tmp_path: Path) -> None:
     repository = _repository(
         tmp_path,
-        sample_test=(
-            "import time\n\n"
-            "def test_slow() -> None:\n"
-            "    time.sleep(10)\n"
-        ),
+        sample_test=("import time\n\ndef test_slow() -> None:\n    time.sleep(10)\n"),
     )
     manifest = _manifest(
         repository,
@@ -395,11 +380,7 @@ def test_global_timeout_kills_the_process_group(tmp_path: Path) -> None:
 def test_cancellation_kills_the_process_group(tmp_path: Path) -> None:
     repository = _repository(
         tmp_path,
-        sample_test=(
-            "import time\n\n"
-            "def test_slow() -> None:\n"
-            "    time.sleep(10)\n"
-        ),
+        sample_test=("import time\n\ndef test_slow() -> None:\n    time.sleep(10)\n"),
     )
     manifest = _manifest(
         repository,
@@ -422,11 +403,7 @@ def test_cancellation_kills_the_process_group(tmp_path: Path) -> None:
 def test_output_overflow_terminates_and_marks_step_truncated(tmp_path: Path) -> None:
     repository = _repository(
         tmp_path,
-        sample_test=(
-            "def test_noisy() -> None:\n"
-            "    print('x' * 100_000)\n"
-            "    assert False\n"
-        ),
+        sample_test=("def test_noisy() -> None:\n    print('x' * 100_000)\n    assert False\n"),
     )
     manifest = _manifest(
         repository,
@@ -556,7 +533,4 @@ def test_cli_loads_manifest_and_writes_receipt(
     assert summary["outcome"] == "succeeded"
     assert summary["receipt_digest"]
     assert (output / "runner-v3-receipt.json").is_file()
-    assert not any(
-        key in os.environ
-        for key in ("RUNNER_V3_MANIFEST_JSON", "RUNNER_V3_PATCH_TEXT")
-    )
+    assert not any(key in os.environ for key in ("RUNNER_V3_MANIFEST_JSON", "RUNNER_V3_PATCH_TEXT"))

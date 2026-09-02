@@ -27,27 +27,21 @@ def _reject_duplicate_keys(
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest contains a duplicate JSON key"
-            )
+            raise RunnerV3ExecutionError("Runner V3 manifest contains a duplicate JSON key")
         result[key] = value
     return result
 
 
 def _read_manifest(path: Path) -> RunnerV3JobManifest:
     if path.is_symlink():
-        raise RunnerV3ExecutionError(
-            "Runner V3 manifest path cannot be a symlink"
-        )
+        raise RunnerV3ExecutionError("Runner V3 manifest path cannot be a symlink")
     try:
         descriptor = os.open(
             path,
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
         )
     except OSError as exc:
-        raise RunnerV3ExecutionError(
-            "Runner V3 manifest file could not be opened"
-        ) from exc
+        raise RunnerV3ExecutionError("Runner V3 manifest file could not be opened") from exc
     try:
         before = os.fstat(descriptor)
         if (
@@ -56,9 +50,7 @@ def _read_manifest(path: Path) -> RunnerV3JobManifest:
             or before.st_size > _MAX_MANIFEST_BYTES
             or before.st_nlink != 1
         ):
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest file metadata is invalid"
-            )
+            raise RunnerV3ExecutionError("Runner V3 manifest file metadata is invalid")
         raw = os.read(descriptor, _MAX_MANIFEST_BYTES + 1)
         after = os.fstat(descriptor)
         if (
@@ -68,9 +60,7 @@ def _read_manifest(path: Path) -> RunnerV3JobManifest:
             or after.st_size != before.st_size
             or after.st_nlink != 1
         ):
-            raise RunnerV3ExecutionError(
-                "Runner V3 manifest changed while being read"
-            )
+            raise RunnerV3ExecutionError("Runner V3 manifest changed while being read")
     finally:
         os.close(descriptor)
     try:
@@ -80,9 +70,7 @@ def _read_manifest(path: Path) -> RunnerV3JobManifest:
         )
         return RunnerV3JobManifest.model_validate(value)
     except (UnicodeDecodeError, json.JSONDecodeError, ValidationError) as exc:
-        raise RunnerV3ExecutionError(
-            "Runner V3 manifest JSON or digest is invalid"
-        ) from exc
+        raise RunnerV3ExecutionError("Runner V3 manifest JSON or digest is invalid") from exc
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -105,10 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) -> None:
         cancellation["requested"] = True
 
-    previous = {
-        signum: signal.getsignal(signum)
-        for signum in (signal.SIGINT, signal.SIGTERM)
-    }
+    previous = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
     for signum in previous:
         signal.signal(signum, request_cancellation)
     try:
