@@ -54,6 +54,12 @@ docker rm "$container_id" >/dev/null
 container_id=''
 mkdir -p "$runtime_tmp/usr/bin" "$runtime_tmp/opt/liltweak-runtime"
 ln -sfn /usr/local/bin/python3 "$runtime_tmp/usr/bin/python3"
+resolver_source=/etc/resolv.conf
+if [[ -f /run/systemd/resolve/resolv.conf ]]; then
+  resolver_source=/run/systemd/resolve/resolv.conf
+fi
+rm -f "$runtime_tmp/etc/resolv.conf"
+install -o root -g root -m 0644 "$resolver_source" "$runtime_tmp/etc/resolv.conf"
 mount --bind /opt/liltweak-runtime "$runtime_tmp/opt/liltweak-runtime"
 chroot "$runtime_tmp" /bin/sh -ceu 'apt-get update; apt-get install -y --no-install-recommends ca-certificates git; rm -rf /var/lib/apt/lists/*; python3 -m venv /opt/liltweak-runtime/venv'
 umount "$runtime_tmp/opt/liltweak-runtime"
