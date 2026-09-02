@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "4e5cc8a553941e2e79dc574f40652e4b724184bea4b969b222c17cfb84bacd35",
+  "manifest_scope_digest": "7b7c48fc425a3d17a487f0dba30f11c6e6b3cf0bbc1e91c8bd77cb65284e60ba",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 369,
@@ -106,8 +106,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "386a2ae6268bffed00539ff3b08d5ce078d97b46279593edd920e28f9be061f5",
-      "git_blob_sha1": "f7a1480cd7d5778e03aba52bab44b84aaef1384e",
+      "sha256": "809f8acd6624e66167559459ef3b0c9651341a5c9578f875611356ec3298f9a3",
+      "git_blob_sha1": "517942bd2ad7282a6ee0f751ee92150ed4e1ff34",
       "bytes": 2471
     },
     {
