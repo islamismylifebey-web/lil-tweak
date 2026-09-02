@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -278,7 +278,11 @@ class ContractRegistryStore:
     def append(self, kind: str, subject_id: str, payload: object) -> None:
         if kind not in self._KINDS:
             raise ContractRegistryError("unknown registry record kind")
-        value = asdict(payload) if hasattr(payload, "__dataclass_fields__") else payload
+        value = (
+            asdict(payload)
+            if is_dataclass(payload) and not isinstance(payload, type)
+            else payload
+        )
         self._connection.execute(
             "INSERT INTO contract_registry_events"
             "(kind, subject_id, payload, created_at) VALUES(?,?,?,?)",

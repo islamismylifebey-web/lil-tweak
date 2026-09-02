@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "452852b1b0c2ebd306ad0cd07cb3dfb6c80595a4eb2b54047071fafd1cec409b",
+  "manifest_scope_digest": "c0687b6ed2c699b927a101bf44a73204aa9e23de3398731e96d993805be7fc8d",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 309,
@@ -954,9 +954,9 @@
       "relative_path": "liltweak/contract_registry.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a1a5455a37fa4d924f49ae5b9c6077c27fde12b391308b34bd312a2c5a26010b",
-      "git_blob_sha1": "9d38c0b203692343ccbe3e4168f71dea1afc5845",
-      "bytes": 22488
+      "sha256": "6344d1fc816d9eb24c22164ac057336ba6d8ce534b9444c821c124fcd620ef75",
+      "git_blob_sha1": "1fb6e8da0ba2a3b69db9ca0778f40d391f728f6a",
+      "bytes": 22565
     },
     {
       "relative_path": "liltweak/costs.py",
