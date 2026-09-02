@@ -43,13 +43,9 @@ def _git(workspace: Path, *arguments: str) -> str:
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke source inspection failed"
-        ) from exc
+        raise RunnerV3SmokeManifestError("Runner V3 smoke source inspection failed") from exc
     if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 128_000:
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke source inspection failed"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke source inspection failed")
     return result.stdout.strip()
 
 
@@ -61,39 +57,25 @@ def build_smoke_manifest(
     """Bind a no-write smoke job to one exact clean Git checkout."""
 
     if workspace.is_symlink():
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke workspace cannot be a symlink"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke workspace cannot be a symlink")
     try:
         resolved = workspace.resolve(strict=True)
     except OSError as exc:
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke workspace does not exist"
-        ) from exc
+        raise RunnerV3SmokeManifestError("Runner V3 smoke workspace does not exist") from exc
     if not resolved.is_dir():
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke workspace must be a directory"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke workspace must be a directory")
     if _git(resolved, "rev-parse", "--is-inside-work-tree") != "true":
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke workspace is not a Git checkout"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke workspace is not a Git checkout")
     commit = _git(resolved, "rev-parse", "HEAD")
     tree = _git(resolved, "rev-parse", "HEAD^{tree}")
     if len(commit) != 40 or len(tree) != 40:
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke source identity is invalid"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke source identity is invalid")
     if _git(resolved, "status", "--porcelain=v1", "--untracked-files=all"):
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke workspace must be clean"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke workspace must be clean")
 
     issued_at = now or datetime.now(UTC)
     if issued_at.tzinfo is None or issued_at.utcoffset() is None:
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke issuance time must be timezone-aware"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke issuance time must be timezone-aware")
     expires_at = issued_at + timedelta(minutes=15)
     return RunnerV3JobManifest.issue(
         execution_id=f"runner_v3_smoke_{commit[:16]}",
@@ -126,9 +108,7 @@ def build_smoke_manifest(
 
 def _write_manifest(path: Path, manifest: RunnerV3JobManifest) -> None:
     if path.exists() or path.is_symlink():
-        raise RunnerV3SmokeManifestError(
-            "Runner V3 smoke manifest output already exists"
-        )
+        raise RunnerV3SmokeManifestError("Runner V3 smoke manifest output already exists")
     path.parent.mkdir(parents=True, exist_ok=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_NOFOLLOW", 0)
@@ -139,16 +119,12 @@ def _write_manifest(path: Path, manifest: RunnerV3JobManifest) -> None:
             "Runner V3 smoke manifest output is not safely writable"
         ) from exc
     try:
-        payload = (
-            f"{canonical_json(manifest.model_dump(mode='json'))}\n".encode()
-        )
+        payload = f"{canonical_json(manifest.model_dump(mode='json'))}\n".encode()
         view = memoryview(payload)
         while view:
             written = os.write(descriptor, view)
             if written <= 0:
-                raise RunnerV3SmokeManifestError(
-                    "Runner V3 smoke manifest write was incomplete"
-                )
+                raise RunnerV3SmokeManifestError("Runner V3 smoke manifest write was incomplete")
             view = view[written:]
         os.fsync(descriptor)
     finally:

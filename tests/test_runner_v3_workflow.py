@@ -100,9 +100,7 @@ def test_runner_v3_workflow_pins_checkout_toolchain_and_artifacts() -> None:
     assert "$RUNNER_TEMP/runner-v3-output" in initialize["run"]
     assert "$RUNNER_TEMP/runner-v3-manifest.json" in initialize["run"]
     assert "$GITHUB_ENV" in initialize["run"]
-    assert checkout["uses"] == (
-        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
-    )
+    assert checkout["uses"] == ("actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683")
     assert checkout["with"]["persist-credentials"] is False
     assert checkout["with"]["fetch-depth"] == 1
     assert checkout["with"]["clean"] is True
@@ -110,18 +108,12 @@ def test_runner_v3_workflow_pins_checkout_toolchain_and_artifacts() -> None:
     assert checkout["with"]["submodules"] is False
     assert "expected_commit" in checkout["with"]["ref"]
     assert "pull_request.head.sha" in checkout["with"]["ref"]
-    assert setup_python["uses"] == (
-        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
-    )
+    assert setup_python["uses"] == ("actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065")
     assert setup_python["with"]["python-version"] == "3.12.13"
-    assert setup_uv["uses"] == (
-        "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9"
-    )
+    assert setup_uv["uses"] == ("astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9")
     assert setup_uv["with"]["version"] == "0.11.33"
     assert setup_uv["with"]["enable-cache"] is False
-    assert upload["uses"] == (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    )
+    assert upload["uses"] == ("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02")
     assert upload["with"]["if-no-files-found"] == "error"
     assert upload["with"]["retention-days"] == 1
     assert upload["with"]["include-hidden-files"] is False
@@ -164,9 +156,7 @@ def test_runner_v3_workflow_has_no_external_or_write_control_plane() -> None:
     assert "60_000" in WORKFLOW_TEXT
     assert "manifest_digest" in WORKFLOW_TEXT
     assert "acknowledge_builder_only" in WORKFLOW_TEXT
-    run_blocks = "\n".join(
-        str(step.get("run", "")) for step in _steps(_workflow())
-    )
+    run_blocks = "\n".join(str(step.get("run", "")) for step in _steps(_workflow()))
     assert "${{ inputs.manifest_base64 }}" not in run_blocks
     assert "${{ inputs.manifest_digest }}" not in run_blocks
 
