@@ -4,13 +4,15 @@ import hashlib
 import secrets
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal, Protocol, Self
+from typing import Any, Final, Literal, Protocol, Self
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr, model_validator
 
 from ...creator_contract import CreatorSchema, content_digest
 
-RUNNER_V3_PROFILE_ID = "galor-tweak-runner-v3-github-01"
+RUNNER_V3_PROFILE_ID: Final[Literal["galor-tweak-runner-v3-github-01"]] = (
+    "galor-tweak-runner-v3-github-01"
+)
 RUNNER_V3_WORKFLOW_PATH = ".github/workflows/runner-v3.yml"
 MAX_RUNNER_V3_PATCH_BYTES = 262_144
 MAX_RUNNER_V3_AUTHORIZED_PATHS = 64
@@ -159,7 +161,7 @@ class RunnerV3JobManifest(CreatorSchema):
         actions: tuple[RunnerV3Action, ...],
         patch: RunnerV3Patch | None,
     ) -> RunnerV3JobManifest:
-        values = {
+        values: dict[str, Any] = {
             "execution_id": execution_id,
             "attempt_nonce": attempt_nonce,
             "runner_profile_id": RUNNER_V3_PROFILE_ID,
@@ -295,7 +297,7 @@ class RunnerV3Receipt(CreatorSchema):
         started_at_ms: int,
         finished_at_ms: int,
     ) -> RunnerV3Receipt:
-        values = {
+        values: dict[str, Any] = {
             "execution_id": manifest.execution_id,
             "runner_profile_id": manifest.runner_profile_id,
             "repository_id": manifest.repository_id,
