@@ -368,9 +368,7 @@ class GitHubRunnerV3Provider:
         if not isinstance(candidate, RunnerV3JobManifest):
             return None, "Runner V3 manifest factory returned an invalid type"
         try:
-            manifest = RunnerV3JobManifest.model_validate(
-                candidate.model_dump(mode="python")
-            )
+            manifest = RunnerV3JobManifest.model_validate(candidate.model_dump(mode="python"))
         except ValidationError:
             return None, "Runner V3 manifest failed strict digest and schema validation"
 

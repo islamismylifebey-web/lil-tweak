@@ -101,9 +101,7 @@ class FixtureRunnerV3Client:
 
 
 def _profile(*, writable: bool = False) -> ResourceProfile:
-    workspace_policy = (
-        WorkspacePolicy.EPHEMERAL_WRITABLE if writable else WorkspacePolicy.READ_ONLY
-    )
+    workspace_policy = WorkspacePolicy.EPHEMERAL_WRITABLE if writable else WorkspacePolicy.READ_ONLY
     return ResourceProfile(
         runner_profile_id=RUNNER_V3_PROFILE_ID,
         provider=ResourceProvider.GITHUB,
@@ -144,9 +142,7 @@ def _contract_and_lease(
         required_disk_mb=4_096,
         shared_memory_required=True,
         workspace_policy=(
-            WorkspacePolicy.EPHEMERAL_WRITABLE
-            if writable
-            else WorkspacePolicy.READ_ONLY
+            WorkspacePolicy.EPHEMERAL_WRITABLE if writable else WorkspacePolicy.READ_ONLY
         ),
         source_write_required=writable,
         estimated_duration_seconds=300,
@@ -228,9 +224,7 @@ def _manifest_factory(
         timeout_seconds=contract.max_wall_clock_seconds,
         output_byte_limit=128_000,
         workspace_mode=(
-            RunnerV3WorkspaceMode.EPHEMERAL_PATCH
-            if writable
-            else RunnerV3WorkspaceMode.READ_ONLY
+            RunnerV3WorkspaceMode.EPHEMERAL_PATCH if writable else RunnerV3WorkspaceMode.READ_ONLY
         ),
         source_write_authorized=contract.source_write_authorized,
         actions=(RunnerV3Action.INSPECT_SOURCE, RunnerV3Action.GIT_DIFF),
@@ -310,9 +304,7 @@ def _mutate_contract(
     if mutation == "profile":
         return contract.model_copy(update={"runner_profile_id": "other-runner"})
     if mutation == "repository":
-        source = contract.source.model_copy(
-            update={"repository_id": "github:other/repository"}
-        )
+        source = contract.source.model_copy(update={"repository_id": "github:other/repository"})
         return contract.model_copy(update={"source": source})
     if mutation == "gpu":
         return contract.model_copy(update={"gpu_required": True})
@@ -488,9 +480,7 @@ async def test_runner_v3_provider_allows_only_authorized_ephemeral_patch_mode() 
     result = await provider.execute(contract=contract, lease=lease)
 
     assert result.status is ProviderExecutionStatus.RUNNING
-    manifest = RunnerV3JobManifest.model_validate_json(
-        client.dispatches[0]["manifest_json"]
-    )
+    manifest = RunnerV3JobManifest.model_validate_json(client.dispatches[0]["manifest_json"])
     assert manifest.workspace_mode is RunnerV3WorkspaceMode.EPHEMERAL_PATCH
     assert manifest.source_write_authorized is True
     assert manifest.patch is not None
@@ -543,9 +533,7 @@ async def test_runner_v3_status_remains_nonfinal_until_collection() -> None:
     await provider.execute(contract=contract, lease=lease)
 
     queued = await provider.status(lease.execution_id)
-    manifest = RunnerV3JobManifest.model_validate_json(
-        client.dispatches[0]["manifest_json"]
-    )
+    manifest = RunnerV3JobManifest.model_validate_json(client.dispatches[0]["manifest_json"])
     client.snapshot = _completed_snapshot(manifest)
     completed = await provider.status(lease.execution_id)
 
@@ -560,9 +548,7 @@ async def test_runner_v3_collection_returns_builder_evidence_not_verification() 
     client = FixtureRunnerV3Client()
     provider = _provider(client)
     await provider.execute(contract=contract, lease=lease)
-    manifest = RunnerV3JobManifest.model_validate_json(
-        client.dispatches[0]["manifest_json"]
-    )
+    manifest = RunnerV3JobManifest.model_validate_json(client.dispatches[0]["manifest_json"])
     client.snapshot = _completed_snapshot(manifest)
 
     result = await provider.collect(lease.execution_id)
@@ -585,9 +571,7 @@ async def test_runner_v3_collection_rejects_failed_or_mismatched_snapshot(
     client = FixtureRunnerV3Client()
     provider = _provider(client)
     await provider.execute(contract=contract, lease=lease)
-    manifest = RunnerV3JobManifest.model_validate_json(
-        client.dispatches[0]["manifest_json"]
-    )
+    manifest = RunnerV3JobManifest.model_validate_json(client.dispatches[0]["manifest_json"])
     values: dict[str, object] = {}
     if mismatch == "conclusion":
         values.update(
