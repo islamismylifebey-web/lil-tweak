@@ -11,6 +11,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -369,12 +370,39 @@ def _host_capacity(workspace: Path) -> RunnerV3HostCapacity:
     )
 
 
-def _child_environment(output_directory: Path) -> dict[str, str]:
-    home = output_directory / "home"
-    temporary = output_directory / "tmp"
-    pycache = output_directory / "pycache"
-    ruff_cache = output_directory / "ruff-cache"
-    mypy_cache = output_directory / "mypy-cache"
+def _create_runtime_directory(output_directory: Path) -> Path:
+    try:
+        runtime_directory = Path(
+            tempfile.mkdtemp(
+                prefix=".runner-v3-runtime-",
+                dir=output_directory.parent,
+            )
+        )
+        runtime_directory.chmod(0o700)
+    except OSError as exc:
+        raise RunnerV3ExecutionError("Runner V3 runtime scratch could not be created") from exc
+    return runtime_directory
+
+
+def _remove_runtime_directory(runtime_directory: Path) -> None:
+    try:
+        metadata = runtime_directory.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise RunnerV3ExecutionError("Runner V3 runtime scratch changed before cleanup")
+    try:
+        shutil.rmtree(runtime_directory)
+    except OSError as exc:
+        raise RunnerV3ExecutionError("Runner V3 runtime scratch could not be removed") from exc
+
+
+def _child_environment(runtime_directory: Path) -> dict[str, str]:
+    home = runtime_directory / "home"
+    temporary = runtime_directory / "tmp"
+    pycache = runtime_directory / "pycache"
+    ruff_cache = runtime_directory / "ruff-cache"
+    mypy_cache = runtime_directory / "mypy-cache"
     for directory in (home, temporary, pycache, ruff_cache, mypy_cache):
         directory.mkdir(mode=0o700)
     path = os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin"
@@ -679,108 +707,112 @@ class RunnerV3Executor:
         output_directory.chmod(0o700)
         steps_directory = output_directory / "steps"
         steps_directory.mkdir(mode=0o700)
-        environment = _child_environment(output_directory)
+        runtime_directory = _create_runtime_directory(output_directory)
+        try:
+            environment = _child_environment(runtime_directory)
 
-        started_at_ms = _milliseconds()
-        deadline = time.monotonic() + validated.timeout_seconds
-        receipts: list[RunnerV3StepReceipt] = []
-        patch_fingerprints: dict[str, str] | None = None
-        for index, action in enumerate(validated.actions):
-            step_started = _milliseconds()
-            if action is RunnerV3Action.INSPECT_SOURCE:
-                result = self._inspect_source(
-                    workspace,
-                    validated,
-                    deadline=deadline,
-                    cancellation_requested=cancellation_requested,
+            started_at_ms = _milliseconds()
+            deadline = time.monotonic() + validated.timeout_seconds
+            receipts: list[RunnerV3StepReceipt] = []
+            patch_fingerprints: dict[str, str] | None = None
+            for index, action in enumerate(validated.actions):
+                step_started = _milliseconds()
+                if action is RunnerV3Action.INSPECT_SOURCE:
+                    result = self._inspect_source(
+                        workspace,
+                        validated,
+                        deadline=deadline,
+                        cancellation_requested=cancellation_requested,
+                    )
+                elif action is RunnerV3Action.GIT_DIFF:
+                    result = self._git_diff(
+                        workspace,
+                        validated,
+                        patch_fingerprints=patch_fingerprints,
+                    )
+                else:
+                    result = _run_process(
+                        _fixed_command(action, output_directory),
+                        workspace=workspace,
+                        environment=environment,
+                        manifest=validated,
+                        deadline=deadline,
+                        poll_interval_seconds=self._poll_interval_seconds,
+                        cancellation_requested=cancellation_requested,
+                    )
+                    result = self._enforce_workspace_state(
+                        workspace,
+                        validated,
+                        result,
+                        patch_fingerprints=patch_fingerprints,
+                    )
+                step_finished = _milliseconds()
+                step = _step_receipt(
+                    action=action,
+                    result=result,
+                    started_at_ms=step_started,
+                    finished_at_ms=step_finished,
                 )
-            elif action is RunnerV3Action.GIT_DIFF:
-                result = self._git_diff(
-                    workspace,
-                    validated,
-                    patch_fingerprints=patch_fingerprints,
-                )
-            else:
-                result = _run_process(
-                    _fixed_command(action, output_directory),
-                    workspace=workspace,
-                    environment=environment,
-                    manifest=validated,
-                    deadline=deadline,
-                    poll_interval_seconds=self._poll_interval_seconds,
-                    cancellation_requested=cancellation_requested,
-                )
-                result = self._enforce_workspace_state(
-                    workspace,
-                    validated,
-                    result,
-                    patch_fingerprints=patch_fingerprints,
-                )
-            step_finished = _milliseconds()
-            step = _step_receipt(
-                action=action,
-                result=result,
-                started_at_ms=step_started,
-                finished_at_ms=step_finished,
+                receipts.append(step)
+                _persist_step(output_directory, index, step, result)
+                if (
+                    action is RunnerV3Action.INSPECT_SOURCE
+                    and result.exit_code == 0
+                    and validated.patch is not None
+                ):
+                    _apply_patch(workspace, validated)
+                    patch_fingerprints = _patch_fingerprints(
+                        workspace,
+                        patch_paths,
+                    )
+                if result.exit_code != 0:
+                    break
+
+            final_commit, final_tree = _source_identity(workspace)
+            entries = _status_entries(workspace)
+            changed_paths = tuple(sorted({path for _, path in entries}))
+            candidate = self._candidate_patch(
+                workspace,
+                validated,
+                entries,
+                patch_fingerprints=patch_fingerprints,
             )
-            receipts.append(step)
-            _persist_step(output_directory, index, step, result)
-            if (
-                action is RunnerV3Action.INSPECT_SOURCE
-                and result.exit_code == 0
-                and validated.patch is not None
-            ):
-                _apply_patch(workspace, validated)
-                patch_fingerprints = _patch_fingerprints(
-                    workspace,
-                    patch_paths,
-                )
-            if result.exit_code != 0:
-                break
+            state_valid = self._final_state_is_valid(
+                validated,
+                final_commit=final_commit,
+                final_tree=final_tree,
+                changed_paths=changed_paths,
+                patch_fingerprints=patch_fingerprints,
+                workspace=workspace,
+            )
+            outcome = self._outcome(receipts)
+            if outcome is RunnerV3Outcome.SUCCEEDED and not state_valid:
+                outcome = RunnerV3Outcome.FAILED
+            candidate_digest: str | None = None
+            if candidate is not None:
+                candidate_digest = hashlib.sha256(candidate).hexdigest()
+                _write_new(output_directory / "candidate.patch", candidate)
 
-        final_commit, final_tree = _source_identity(workspace)
-        entries = _status_entries(workspace)
-        changed_paths = tuple(sorted({path for _, path in entries}))
-        candidate = self._candidate_patch(
-            workspace,
-            validated,
-            entries,
-            patch_fingerprints=patch_fingerprints,
-        )
-        state_valid = self._final_state_is_valid(
-            validated,
-            final_commit=final_commit,
-            final_tree=final_tree,
-            changed_paths=changed_paths,
-            patch_fingerprints=patch_fingerprints,
-            workspace=workspace,
-        )
-        outcome = self._outcome(receipts)
-        if outcome is RunnerV3Outcome.SUCCEEDED and not state_valid:
-            outcome = RunnerV3Outcome.FAILED
-        candidate_digest: str | None = None
-        if candidate is not None:
-            candidate_digest = hashlib.sha256(candidate).hexdigest()
-            _write_new(output_directory / "candidate.patch", candidate)
-
-        receipt = RunnerV3Receipt.issue(
-            manifest=validated,
-            host_capacity=capacity,
-            steps=tuple(receipts),
-            outcome=outcome,
-            source_commit_after=final_commit,
-            source_tree_after=final_tree,
-            workspace_changed=bool(changed_paths),
-            changed_paths=changed_paths,
-            candidate_patch_digest=candidate_digest,
-            started_at_ms=started_at_ms,
-            finished_at_ms=_milliseconds(),
-        )
-        _write_json(
-            output_directory / "runner-v3-receipt.json",
-            receipt.model_dump(mode="json"),
-        )
-        return receipt
+            receipt = RunnerV3Receipt.issue(
+                manifest=validated,
+                host_capacity=capacity,
+                steps=tuple(receipts),
+                outcome=outcome,
+                source_commit_after=final_commit,
+                source_tree_after=final_tree,
+                workspace_changed=bool(changed_paths),
+                changed_paths=changed_paths,
+                candidate_patch_digest=candidate_digest,
+                started_at_ms=started_at_ms,
+                finished_at_ms=_milliseconds(),
+            )
+            _write_json(
+                output_directory / "runner-v3-receipt.json",
+                receipt.model_dump(mode="json"),
+            )
+            return receipt
+        finally:
+            _remove_runtime_directory(runtime_directory)
 
     def _validate_manifest(
         self,
