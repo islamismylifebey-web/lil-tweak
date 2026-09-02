@@ -48,6 +48,17 @@ export interface VerifiedRunnerRequest<Operation extends RunnerOperation> {
   request_nonce: string;
   issued_at_ms: number;
   payload: RunnerPayloads[Operation];
+  envelope: {
+    request: {
+      schema_version: typeof RUNNER_REQUEST_SCHEMA;
+      runner_id: typeof PINNED_RUNNER_ID;
+      operation: Operation;
+      request_nonce: string;
+      issued_at_ms: number;
+      payload: RunnerPayloads[Operation];
+    };
+    signature: string;
+  };
 }
 
 export class RunnerAuthenticationError extends Error {
@@ -60,6 +71,7 @@ export class RunnerAuthenticationError extends Error {
 function parseAuthenticationEnvelope(value: unknown): {
   request: RunnerRequestPayload;
   signature: Uint8Array;
+  signatureText: string;
 } {
   try {
     const envelope = exactRecord(value, ["request", "signature"], "runner envelope");
@@ -118,6 +130,7 @@ function parseAuthenticationEnvelope(value: unknown): {
         payload: request.payload,
       },
       signature,
+      signatureText,
     };
   } catch (error) {
     if (error instanceof RunnerAuthenticationError) {
@@ -199,10 +212,26 @@ export async function verifyRunnerRequest<Operation extends RunnerOperation>(
   if (!verified) {
     throw new RunnerAuthenticationError();
   }
+  const payload = parseOperationPayload(expectedOperation, envelope.request.payload);
+  const normalizedRequest: VerifiedRunnerRequest<Operation>["envelope"]["request"] = {
+    schema_version: RUNNER_REQUEST_SCHEMA,
+    runner_id: PINNED_RUNNER_ID,
+    operation: expectedOperation,
+    request_nonce: envelope.request.request_nonce,
+    issued_at_ms: envelope.request.issued_at_ms,
+    payload,
+  };
+  if (canonicalJson(normalizedRequest) !== canonicalJson(envelope.request)) {
+    throw new RunnerAuthenticationError();
+  }
   return {
     operation: expectedOperation,
     request_nonce: envelope.request.request_nonce,
     issued_at_ms: envelope.request.issued_at_ms,
-    payload: parseOperationPayload(expectedOperation, envelope.request.payload),
+    payload,
+    envelope: {
+      request: normalizedRequest,
+      signature: envelope.signatureText,
+    },
   };
 }

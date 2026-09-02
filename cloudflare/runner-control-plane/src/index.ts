@@ -213,11 +213,18 @@ async function handle(request: Request, env: Env): Promise<Response> {
       env.LIL_TWEAK_RUNNER_SIGNING_PUBLIC_KEY,
       Date.now(),
     );
+    const receiptDigest = await sha256Hex(
+      canonicalJson(evidence.payload.evidence.receipt),
+    );
+    if (receiptDigest !== evidence.payload.evidence.receipt_digest) {
+      throw new InputError("evidence receipt digest does not match the receipt");
+    }
     const evidenceDigest = await sha256Hex(canonicalJson(evidence.payload.evidence));
     return resultResponse(
       await controlObject(env).recordEvidence(
         evidence.payload,
         evidenceDigest,
+        evidence.envelope,
         evidence.request_nonce,
         evidence.issued_at_ms,
         Date.now(),

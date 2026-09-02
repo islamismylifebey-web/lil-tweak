@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import ValidationError
 
 from liltweak.cloudflare_runner_qualification import CloudflareRunnerQualificationProof
 from liltweak.creator_contract import content_digest
@@ -50,9 +52,15 @@ from liltweak.resource.dispatch import (
     dispatch_issuer_key_id,
 )
 from liltweak.resource.leases import ExecutionLease
+from runner.protocol import canonical_json, sign_runner_request
 
 NOW = datetime(2026, 9, 1, tzinfo=UTC)
 LEASE_SIGNING_KEY = b"T" * 32
+RUNNER_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(b"R" * 32)
+RUNNER_PUBLIC_KEY = RUNNER_PRIVATE_KEY.public_key().public_bytes(
+    serialization.Encoding.Raw,
+    serialization.PublicFormat.Raw,
+)
 
 
 class FixtureDispatchClient:
@@ -280,13 +288,118 @@ def _summary(
         "claim_receipt_digest": "1" * 64,
     }
     if status == "EVIDENCE_RECORDED":
+        evidence_envelope, evidence_digest = _signed_runner_evidence(
+            contract,
+            lease,
+            outcome=evidence_outcome or "succeeded",
+        )
         payload.update(
-            evidence_digest="2" * 64,
+            evidence_digest=evidence_digest,
             evidence_outcome=evidence_outcome or "succeeded",
+            evidence_envelope=evidence_envelope,
         )
     if status == "CANCEL_REQUESTED":
         payload["cancellation_reason_digest"] = "3" * 64
     return RunnerExecutionSummary.model_validate(payload)
+
+
+def _signed_runner_evidence(
+    contract: ResourceExecutionContractV2,
+    lease: ExecutionLease,
+    *,
+    outcome: str = "succeeded",
+) -> tuple[dict[str, object], str]:
+    receipt = {
+        "runner_id": GALOR_TWEAK_RUNNER_ID,
+        "runtime_image": (
+            "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+        ),
+        "seccomp_sha256": ("50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"),
+        "apparmor_profile": "liltweak-runner-job",
+        "network_denied": True,
+        "package_install_allowed": False,
+        "production_access_allowed": False,
+        "deploy_allowed": False,
+        "workspace_cleaned": True,
+        "cgroup_cleaned": True,
+        "candidate_sha": None,
+        "source_commit": contract.source.source_commit,
+        "source_tree": contract.source.source_tree,
+        "source_mutated": False,
+    }
+    evidence = {
+        "schema_version": "lil-tweak.runner-evidence/v2",
+        "outcome": outcome,
+        "operation_digest": contract.commands_digest,
+        "stdout_digest": "6" * 64,
+        "stderr_digest": "7" * 64,
+        "receipt_digest": hashlib.sha256(canonical_json(receipt).encode()).hexdigest(),
+        "receipt": receipt,
+        "exit_code": 0 if outcome == "succeeded" else 1,
+        "started_at_ms": int(NOW.timestamp() * 1_000),
+        "finished_at_ms": int((NOW + timedelta(seconds=1)).timestamp() * 1_000),
+    }
+    envelope = sign_runner_request(
+        operation="evidence",
+        payload={
+            "execution_id": lease.execution_id,
+            "attempt_nonce": _dispatch_nonce(lease),
+            "evidence": evidence,
+        },
+        private_key=RUNNER_PRIVATE_KEY,
+        issued_at_ms=int((NOW + timedelta(seconds=1)).timestamp() * 1_000),
+        request_nonce=b"N" * 32,
+    )
+    return envelope, hashlib.sha256(canonical_json(evidence).encode()).hexdigest()
+
+
+def test_recorded_status_rejects_legacy_digest_only_runner_evidence() -> None:
+    contract, lease = _contract_and_lease()
+    payload = {
+        "execution_id": lease.execution_id,
+        "runner_id": GALOR_TWEAK_RUNNER_ID,
+        "runner_role": GALOR_TWEAK_RUNNER_ROLE,
+        "status": "EVIDENCE_RECORDED",
+        "lease_digest": lease.lease_digest,
+        "contract_digest": contract.contract_digest,
+        "commands_digest": contract.commands_digest,
+        "approval_digest": lease.approval_digest,
+        "policy_digest": lease.policy_digest,
+        "expires_at_ms": int((NOW + timedelta(minutes=1)).timestamp() * 1_000),
+        "claim_receipt_digest": "1" * 64,
+        "evidence_digest": "2" * 64,
+        "evidence_outcome": "succeeded",
+    }
+
+    with pytest.raises(ValidationError, match="signed runner evidence"):
+        RunnerExecutionSummary.model_validate(payload)
+
+
+def test_recorded_status_accepts_signed_detailed_runner_evidence() -> None:
+    contract, lease = _contract_and_lease()
+    envelope, evidence_digest = _signed_runner_evidence(contract, lease)
+
+    summary = RunnerExecutionSummary.model_validate(
+        {
+            "execution_id": lease.execution_id,
+            "runner_id": GALOR_TWEAK_RUNNER_ID,
+            "runner_role": GALOR_TWEAK_RUNNER_ROLE,
+            "status": "EVIDENCE_RECORDED",
+            "lease_digest": lease.lease_digest,
+            "contract_digest": contract.contract_digest,
+            "commands_digest": contract.commands_digest,
+            "approval_digest": lease.approval_digest,
+            "policy_digest": lease.policy_digest,
+            "expires_at_ms": int((NOW + timedelta(minutes=1)).timestamp() * 1_000),
+            "claim_receipt_digest": "1" * 64,
+            "evidence_digest": evidence_digest,
+            "evidence_outcome": "succeeded",
+            "evidence_envelope": envelope,
+        }
+    )
+
+    assert summary.evidence_envelope is not None
+    assert summary.evidence_envelope.request.payload.evidence.receipt.source_mutated is False
 
 
 def _gate3_proof(
@@ -355,6 +468,7 @@ def _provider(
         gate3_config=_gate3_config(),
         attestation_factory=attestation_factory or _attestation_factory(private_key),
         attestation_verifier=_attestation_verifier(private_key),
+        runner_public_key=RUNNER_PUBLIC_KEY,
         lease_signing_key=LEASE_SIGNING_KEY,
         clock=lambda: NOW + timedelta(seconds=1),
     )
@@ -636,7 +750,8 @@ async def test_provider_keeps_successful_runner_evidence_pending_independent_ver
     assert offered.status is ProviderExecutionStatus.RUNNING
     assert reconciled.status is ProviderExecutionStatus.RUNNING
     assert reconciled.verification_outcome is VerificationOutcome.PENDING
-    assert reconciled.evidence_digest == "2" * 64
+    assert reconciled.evidence_digest == client.summary.evidence_digest
+    assert provider.evidence_for(lease.execution_id) == client.summary.evidence_envelope
     assert "independent" in reconciled.reason
     assert client.status_calls == [lease.execution_id]
 
@@ -663,8 +778,30 @@ async def test_provider_collect_reconciles_failed_runner_evidence_fail_closed() 
 
     assert reconciled.status is ProviderExecutionStatus.FAILED
     assert reconciled.verification_outcome is VerificationOutcome.FAILED
-    assert reconciled.evidence_digest == "2" * 64
+    assert reconciled.evidence_digest == client.summary.evidence_digest
     assert client.status_calls == [lease.execution_id]
+
+
+@pytest.mark.asyncio
+async def test_provider_rejects_forged_detailed_runner_evidence_signature() -> None:
+    contract, lease = _contract_and_lease()
+    private_key = Ed25519PrivateKey.generate()
+    client = FixtureDispatchClient(_receipt(contract, lease))
+    provider = _provider(
+        client=client,
+        private_key=private_key,
+        gate3_proof=_gate3_proof(),
+    )
+    await provider.execute(contract=contract, lease=lease, manifest=_manifest())
+    summary = _summary(contract, lease, status="EVIDENCE_RECORDED")
+    assert summary.evidence_envelope is not None
+    forged = summary.evidence_envelope.model_copy(update={"signature": "A" * 86})
+    client.summary = summary.model_copy(update={"evidence_envelope": forged})
+
+    reconciled = await provider.collect(lease.execution_id)
+
+    assert reconciled.status is ProviderExecutionStatus.BLOCKED
+    assert "signature" in reconciled.reason
 
 
 @pytest.mark.asyncio

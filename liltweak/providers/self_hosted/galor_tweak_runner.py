@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, Self, runtime_checkable
 
-from pydantic import Field, StrictInt, StrictStr, ValidationError, model_validator
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from pydantic import Field, StrictBool, StrictInt, StrictStr, ValidationError, model_validator
 
 from ...cloudflare_runner_qualification import CloudflareRunnerQualificationProof
-from ...creator_contract import CreatorSchema
+from ...creator_contract import CreatorSchema, canonical_json, content_digest
 from ...resource.contracts import (
     DeploymentPurpose,
     HealthStatus,
@@ -37,6 +40,7 @@ from ..contracts import (
     VerificationOutcome,
 )
 from .qualification_manifest import (
+    JOB_B_ARTIFACT_PATH,
     QualificationBoundedWriteManifest,
     QualificationJobManifest,
     QualificationReadOnlyManifest,
@@ -47,6 +51,15 @@ GALOR_TWEAK_RUNNER_ROLE = "role-tweak-runner"
 GALOR_TWEAK_REPOSITORY_ID = "github:islamismylifebey-web/lil-tweak"
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _SAFE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+_BASE64URL_PATTERN = r"^[A-Za-z0-9_-]+$"
+_GIT_SHA_PATTERN = r"^[0-9a-f]{40}$"
+_QUALIFICATION_BRANCH_PATTERN = r"^qualification/galor-tweak-runner-01/[a-z0-9][a-z0-9-]{0,31}$"
+_RUNNER_RUNTIME_IMAGE: Literal[
+    "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+] = "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+_RUNNER_SECCOMP_SHA256: Literal[
+    "50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"
+] = "50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"
 
 
 class GalorTweakRunnerConfig(CreatorSchema):
@@ -88,6 +101,124 @@ class RunnerOfferReceipt(CreatorSchema):
         return f"runner-offer:{self.execution_id}:{self.lease_digest[:16]}"
 
 
+class RunnerBaseReceipt(CreatorSchema):
+    """Fixed sandbox facts available even when execution fails before checkout inspection."""
+
+    runner_id: Literal["galor-tweak-runner-01"] = "galor-tweak-runner-01"
+    runtime_image: Literal[
+        "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+    ] = _RUNNER_RUNTIME_IMAGE
+    seccomp_sha256: Literal["50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"] = (
+        _RUNNER_SECCOMP_SHA256
+    )
+    apparmor_profile: Literal["liltweak-runner-job"] = "liltweak-runner-job"
+    network_denied: Literal[True] = True
+    package_install_allowed: Literal[False] = False
+    production_access_allowed: Literal[False] = False
+    deploy_allowed: Literal[False] = False
+    workspace_cleaned: StrictBool
+    cgroup_cleaned: StrictBool
+
+
+class RunnerReadOnlyReceipt(RunnerBaseReceipt):
+    candidate_sha: None
+    source_commit: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    source_tree: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    source_mutated: Literal[False] = False
+
+
+class RunnerBoundedWriteReceipt(RunnerBaseReceipt):
+    artifact_path: Literal["docs/runner-qualification/galor-tweak-runner-01.md"] = (
+        JOB_B_ARTIFACT_PATH
+    )
+    artifact_sha256: Literal["62253a2945ea498f3b206a0449e5a97a0cf5783dd7858d7a11fbb365f4c04a91"] = (
+        "62253a2945ea498f3b206a0449e5a97a0cf5783dd7858d7a11fbb365f4c04a91"
+    )
+    candidate_sha: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    candidate_tree: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    source_commit: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    source_tree: StrictStr = Field(pattern=_GIT_SHA_PATTERN)
+    source_mutated: Literal[True] = True
+    bundle_sha256: StrictStr = Field(pattern=_SHA256_PATTERN)
+    bundle_size: StrictInt = Field(ge=1, le=1_000_000)
+    candidate_store_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
+    created_at_ms: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
+    qualification_branch: StrictStr = Field(pattern=_QUALIFICATION_BRANCH_PATTERN)
+
+
+class RunnerPreExecutionCancellationReceipt(CreatorSchema):
+    cancelled_before_execution: Literal[True] = True
+
+
+type RunnerReceipt = (
+    RunnerBoundedWriteReceipt
+    | RunnerReadOnlyReceipt
+    | RunnerBaseReceipt
+    | RunnerPreExecutionCancellationReceipt
+)
+
+
+class RunnerEvidence(CreatorSchema):
+    schema_version: Literal["lil-tweak.runner-evidence/v2"] = "lil-tweak.runner-evidence/v2"
+    outcome: Literal["succeeded", "failed", "cancelled"]
+    operation_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    stdout_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    stderr_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    receipt_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
+    receipt: RunnerReceipt
+    exit_code: StrictInt = Field(ge=0, le=255)
+    started_at_ms: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
+    finished_at_ms: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> Self:
+        if self.started_at_ms > self.finished_at_ms:
+            raise ValueError("runner evidence timestamps are not ordered")
+        if self.receipt_digest != content_digest(self.receipt):
+            raise ValueError("runner evidence receipt digest does not match")
+        if self.outcome == "succeeded":
+            if not isinstance(
+                self.receipt,
+                (RunnerReadOnlyReceipt, RunnerBoundedWriteReceipt),
+            ):
+                raise ValueError("successful runner evidence requires a detailed receipt")
+            if (
+                self.exit_code != 0
+                or not self.receipt.workspace_cleaned
+                or not self.receipt.cgroup_cleaned
+            ):
+                raise ValueError("successful runner evidence requires completed cleanup")
+        if isinstance(self.receipt, RunnerPreExecutionCancellationReceipt) and (
+            self.outcome != "cancelled" or self.exit_code != 0
+        ):
+            raise ValueError("pre-execution cancellation receipt is invalid")
+        return self
+
+    @property
+    def evidence_digest(self) -> str:
+        return content_digest(self)
+
+
+class RunnerEvidenceRequestPayload(CreatorSchema):
+    execution_id: StrictStr = Field(pattern=_SAFE_ID_PATTERN)
+    attempt_nonce: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    evidence: RunnerEvidence
+
+
+class RunnerEvidenceRequest(CreatorSchema):
+    schema_version: Literal["lil-tweak.runner-request/v1"] = "lil-tweak.runner-request/v1"
+    runner_id: Literal["galor-tweak-runner-01"] = "galor-tweak-runner-01"
+    operation: Literal["evidence"] = "evidence"
+    request_nonce: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    issued_at_ms: StrictInt = Field(ge=0, le=9_007_199_254_740_991)
+    payload: RunnerEvidenceRequestPayload
+
+
+class SignedRunnerEvidenceEnvelope(CreatorSchema):
+    request: RunnerEvidenceRequest
+    signature: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{86}$")
+
+
 class RunnerExecutionSummary(CreatorSchema):
     """Typed controller view of one durable private-runner dispatch."""
 
@@ -110,6 +241,7 @@ class RunnerExecutionSummary(CreatorSchema):
     claim_receipt_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
     evidence_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
     evidence_outcome: Literal["succeeded", "failed", "cancelled"] | None = None
+    evidence_envelope: SignedRunnerEvidenceEnvelope | None = None
     cancellation_reason_digest: StrictStr | None = Field(
         default=None,
         pattern=_SHA256_PATTERN,
@@ -121,10 +253,22 @@ class RunnerExecutionSummary(CreatorSchema):
             raise ValueError("claimed execution requires a claim receipt digest")
         has_evidence = self.evidence_digest is not None or self.evidence_outcome is not None
         if self.status == "EVIDENCE_RECORDED":
-            if self.evidence_digest is None or self.evidence_outcome is None:
+            if (
+                self.evidence_digest is None
+                or self.evidence_outcome is None
+                or self.evidence_envelope is None
+            ):
+                raise ValueError("recorded execution requires signed runner evidence")
+            evidence = self.evidence_envelope.request.payload.evidence
+            if (
+                evidence.evidence_digest != self.evidence_digest
+                or evidence.outcome != self.evidence_outcome
+            ):
                 raise ValueError("recorded execution evidence is incomplete")
         elif has_evidence:
             raise ValueError("execution evidence contradicts status")
+        elif self.evidence_envelope is not None:
+            raise ValueError("signed runner evidence contradicts status")
         if self.status == "CANCEL_REQUESTED":
             if self.cancellation_reason_digest is None:
                 raise ValueError("cancellation status requires a reason digest")
@@ -202,11 +346,14 @@ class GalorTweakRunnerProvider:
         gate3_config: GalorTweakRunnerGate3Config,
         attestation_factory: DispatchAttestationFactory,
         attestation_verifier: DispatchAttestationVerifier,
+        runner_public_key: bytes,
         lease_signing_key: bytes,
         clock: Callable[[], datetime],
     ) -> None:
         if not isinstance(lease_signing_key, bytes) or len(lease_signing_key) != 32:
             raise ValueError("self-hosted provider lease signing key must contain exactly 32 bytes")
+        if not isinstance(runner_public_key, bytes) or len(runner_public_key) != 32:
+            raise ValueError("self-hosted provider runner public key must contain exactly 32 bytes")
         if (
             gate3_config.execution_host != config.runner_id
             or gate3_config.runner_role != config.role
@@ -218,10 +365,12 @@ class GalorTweakRunnerProvider:
         self._gate3_config = gate3_config
         self._attestation_factory = attestation_factory
         self._attestation_verifier = attestation_verifier
+        self._runner_public_key = Ed25519PublicKey.from_public_bytes(runner_public_key)
         self._lease_signing_key = lease_signing_key
         self._clock = clock
         self._leases = ExecutionLeaseRegistry()
         self._records: dict[str, _DispatchRecord] = {}
+        self._evidence: dict[str, SignedRunnerEvidenceEnvelope] = {}
         self._gate3_proof: CloudflareRunnerQualificationProof | None = None
 
     def qualify(self) -> ProviderQualification:
@@ -415,6 +564,7 @@ class GalorTweakRunnerProvider:
 
     async def destroy(self, execution_id: str) -> ProviderOperationResult:
         record = self._records.pop(execution_id, None)
+        self._evidence.pop(execution_id, None)
         if record is None:
             return self._result(
                 execution_id,
@@ -431,6 +581,9 @@ class GalorTweakRunnerProvider:
     def receipt_for(self, execution_id: str) -> RunnerOfferReceipt | None:
         record = self._records.get(execution_id)
         return None if record is None else record.receipt
+
+    def evidence_for(self, execution_id: str) -> SignedRunnerEvidenceEnvelope | None:
+        return self._evidence.get(execution_id)
 
     def _normalize(
         self,
@@ -535,6 +688,16 @@ class GalorTweakRunnerProvider:
                 operation_id=operation_id,
                 verification_outcome=VerificationOutcome.FAILED,
             )
+        evidence = self._validated_runner_evidence(summary, record)
+        if isinstance(evidence, str):
+            return self._result(
+                execution_id,
+                ProviderExecutionStatus.BLOCKED,
+                evidence,
+                operation_id=operation_id,
+                verification_outcome=VerificationOutcome.FAILED,
+            )
+        self._evidence[execution_id] = evidence
         if summary.evidence_outcome == "succeeded":
             return self._result(
                 execution_id,
@@ -563,6 +726,86 @@ class GalorTweakRunnerProvider:
             verification_outcome=VerificationOutcome.FAILED,
             evidence_digest=summary.evidence_digest,
         )
+
+    def _validated_runner_evidence(
+        self,
+        summary: RunnerExecutionSummary,
+        record: _DispatchRecord,
+    ) -> SignedRunnerEvidenceEnvelope | str:
+        envelope = summary.evidence_envelope
+        if envelope is None or summary.evidence_digest is None:
+            return "private runner status lacks signed detailed evidence"
+        request = envelope.request
+        try:
+            signature = base64.b64decode(
+                envelope.signature + ("=" * (-len(envelope.signature) % 4)),
+                altchars=b"-_",
+                validate=True,
+            )
+        except (binascii.Error, ValueError, UnicodeEncodeError):
+            return "signed runner evidence signature encoding was rejected"
+        if len(signature) != 64:
+            return "signed runner evidence signature encoding was rejected"
+        signing_bytes = (
+            "lil-tweak.runner-request/evidence/v1\n"
+            + canonical_json(request.model_dump(mode="json"))
+        ).encode("utf-8")
+        try:
+            self._runner_public_key.verify(signature, signing_bytes)
+        except InvalidSignature:
+            return "signed runner evidence signature was rejected"
+
+        payload = request.payload
+        evidence = payload.evidence
+        expected_attempt_nonce = (
+            base64.urlsafe_b64encode(bytes.fromhex(record.lease.attempt_nonce))
+            .decode("ascii")
+            .rstrip("=")
+        )
+        bindings = (
+            (payload.execution_id, record.lease.execution_id),
+            (payload.attempt_nonce, expected_attempt_nonce),
+            (evidence.operation_digest, record.manifest.commands_digest),
+            (evidence.evidence_digest, summary.evidence_digest),
+            (evidence.outcome, summary.evidence_outcome),
+        )
+        if any(observed != expected for observed, expected in bindings):
+            return "signed runner evidence binding mismatch"
+
+        receipt = evidence.receipt
+        if isinstance(
+            receipt,
+            (RunnerReadOnlyReceipt, RunnerBoundedWriteReceipt),
+        ) and (
+            receipt.source_commit != record.manifest.source.commit_sha
+            or receipt.source_tree != record.manifest.source.tree_sha
+        ):
+            return "signed runner evidence source binding mismatch"
+        if isinstance(receipt, RunnerBoundedWriteReceipt):
+            if not isinstance(record.manifest, QualificationBoundedWriteManifest):
+                return "signed runner evidence job type binding mismatch"
+            bounded_bindings = (
+                (receipt.artifact_path, record.manifest.artifact.path),
+                (receipt.artifact_sha256, record.manifest.artifact.content_sha256),
+                (receipt.qualification_branch, record.manifest.qualification_branch),
+                (receipt.candidate_store_id, record.lease.execution_id),
+            )
+            if any(observed != expected for observed, expected in bounded_bindings):
+                return "signed runner evidence bounded-write binding mismatch"
+            if (
+                receipt.candidate_sha == receipt.source_commit
+                or receipt.candidate_tree == receipt.source_tree
+                or receipt.created_at_ms < evidence.started_at_ms
+                or receipt.created_at_ms > evidence.finished_at_ms
+            ):
+                return "signed runner evidence bounded-write candidate is invalid"
+        if evidence.outcome == "succeeded":
+            if isinstance(record.manifest, QualificationReadOnlyManifest):
+                if not isinstance(receipt, RunnerReadOnlyReceipt):
+                    return "signed runner evidence read-only receipt is unavailable"
+            elif not isinstance(receipt, RunnerBoundedWriteReceipt):
+                return "signed runner evidence bounded-write receipt is unavailable"
+        return envelope
 
     async def _refresh_gate3_proof(
         self,

@@ -106,7 +106,7 @@ class _Executor:
         )
 
 
-def test_service_claims_before_execution_and_returns_only_digest_evidence() -> None:
+def test_service_claims_before_execution_and_returns_bounded_receipt_evidence() -> None:
     offer, key_id, public = _signed_offer()
     client = _Client(offer)
     executor = _Executor()
@@ -121,7 +121,7 @@ def test_service_claims_before_execution_and_returns_only_digest_evidence() -> N
     assert service.run_once() is True
     assert executor.calls == 1
     assert client.evidence == {
-        "schema_version": "lil-tweak.runner-evidence/v1",
+        "schema_version": "lil-tweak.runner-evidence/v2",
         "outcome": "succeeded",
         "operation_digest": offer["attestation"]["attestation"]["commands_digest"],
         "stdout_digest": hashlib.sha256(b"bounded stdout").hexdigest(),
@@ -129,6 +129,7 @@ def test_service_claims_before_execution_and_returns_only_digest_evidence() -> N
         "receipt_digest": hashlib.sha256(
             canonical_json({"candidate_sha": None, "source_mutated": False}).encode()
         ).hexdigest(),
+        "receipt": {"candidate_sha": None, "source_mutated": False},
         "exit_code": 0,
         "started_at_ms": 1_011_000,
         "finished_at_ms": 1_012_000,

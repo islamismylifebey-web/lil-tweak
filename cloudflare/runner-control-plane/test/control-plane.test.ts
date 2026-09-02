@@ -9,6 +9,7 @@ import {
   verifyDispatchAttestation,
   type DispatchAttestationPayload,
 } from "../src/attestation";
+import { parseEvidenceRequest } from "../src/protocol";
 import goldenFixture from "./fixtures/dispatch-attestation-v1.json";
 
 const CONTROL_AUTH = "Bearer test-control-token-not-operational";
@@ -19,6 +20,10 @@ const EMPTY_SHA256 =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const QUALIFICATION_CONTENT_SHA256 =
   "62253a2945ea498f3b206a0449e5a97a0cf5783dd7858d7a11fbb365f4c04a91";
+const RUNTIME_IMAGE =
+  "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36";
+const SECCOMP_SHA256 =
+  "50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23";
 
 function digest(letter: string): string {
   return letter.repeat(64);
@@ -74,6 +79,76 @@ function boundedWriteManifest() {
       content_sha256: QUALIFICATION_CONTENT_SHA256,
     },
   } as const;
+}
+
+function baseReceipt() {
+  return {
+    runner_id: "galor-tweak-runner-01",
+    runtime_image: RUNTIME_IMAGE,
+    seccomp_sha256: SECCOMP_SHA256,
+    apparmor_profile: "liltweak-runner-job",
+    network_denied: true,
+    package_install_allowed: false,
+    production_access_allowed: false,
+    deploy_allowed: false,
+    workspace_cleaned: true,
+    cgroup_cleaned: true,
+  } as const;
+}
+
+function readOnlyReceipt(manifest = readOnlyManifest()) {
+  return {
+    ...baseReceipt(),
+    candidate_sha: null,
+    source_commit: manifest.source.commit_sha,
+    source_tree: manifest.source.tree_sha,
+    source_mutated: false,
+  } as const;
+}
+
+function boundedWriteReceipt(
+  executionId: string,
+  manifest = boundedWriteManifest(),
+) {
+  return {
+    ...baseReceipt(),
+    artifact_path: manifest.artifact.path,
+    artifact_sha256: manifest.artifact.content_sha256,
+    candidate_sha: "3".repeat(40),
+    candidate_tree: "4".repeat(40),
+    source_commit: manifest.source.commit_sha,
+    source_tree: manifest.source.tree_sha,
+    source_mutated: true,
+    bundle_sha256: digest("5"),
+    bundle_size: 42_000,
+    candidate_store_id: executionId,
+    created_at_ms: Date.now() - 500,
+    qualification_branch: manifest.qualification_branch,
+  } as const;
+}
+
+async function runnerEvidence(
+  operationDigest: string,
+  receipt: Record<string, unknown>,
+  overrides: Partial<{
+    outcome: "succeeded" | "failed" | "cancelled";
+    exit_code: number;
+  }> = {},
+) {
+  const now = Date.now();
+  return {
+    schema_version: "lil-tweak.runner-evidence/v2",
+    outcome: "succeeded" as const,
+    operation_digest: operationDigest,
+    stdout_digest: digest("b"),
+    stderr_digest: digest("c"),
+    receipt_digest: await sha256Hex(canonicalJson(receipt)),
+    receipt,
+    exit_code: 0,
+    started_at_ms: now - 1_000,
+    finished_at_ms: now,
+    ...overrides,
+  };
 }
 
 type RunnerOperation = "poll" | "claim" | "status" | "evidence";
@@ -456,7 +531,7 @@ describe("Lil Tweak runner control plane", () => {
     });
   });
 
-  it("records digest-only evidence without completing or qualifying an execution", async () => {
+  it("persists the normalized signed v2 evidence envelope for controller status only", async () => {
     const signed = await offer("evidence-only");
     const identifiers = {
       execution_id: signed.attestation.execution_id,
@@ -474,17 +549,10 @@ describe("Lil Tweak runner control plane", () => {
 
     const evidenceBody = {
       ...identifiers,
-      evidence: {
-        schema_version: "lil-tweak.runner-evidence/v1",
-        outcome: "succeeded",
-        operation_digest: signed.attestation.commands_digest,
-        stdout_digest: digest("b"),
-        stderr_digest: digest("c"),
-        receipt_digest: digest("d"),
-        exit_code: 0,
-        started_at_ms: Date.now() - 1_000,
-        finished_at_ms: Date.now(),
-      },
+      evidence: await runnerEvidence(
+        signed.attestation.commands_digest,
+        readOnlyReceipt(),
+      ),
     };
     const bearerOnlyEvidence = await request(
       "/v1/runners/galor-tweak-runner-01/evidence",
@@ -493,17 +561,20 @@ describe("Lil Tweak runner control plane", () => {
     );
     expect(bearerOnlyEvidence.status).toBe(401);
 
+    const signedEvidence = await signedRunnerRequest("evidence", evidenceBody);
     const evidenceResponse = await request(
       "/v1/runners/galor-tweak-runner-01/evidence",
       RUNNER_AUTH,
-      await signedRunnerRequest("evidence", evidenceBody),
+      signedEvidence,
     );
     expect(evidenceResponse.status).toBe(202);
-    expect(await evidenceResponse.json()).toMatchObject({
+    const submission = await evidenceResponse.json<Record<string, unknown>>();
+    expect(submission).toMatchObject({
       execution_id: "evidence-only",
       status: "EVIDENCE_RECORDED",
       evidence_digest: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+    expect(submission).not.toHaveProperty("evidence_envelope");
 
     const statusResponse = await request(
       "/v1/control/executions/evidence-only",
@@ -512,13 +583,104 @@ describe("Lil Tweak runner control plane", () => {
     const status = await statusResponse.json<Record<string, unknown>>();
     expect(statusResponse.status).toBe(200);
     expect(status.status).toBe("EVIDENCE_RECORDED");
+    expect(status.evidence_envelope).toEqual(signedEvidence);
     expect(JSON.stringify(status)).not.toContain("COMPLETE");
     expect(JSON.stringify(status)).not.toContain("QUALIFIED");
     expect(JSON.stringify(status)).not.toContain('"command"');
     expect(JSON.stringify(status)).not.toContain('"stdout"');
+
+    const runnerStatusResponse = await request(
+      "/v1/runners/galor-tweak-runner-01/status",
+      RUNNER_AUTH,
+      await signedRunnerRequest("status", { execution_id: "evidence-only" }),
+    );
+    expect(runnerStatusResponse.status).toBe(200);
+    expect(
+      await runnerStatusResponse.json<Record<string, unknown>>(),
+    ).not.toHaveProperty("evidence_envelope");
   });
 
-  it("rejects raw evidence and disallows every runner identity but the pinned runner", async () => {
+  it("accepts the exact successful bounded-write receipt produced by the host executor", async () => {
+    const manifest = boundedWriteManifest();
+    const signed = await offer("bounded-write-evidence", manifest);
+    const identifiers = {
+      execution_id: signed.attestation.execution_id,
+      attempt_nonce: signed.attestation.attempt_nonce,
+    };
+    expect(
+      (
+        await request(
+          "/v1/runners/galor-tweak-runner-01/claim",
+          RUNNER_AUTH,
+          await signedRunnerRequest("claim", identifiers),
+        )
+      ).status,
+    ).toBe(200);
+    const evidenceBody = {
+      ...identifiers,
+      evidence: await runnerEvidence(
+        signed.attestation.commands_digest,
+        boundedWriteReceipt("bounded-write-evidence", manifest),
+      ),
+    };
+
+    const response = await request(
+      "/v1/runners/galor-tweak-runner-01/evidence",
+      RUNNER_AUTH,
+      await signedRunnerRequest("evidence", evidenceBody),
+    );
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      execution_id: "bounded-write-evidence",
+      status: "EVIDENCE_RECORDED",
+    });
+  });
+
+  it("accepts bounded failure and exact pre-execution cancellation receipts without qualifying", async () => {
+    const identifiers = {
+      execution_id: "bounded-non-success",
+      attempt_nonce: "A".repeat(43),
+    };
+    const failed = parseEvidenceRequest({
+      ...identifiers,
+      evidence: await runnerEvidence(digest("a"), baseReceipt(), {
+        outcome: "failed",
+        exit_code: 70,
+      }),
+    });
+    expect(failed.evidence.receipt).toEqual(baseReceipt());
+
+    const cancellationReceipt = { cancelled_before_execution: true } as const;
+    const cancelled = parseEvidenceRequest({
+      ...identifiers,
+      evidence: await runnerEvidence(digest("a"), cancellationReceipt, {
+        outcome: "cancelled",
+        exit_code: 0,
+      }),
+    });
+    expect(cancelled.evidence.receipt).toEqual(cancellationReceipt);
+
+    expect(() =>
+      parseEvidenceRequest({
+        ...identifiers,
+        evidence: {
+          schema_version: "lil-tweak.runner-evidence/v2",
+          outcome: "succeeded",
+          operation_digest: digest("a"),
+          stdout_digest: digest("b"),
+          stderr_digest: digest("c"),
+          receipt_digest: digest("d"),
+          receipt: baseReceipt(),
+          exit_code: 0,
+          started_at_ms: 1,
+          finished_at_ms: 2,
+        },
+      }),
+    ).toThrow(/completed job receipt/);
+  });
+
+  it("rejects v1, digest-only v2, and receipt fields outside the bounded contract", async () => {
     const signed = await offer("reject-raw-evidence");
     const wrongRunner = await request(
       "/v1/runners/not-a-runner/claim",
@@ -540,7 +702,7 @@ describe("Lil Tweak runner control plane", () => {
     );
     expect(claim.status).toBe(200);
 
-    const rawEvidenceBody = {
+    const v1EvidenceBody = {
       execution_id: signed.attestation.execution_id,
       attempt_nonce: signed.attestation.attempt_nonce,
       evidence: {
@@ -553,15 +715,61 @@ describe("Lil Tweak runner control plane", () => {
         exit_code: 0,
         started_at_ms: Date.now() - 1_000,
         finished_at_ms: Date.now(),
-        stdout: "raw output is forbidden",
       },
+    };
+    const v1Evidence = await request(
+      "/v1/runners/galor-tweak-runner-01/evidence",
+      RUNNER_AUTH,
+      await signedRunnerRequest("evidence", v1EvidenceBody),
+    );
+    expect(v1Evidence.status).toBe(400);
+
+    const receipt = {
+      ...readOnlyReceipt(),
+      stdout: "raw output is forbidden",
     };
     const rawEvidence = await request(
       "/v1/runners/galor-tweak-runner-01/evidence",
       RUNNER_AUTH,
-      await signedRunnerRequest("evidence", rawEvidenceBody),
+      await signedRunnerRequest("evidence", {
+        execution_id: signed.attestation.execution_id,
+        attempt_nonce: signed.attestation.attempt_nonce,
+        evidence: await runnerEvidence(signed.attestation.commands_digest, receipt),
+      }),
     );
     expect(rawEvidence.status).toBe(400);
+
+    const v2 = await runnerEvidence(
+      signed.attestation.commands_digest,
+      readOnlyReceipt(),
+    );
+    const { receipt: _omittedReceipt, ...digestOnlyV2 } = v2;
+    const digestOnly = await request(
+      "/v1/runners/galor-tweak-runner-01/evidence",
+      RUNNER_AUTH,
+      await signedRunnerRequest("evidence", {
+        execution_id: signed.attestation.execution_id,
+        attempt_nonce: signed.attestation.attempt_nonce,
+        evidence: digestOnlyV2,
+      }),
+    );
+    expect(digestOnly.status).toBe(400);
+
+    const mismatchedDigestEvidence = await runnerEvidence(
+      signed.attestation.commands_digest,
+      readOnlyReceipt(),
+    );
+    mismatchedDigestEvidence.receipt_digest = digest("f");
+    const mismatchedDigest = await request(
+      "/v1/runners/galor-tweak-runner-01/evidence",
+      RUNNER_AUTH,
+      await signedRunnerRequest("evidence", {
+        execution_id: signed.attestation.execution_id,
+        attempt_nonce: signed.attestation.attempt_nonce,
+        evidence: mismatchedDigestEvidence,
+      }),
+    );
+    expect(mismatchedDigest.status).toBe(400);
   });
 
   it("records cancellation as a request, never as completion", async () => {

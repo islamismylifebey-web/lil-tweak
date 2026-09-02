@@ -12,6 +12,7 @@ import type {
   ClaimRequest,
   ClaimSummary,
   EvidenceRequest,
+  RunnerEvidenceEnvelope,
   EvidenceSummary,
   ExecutionStatus,
   ExecutionSummary,
@@ -49,6 +50,7 @@ interface ExecutionRow extends Record<string, string | number | null> {
   claim_receipt_digest: string | null;
   evidence_digest: string | null;
   evidence_outcome: RunnerEvidence["outcome"] | null;
+  evidence_envelope_json: string | null;
   cancellation_reason_digest: string | null;
   updated_at_ms: number;
 }
@@ -84,6 +86,7 @@ export class RunnerControlPlane extends DurableObject<Env> {
           claim_receipt_digest TEXT,
           evidence_digest TEXT,
           evidence_outcome TEXT,
+          evidence_envelope_json TEXT,
           cancellation_reason_digest TEXT,
           updated_at_ms INTEGER NOT NULL
         )
@@ -99,6 +102,11 @@ export class RunnerControlPlane extends DurableObject<Env> {
       }
       if (!columns.has("manifest_json")) {
         this.ctx.storage.sql.exec("ALTER TABLE executions ADD COLUMN manifest_json TEXT");
+      }
+      if (!columns.has("evidence_envelope_json")) {
+        this.ctx.storage.sql.exec(
+          "ALTER TABLE executions ADD COLUMN evidence_envelope_json TEXT",
+        );
       }
       this.ctx.storage.sql.exec(
         "CREATE INDEX IF NOT EXISTS idx_executions_expiry ON executions(expires_at_ms)",
@@ -127,6 +135,7 @@ export class RunnerControlPlane extends DurableObject<Env> {
                   issued_at_ms, expires_at_ms, status, claimed_at_ms,
                   nonce_consumed_at_ms,
                   claim_receipt_digest, evidence_digest, evidence_outcome,
+                  evidence_envelope_json,
                   cancellation_reason_digest, updated_at_ms
            FROM executions WHERE execution_id = ?`,
           executionId,
@@ -181,7 +190,10 @@ export class RunnerControlPlane extends DurableObject<Env> {
     return true;
   }
 
-  private summary(row: ExecutionRow): ExecutionSummary {
+  private summary(
+    row: ExecutionRow,
+    includeEvidenceEnvelope = false,
+  ): ExecutionSummary {
     const summary: ExecutionSummary = {
       execution_id: row.execution_id,
       runner_id: PINNED_RUNNER_ID,
@@ -202,6 +214,15 @@ export class RunnerControlPlane extends DurableObject<Env> {
     }
     if (row.evidence_outcome !== null) {
       summary.evidence_outcome = row.evidence_outcome;
+    }
+    if (
+      includeEvidenceEnvelope &&
+      row.status === "EVIDENCE_RECORDED" &&
+      row.evidence_envelope_json !== null
+    ) {
+      summary.evidence_envelope = JSON.parse(
+        row.evidence_envelope_json,
+      ) as RunnerEvidenceEnvelope;
     }
     if (row.cancellation_reason_digest !== null) {
       summary.cancellation_reason_digest = row.cancellation_reason_digest;
@@ -298,7 +319,8 @@ export class RunnerControlPlane extends DurableObject<Env> {
                   attestation_digest, attestation_json, manifest_json,
                   issued_at_ms, expires_at_ms, status, claimed_at_ms,
                   nonce_consumed_at_ms, claim_receipt_digest, evidence_digest,
-                  evidence_outcome, cancellation_reason_digest, updated_at_ms
+                  evidence_outcome, evidence_envelope_json,
+                  cancellation_reason_digest, updated_at_ms
            FROM executions
            WHERE status = 'OFFERED' AND expires_at_ms > ?
              AND attestation_json IS NOT NULL AND manifest_json IS NOT NULL
@@ -399,10 +421,12 @@ export class RunnerControlPlane extends DurableObject<Env> {
   async recordEvidence(
     request: EvidenceRequest,
     evidenceDigest: string,
+    evidenceEnvelope: RunnerEvidenceEnvelope,
     requestNonce: string,
     issuedAtMs: number,
     nowMs: number,
   ): Promise<ControlPlaneResult<EvidenceSummary>> {
+    const evidenceEnvelopeJson = canonicalJson(evidenceEnvelope);
     let result: ControlPlaneResult<EvidenceSummary> = {
       ok: false,
       error: "conflict",
@@ -432,10 +456,11 @@ export class RunnerControlPlane extends DurableObject<Env> {
       }
       this.ctx.storage.sql.exec(
         `UPDATE executions
-         SET status = 'EVIDENCE_RECORDED', evidence_digest = ?, evidence_outcome = ?, updated_at_ms = ?
+         SET status = 'EVIDENCE_RECORDED', evidence_digest = ?, evidence_outcome = ?, evidence_envelope_json = ?, updated_at_ms = ?
          WHERE execution_id = ? AND status = 'CLAIMED'`,
         evidenceDigest,
         request.evidence.outcome,
+        evidenceEnvelopeJson,
         nowMs,
         row.execution_id,
       );
@@ -465,7 +490,10 @@ export class RunnerControlPlane extends DurableObject<Env> {
         result = { ok: false, error: "not_found" };
         return;
       }
-      result = { ok: true, value: this.summary(this.updateExpiry(selected, nowMs)) };
+      result = {
+        ok: true,
+        value: this.summary(this.updateExpiry(selected, nowMs), true),
+      };
     });
     return result;
   }

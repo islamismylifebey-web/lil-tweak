@@ -48,6 +48,7 @@ from .providers.self_hosted.galor_tweak_runner import (
     GalorTweakRunnerConfig,
     GalorTweakRunnerGate3Config,
     GalorTweakRunnerProvider,
+    SignedRunnerEvidenceEnvelope,
 )
 from .providers.self_hosted.qualification_manifest import (
     QualificationBoundedWriteManifest,
@@ -207,6 +208,7 @@ class PrivateRunnerDispatchReceipt(CreatorSchema):
     commands_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
     operation_id: StrictStr | None = None
     runner_evidence_digest: StrictStr | None = Field(default=None, pattern=_SHA256_PATTERN)
+    runner_evidence_envelope: SignedRunnerEvidenceEnvelope | None = None
     independent_verification_required: Literal[True] = True
 
 
@@ -236,6 +238,8 @@ class _QualificationProvider(Protocol):
     ) -> ProviderOperationResult: ...
 
     async def collect(self, execution_id: str) -> ProviderOperationResult: ...
+
+    def evidence_for(self, execution_id: str) -> SignedRunnerEvidenceEnvelope | None: ...
 
     async def cancel(self, execution_id: str) -> ProviderOperationResult: ...
 
@@ -408,7 +412,18 @@ class PrivateRunnerQualificationOrchestrator:
             raise PrivateRunnerActivationError(result.reason)
         if result.evidence_digest is None:
             return receipt
-        collected = receipt.model_copy(update={"runner_evidence_digest": result.evidence_digest})
+        evidence = self._provider.evidence_for(receipt.execution_id)
+        if (
+            evidence is None
+            or evidence.request.payload.evidence.evidence_digest != result.evidence_digest
+        ):
+            raise PrivateRunnerActivationError("verified signed runner evidence is unavailable")
+        collected = receipt.model_copy(
+            update={
+                "runner_evidence_digest": result.evidence_digest,
+                "runner_evidence_envelope": evidence,
+            }
+        )
         self._dispatches[receipt.execution_id] = collected
         return collected
 
@@ -593,6 +608,7 @@ def build_live_private_runner_orchestrator(
     controller: ProtectedControllerConfig,
     qualification: PrivateRunnerQualificationEvidence,
     qualification_verifier: CloudflareRunnerQualificationVerifier,
+    runner_public_key: bytes,
     monthly_resource_limit_microusd: int,
     clock: Callable[[], datetime],
 ) -> PrivateRunnerQualificationOrchestrator:
@@ -642,6 +658,7 @@ def build_live_private_runner_orchestrator(
         attestation_verifier=DispatchAttestationVerifier(
             trusted_issuer_public_keys={controller.dispatch_key_id: public_key}
         ),
+        runner_public_key=runner_public_key,
         lease_signing_key=lease_signing_key,
         clock=clock,
     )

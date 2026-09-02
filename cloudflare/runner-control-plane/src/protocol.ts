@@ -27,6 +27,12 @@ export const EMPTY_SHA256 =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 export const QUALIFICATION_CONTENT_SHA256 =
   "62253a2945ea498f3b206a0449e5a97a0cf5783dd7858d7a11fbb365f4c04a91";
+export const RUNNER_EVIDENCE_SCHEMA = "lil-tweak.runner-evidence/v2";
+export const RUNNER_RUNTIME_IMAGE =
+  "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36";
+export const RUNNER_SECCOMP_SHA256 =
+  "50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23";
+export const MAX_CANDIDATE_BUNDLE_BYTES = 1_000_000;
 
 interface ManifestSource {
   repository: typeof QUALIFICATION_REPOSITORY;
@@ -82,13 +88,59 @@ export interface ClaimRequest {
   attempt_nonce: string;
 }
 
+export interface BaseRunnerReceipt {
+  runner_id: typeof PINNED_RUNNER_ID;
+  runtime_image: typeof RUNNER_RUNTIME_IMAGE;
+  seccomp_sha256: typeof RUNNER_SECCOMP_SHA256;
+  apparmor_profile: "liltweak-runner-job";
+  network_denied: true;
+  package_install_allowed: false;
+  production_access_allowed: false;
+  deploy_allowed: false;
+  workspace_cleaned: boolean;
+  cgroup_cleaned: boolean;
+}
+
+export interface ReadOnlyRunnerReceipt extends BaseRunnerReceipt {
+  candidate_sha: null;
+  source_commit: string;
+  source_tree: string;
+  source_mutated: false;
+}
+
+export interface BoundedWriteRunnerReceipt extends BaseRunnerReceipt {
+  artifact_path: typeof QUALIFICATION_ARTIFACT_PATH;
+  artifact_sha256: typeof QUALIFICATION_CONTENT_SHA256;
+  candidate_sha: string;
+  candidate_tree: string;
+  source_commit: string;
+  source_tree: string;
+  source_mutated: true;
+  bundle_sha256: string;
+  bundle_size: number;
+  candidate_store_id: string;
+  created_at_ms: number;
+  qualification_branch: string;
+}
+
+export interface CancelledBeforeExecutionReceipt {
+  cancelled_before_execution: true;
+}
+
+export type RunnerReceipt =
+  | BaseRunnerReceipt
+  | ReadOnlyRunnerReceipt
+  | BoundedWriteRunnerReceipt
+  | CancelledBeforeExecutionReceipt;
+
 export interface RunnerEvidence {
-  schema_version: "lil-tweak.runner-evidence/v1";
+  schema_version: typeof RUNNER_EVIDENCE_SCHEMA;
   outcome: "succeeded" | "failed" | "cancelled";
   operation_digest: string;
   stdout_digest: string;
   stderr_digest: string;
   receipt_digest: string;
+  receipt: RunnerReceipt;
   exit_code: number;
   started_at_ms: number;
   finished_at_ms: number;
@@ -96,6 +148,18 @@ export interface RunnerEvidence {
 
 export interface EvidenceRequest extends ClaimRequest {
   evidence: RunnerEvidence;
+}
+
+export interface RunnerEvidenceEnvelope {
+  request: {
+    schema_version: "lil-tweak.runner-request/v1";
+    runner_id: typeof PINNED_RUNNER_ID;
+    operation: "evidence";
+    request_nonce: string;
+    issued_at_ms: number;
+    payload: EvidenceRequest;
+  };
+  signature: string;
 }
 
 export interface CancelRequest {
@@ -116,6 +180,7 @@ export interface ExecutionSummary {
   claim_receipt_digest?: string;
   evidence_digest?: string;
   evidence_outcome?: RunnerEvidence["outcome"];
+  evidence_envelope?: RunnerEvidenceEnvelope;
   cancellation_reason_digest?: string;
 }
 
@@ -323,6 +388,197 @@ export function parseClaimRequest(value: unknown): ClaimRequest {
   return parseClaimIdentifiers(value, "claim request");
 }
 
+const BASE_RECEIPT_KEYS = [
+  "runner_id",
+  "runtime_image",
+  "seccomp_sha256",
+  "apparmor_profile",
+  "network_denied",
+  "package_install_allowed",
+  "production_access_allowed",
+  "deploy_allowed",
+  "workspace_cleaned",
+  "cgroup_cleaned",
+] as const;
+
+function parseBaseReceiptFields(
+  receipt: Record<string, unknown>,
+): BaseRunnerReceipt {
+  if (
+    stringField(receipt, "runner_id", "evidence.receipt") !== PINNED_RUNNER_ID ||
+    stringField(receipt, "runtime_image", "evidence.receipt") !==
+      RUNNER_RUNTIME_IMAGE ||
+    stringField(receipt, "seccomp_sha256", "evidence.receipt") !==
+      RUNNER_SECCOMP_SHA256 ||
+    stringField(receipt, "apparmor_profile", "evidence.receipt") !==
+      "liltweak-runner-job" ||
+    !booleanField(receipt, "network_denied", "evidence.receipt") ||
+    booleanField(receipt, "package_install_allowed", "evidence.receipt") ||
+    booleanField(receipt, "production_access_allowed", "evidence.receipt") ||
+    booleanField(receipt, "deploy_allowed", "evidence.receipt")
+  ) {
+    throw new InputError("evidence receipt violates the fixed sandbox contract");
+  }
+  return {
+    runner_id: PINNED_RUNNER_ID,
+    runtime_image: RUNNER_RUNTIME_IMAGE,
+    seccomp_sha256: RUNNER_SECCOMP_SHA256,
+    apparmor_profile: "liltweak-runner-job",
+    network_denied: true,
+    package_install_allowed: false,
+    production_access_allowed: false,
+    deploy_allowed: false,
+    workspace_cleaned: booleanField(
+      receipt,
+      "workspace_cleaned",
+      "evidence.receipt",
+    ),
+    cgroup_cleaned: booleanField(
+      receipt,
+      "cgroup_cleaned",
+      "evidence.receipt",
+    ),
+  };
+}
+
+function parseRunnerReceipt(
+  value: unknown,
+  outcome: RunnerEvidence["outcome"],
+  exitCode: number,
+): RunnerReceipt {
+  if (!isRecord(value)) {
+    throw new InputError("evidence.receipt must be an object");
+  }
+  if ("cancelled_before_execution" in value) {
+    const receipt = exactRecord(
+      value,
+      ["cancelled_before_execution"],
+      "evidence.receipt",
+    );
+    if (
+      outcome !== "cancelled" ||
+      exitCode !== 0 ||
+      !booleanField(receipt, "cancelled_before_execution", "evidence.receipt")
+    ) {
+      throw new InputError("pre-execution cancellation receipt is invalid");
+    }
+    return { cancelled_before_execution: true };
+  }
+  if (!("source_mutated" in value)) {
+    const receipt = exactRecord(value, BASE_RECEIPT_KEYS, "evidence.receipt");
+    if (outcome === "succeeded") {
+      throw new InputError("successful evidence requires a completed job receipt");
+    }
+    return parseBaseReceiptFields(receipt);
+  }
+
+  const sourceMutated = booleanField(value, "source_mutated", "evidence.receipt");
+  if (!sourceMutated) {
+    const receipt = exactRecord(
+      value,
+      [...BASE_RECEIPT_KEYS, "candidate_sha", "source_commit", "source_tree", "source_mutated"],
+      "evidence.receipt",
+    );
+    if (receipt.candidate_sha !== null) {
+      throw new InputError("read-only evidence receipt candidate_sha must be null");
+    }
+    return {
+      ...parseBaseReceiptFields(receipt),
+      candidate_sha: null,
+      source_commit: requireMatch(
+        stringField(receipt, "source_commit", "evidence.receipt"),
+        GIT_SHA_PATTERN,
+        "evidence.receipt.source_commit",
+      ),
+      source_tree: requireMatch(
+        stringField(receipt, "source_tree", "evidence.receipt"),
+        GIT_SHA_PATTERN,
+        "evidence.receipt.source_tree",
+      ),
+      source_mutated: false,
+    };
+  }
+
+  const receipt = exactRecord(
+    value,
+    [
+      ...BASE_RECEIPT_KEYS,
+      "artifact_path",
+      "artifact_sha256",
+      "candidate_sha",
+      "candidate_tree",
+      "source_commit",
+      "source_tree",
+      "source_mutated",
+      "bundle_sha256",
+      "bundle_size",
+      "candidate_store_id",
+      "created_at_ms",
+      "qualification_branch",
+    ],
+    "evidence.receipt",
+  );
+  if (
+    stringField(receipt, "artifact_path", "evidence.receipt") !==
+      QUALIFICATION_ARTIFACT_PATH ||
+    stringField(receipt, "artifact_sha256", "evidence.receipt") !==
+      QUALIFICATION_CONTENT_SHA256
+  ) {
+    throw new InputError("bounded-write receipt artifact is not authorized");
+  }
+  const bundleSize = integerField(receipt, "bundle_size", "evidence.receipt");
+  if (bundleSize < 1 || bundleSize > MAX_CANDIDATE_BUNDLE_BYTES) {
+    throw new InputError("evidence.receipt.bundle_size is outside the approved bound");
+  }
+  const createdAt = integerField(receipt, "created_at_ms", "evidence.receipt");
+  if (createdAt < 0) {
+    throw new InputError("evidence.receipt.created_at_ms is invalid");
+  }
+  return {
+    ...parseBaseReceiptFields(receipt),
+    artifact_path: QUALIFICATION_ARTIFACT_PATH,
+    artifact_sha256: QUALIFICATION_CONTENT_SHA256,
+    candidate_sha: requireMatch(
+      stringField(receipt, "candidate_sha", "evidence.receipt"),
+      GIT_SHA_PATTERN,
+      "evidence.receipt.candidate_sha",
+    ),
+    candidate_tree: requireMatch(
+      stringField(receipt, "candidate_tree", "evidence.receipt"),
+      GIT_SHA_PATTERN,
+      "evidence.receipt.candidate_tree",
+    ),
+    source_commit: requireMatch(
+      stringField(receipt, "source_commit", "evidence.receipt"),
+      GIT_SHA_PATTERN,
+      "evidence.receipt.source_commit",
+    ),
+    source_tree: requireMatch(
+      stringField(receipt, "source_tree", "evidence.receipt"),
+      GIT_SHA_PATTERN,
+      "evidence.receipt.source_tree",
+    ),
+    source_mutated: true,
+    bundle_sha256: requireMatch(
+      stringField(receipt, "bundle_sha256", "evidence.receipt"),
+      DIGEST_PATTERN,
+      "evidence.receipt.bundle_sha256",
+    ),
+    bundle_size: bundleSize,
+    candidate_store_id: requireMatch(
+      stringField(receipt, "candidate_store_id", "evidence.receipt"),
+      EXECUTION_ID_PATTERN,
+      "evidence.receipt.candidate_store_id",
+    ),
+    created_at_ms: createdAt,
+    qualification_branch: requireMatch(
+      stringField(receipt, "qualification_branch", "evidence.receipt"),
+      QUALIFICATION_BRANCH_PATTERN,
+      "evidence.receipt.qualification_branch",
+    ),
+  };
+}
+
 export function parseEvidenceRequest(value: unknown): EvidenceRequest {
   const record = exactRecord(
     value,
@@ -345,6 +601,7 @@ export function parseEvidenceRequest(value: unknown): EvidenceRequest {
       "stdout_digest",
       "stderr_digest",
       "receipt_digest",
+      "receipt",
       "exit_code",
       "started_at_ms",
       "finished_at_ms",
@@ -357,7 +614,7 @@ export function parseEvidenceRequest(value: unknown): EvidenceRequest {
   }
   if (
     stringField(evidence, "schema_version", "evidence") !==
-    "lil-tweak.runner-evidence/v1"
+    RUNNER_EVIDENCE_SCHEMA
   ) {
     throw new InputError("evidence schema is invalid");
   }
@@ -389,9 +646,10 @@ export function parseEvidenceRequest(value: unknown): EvidenceRequest {
   return {
     ...identifiers,
     evidence: {
-      schema_version: "lil-tweak.runner-evidence/v1",
+      schema_version: RUNNER_EVIDENCE_SCHEMA,
       outcome,
       ...digests,
+      receipt: parseRunnerReceipt(evidence.receipt, outcome, exitCode),
       exit_code: exitCode,
       started_at_ms: startedAt,
       finished_at_ms: finishedAt,

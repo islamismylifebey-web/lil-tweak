@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from base64 import urlsafe_b64encode
 from dataclasses import replace
@@ -39,6 +40,7 @@ from liltweak.resource.contracts import (
 )
 from liltweak.resource.dispatch import DispatchAttestationVerifier, dispatch_issuer_key_id
 from liltweak.resource.leases import ExecutionLease
+from runner.protocol import canonical_json, sign_runner_request
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -282,6 +284,48 @@ async def test_http_client_rejects_manifest_not_bound_to_attested_commands_diges
 @pytest.mark.asyncio
 async def test_http_client_reads_typed_control_status_without_completion_inference() -> None:
     observed: dict[str, object] = {}
+    receipt = {
+        "runner_id": "galor-tweak-runner-01",
+        "runtime_image": (
+            "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+        ),
+        "seccomp_sha256": ("50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"),
+        "apparmor_profile": "liltweak-runner-job",
+        "network_denied": True,
+        "package_install_allowed": False,
+        "production_access_allowed": False,
+        "deploy_allowed": False,
+        "workspace_cleaned": True,
+        "cgroup_cleaned": True,
+        "candidate_sha": None,
+        "source_commit": "f" * 40,
+        "source_tree": "e" * 40,
+        "source_mutated": False,
+    }
+    evidence = {
+        "schema_version": "lil-tweak.runner-evidence/v2",
+        "outcome": "succeeded",
+        "operation_digest": "c" * 64,
+        "stdout_digest": "3" * 64,
+        "stderr_digest": "4" * 64,
+        "receipt_digest": hashlib.sha256(canonical_json(receipt).encode()).hexdigest(),
+        "receipt": receipt,
+        "exit_code": 0,
+        "started_at_ms": 1_788_229_000_000,
+        "finished_at_ms": 1_788_229_001_000,
+    }
+    envelope = sign_runner_request(
+        operation="evidence",
+        payload={
+            "execution_id": "execution_001",
+            "attempt_nonce": urlsafe_b64encode(bytes(range(32))).decode("ascii").rstrip("="),
+            "evidence": evidence,
+        },
+        private_key=Ed25519PrivateKey.from_private_bytes(b"R" * 32),
+        issued_at_ms=1_788_229_001_000,
+        request_nonce=b"N" * 32,
+    )
+    evidence_digest = hashlib.sha256(canonical_json(evidence).encode()).hexdigest()
 
     def handler(request: httpx.Request) -> httpx.Response:
         observed["method"] = request.method
@@ -300,8 +344,9 @@ async def test_http_client_reads_typed_control_status_without_completion_inferen
                 "policy_digest": "e" * 64,
                 "expires_at_ms": 1_788_229_200_000,
                 "claim_receipt_digest": "1" * 64,
-                "evidence_digest": "2" * 64,
+                "evidence_digest": evidence_digest,
                 "evidence_outcome": "succeeded",
+                "evidence_envelope": envelope,
             },
         )
 
@@ -321,7 +366,8 @@ async def test_http_client_reads_typed_control_status_without_completion_inferen
     }
     assert status.status == "EVIDENCE_RECORDED"
     assert status.evidence_outcome == "succeeded"
-    assert status.evidence_digest == "2" * 64
+    assert status.evidence_digest == evidence_digest
+    assert status.evidence_envelope is not None
 
 
 @pytest.mark.asyncio

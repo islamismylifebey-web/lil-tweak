@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -26,6 +27,9 @@ from liltweak.providers.contracts import (
     ProviderOperationResult,
     VerificationOutcome,
 )
+from liltweak.providers.self_hosted.galor_tweak_runner import (
+    SignedRunnerEvidenceEnvelope,
+)
 from liltweak.providers.self_hosted.qualification_manifest import (
     QualificationBoundedWriteManifest,
     QualificationReadOnlyManifest,
@@ -34,6 +38,7 @@ from liltweak.providers.self_hosted.qualification_manifest import (
 from liltweak.resource.budget import ResourceLedger
 from liltweak.resource.contracts import ResourceProvider, WorkspacePolicy
 from liltweak.resource.dispatch import dispatch_issuer_key_id
+from runner.protocol import canonical_json, sign_runner_request
 
 NOW = datetime(2026, 9, 1, 20, 0, tzinfo=UTC)
 
@@ -133,6 +138,7 @@ class RecordingProvider:
             reason="evidence pending",
             verification_outcome=VerificationOutcome.PENDING,
         )
+        self.evidence: SignedRunnerEvidenceEnvelope | None = None
 
     async def provision(self, *, contract: object, lease: object) -> ProviderOperationResult:
         self.provisioned.append((contract, lease))
@@ -169,6 +175,10 @@ class RecordingProvider:
             evidence_digest="d" * 64,
         )
 
+    def evidence_for(self, execution_id: str) -> SignedRunnerEvidenceEnvelope | None:
+        del execution_id
+        return self.evidence
+
 
 def _orchestrator(provider: RecordingProvider, *, monthly_limit: int = 100_000):
     return PrivateRunnerQualificationOrchestrator(
@@ -179,6 +189,58 @@ def _orchestrator(provider: RecordingProvider, *, monthly_limit: int = 100_000):
         identifier_factory=lambda label: f"{label}-001",
         nonce_factory=lambda: "1" * 64,
     )
+
+
+def _recorded_runner_evidence(
+    provider: RecordingProvider,
+) -> tuple[SignedRunnerEvidenceEnvelope, str]:
+    contract, lease, _ = provider.executed[0]
+    receipt = {
+        "runner_id": "galor-tweak-runner-01",
+        "runtime_image": (
+            "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+        ),
+        "seccomp_sha256": ("50eeb8b4cb2c33284f09453c8dd64c5895f5e1a2fa6b7a7440dfbac175fe1c23"),
+        "apparmor_profile": "liltweak-runner-job",
+        "network_denied": True,
+        "package_install_allowed": False,
+        "production_access_allowed": False,
+        "deploy_allowed": False,
+        "workspace_cleaned": True,
+        "cgroup_cleaned": True,
+        "candidate_sha": None,
+        "source_commit": contract.source.source_commit,
+        "source_tree": contract.source.source_tree,
+        "source_mutated": False,
+    }
+    evidence = {
+        "schema_version": "lil-tweak.runner-evidence/v2",
+        "outcome": "succeeded",
+        "operation_digest": contract.commands_digest,
+        "stdout_digest": "1" * 64,
+        "stderr_digest": "2" * 64,
+        "receipt_digest": hashlib.sha256(canonical_json(receipt).encode()).hexdigest(),
+        "receipt": receipt,
+        "exit_code": 0,
+        "started_at_ms": int((NOW + timedelta(seconds=1)).timestamp() * 1_000),
+        "finished_at_ms": int((NOW + timedelta(seconds=2)).timestamp() * 1_000),
+    }
+    envelope = SignedRunnerEvidenceEnvelope.model_validate(
+        sign_runner_request(
+            operation="evidence",
+            payload={
+                "execution_id": lease.execution_id,
+                "attempt_nonce": base64.urlsafe_b64encode(bytes.fromhex(lease.attempt_nonce))
+                .decode("ascii")
+                .rstrip("="),
+                "evidence": evidence,
+            },
+            private_key=Ed25519PrivateKey.from_private_bytes(b"R" * 32),
+            issued_at_ms=int((NOW + timedelta(seconds=2)).timestamp() * 1_000),
+            request_nonce=b"N" * 32,
+        )
+    )
+    return envelope, hashlib.sha256(canonical_json(evidence).encode()).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -200,6 +262,36 @@ async def test_routes_exact_job_a_through_director_contract_lease_and_provider()
     assert contract.selected_profile.runner_profile_id == "galor-tweak-runner-01"
     assert contract.workspace_policy is WorkspacePolicy.READ_ONLY
     assert contract.commands_digest == manifest.commands_digest == lease.commands_digest
+
+
+@pytest.mark.asyncio
+async def test_collect_requires_and_returns_verified_signed_runner_evidence() -> None:
+    provider = RecordingProvider()
+    orchestrator = _orchestrator(provider)
+    receipt = await orchestrator.offer(
+        manifest=_manifest_a(),
+        source=_source(),
+        approval=_approval(),
+        qualification=_evidence(),
+    )
+    envelope, evidence_digest = _recorded_runner_evidence(provider)
+    provider.status_result = ProviderOperationResult(
+        provider=ResourceProvider.SELF_HOSTED,
+        execution_id=receipt.execution_id,
+        status=ProviderExecutionStatus.RUNNING,
+        reason="evidence recorded",
+        verification_outcome=VerificationOutcome.PENDING,
+        evidence_digest=evidence_digest,
+    )
+
+    with pytest.raises(PrivateRunnerActivationError, match="signed runner evidence"):
+        await orchestrator.collect(receipt)
+
+    provider.evidence = envelope
+    collected = await orchestrator.collect(receipt)
+
+    assert collected.runner_evidence_digest == evidence_digest
+    assert collected.runner_evidence_envelope == envelope
 
 
 @pytest.mark.asyncio

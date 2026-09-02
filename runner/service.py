@@ -66,15 +66,15 @@ class RunnerService:
             raise RuntimeError("executor returned an invalid exit code")
         if result.started_at_ms > result.finished_at_ms:
             raise RuntimeError("executor returned invalid timestamps")
+        receipt = dict(result.receipt)
         return {
-            "schema_version": "lil-tweak.runner-evidence/v1",
+            "schema_version": "lil-tweak.runner-evidence/v2",
             "outcome": result.outcome,
             "operation_digest": offer.commands_digest,
             "stdout_digest": hashlib.sha256(result.stdout).hexdigest(),
             "stderr_digest": hashlib.sha256(result.stderr).hexdigest(),
-            "receipt_digest": hashlib.sha256(
-                canonical_json(dict(result.receipt)).encode("utf-8")
-            ).hexdigest(),
+            "receipt_digest": hashlib.sha256(canonical_json(receipt).encode("utf-8")).hexdigest(),
+            "receipt": receipt,
             "exit_code": result.exit_code,
             "started_at_ms": result.started_at_ms,
             "finished_at_ms": result.finished_at_ms,
