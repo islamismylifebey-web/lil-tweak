@@ -80,12 +80,8 @@ def test_runner_v3_workflow_is_read_only_and_headless() -> None:
     assert job["timeout-minutes"] == 30
     assert "permissions" not in job
     assert job["env"]["RUNNER_V3_PROFILE_ID"] == RUNNER_V3_PROFILE_ID
-    assert job["env"]["RUNNER_V3_OUTPUT_DIR"] == (
-        "${{ runner.temp }}/runner-v3-output"
-    )
-    assert job["env"]["RUNNER_V3_MANIFEST_PATH"] == (
-        "${{ runner.temp }}/runner-v3-manifest.json"
-    )
+    assert "RUNNER_V3_OUTPUT_DIR" not in job["env"]
+    assert "RUNNER_V3_MANIFEST_PATH" not in job["env"]
     assert job["env"]["OPENAI_API_KEY"] == ""
     assert job["env"]["LILTWEAK_LIVE_MODEL_ENABLED"] == "false"
     assert job["env"]["LILTWEAK_REPOSITORY_EXECUTION_ENABLED"] == "false"
@@ -94,12 +90,16 @@ def test_runner_v3_workflow_is_read_only_and_headless() -> None:
 def test_runner_v3_workflow_pins_checkout_toolchain_and_artifacts() -> None:
     workflow = _workflow()
     steps = _steps(workflow)
+    initialize = _step_by_name(steps, "Initialize Runner V3 paths")
     checkout = _step_by_name(steps, "Checkout exact Runner V3 source")
     setup_python = _step_by_name(steps, "Set up Python")
     setup_uv = _step_by_name(steps, "Set up uv")
     upload = _step_by_name(steps, "Upload bounded Runner V3 evidence")
     cleanup = _step_by_name(steps, "Remove ephemeral Runner V3 material")
 
+    assert "$RUNNER_TEMP/runner-v3-output" in initialize["run"]
+    assert "$RUNNER_TEMP/runner-v3-manifest.json" in initialize["run"]
+    assert "$GITHUB_ENV" in initialize["run"]
     assert checkout["uses"] == (
         "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
     )
