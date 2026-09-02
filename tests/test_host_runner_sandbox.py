@@ -33,7 +33,7 @@ def test_sandbox_command_uses_pinned_rootfs_mac_seccomp_nonroot_and_no_network()
     )
 
     assert command[:6] == (
-        "/usr/sbin/aa-exec",
+        "/usr/bin/aa-exec",
         "-p",
         "liltweak-runner-job",
         "--",

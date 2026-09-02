@@ -170,7 +170,7 @@ def test_sandbox_command_reuses_shared_pinned_runtime_and_is_execution_disconnec
 
     joined = "\n".join(command)
     assert command[:6] == (
-        "/usr/sbin/aa-exec",
+        "/usr/bin/aa-exec",
         "-p",
         "liltweak-runner-job",
         "--",
@@ -185,7 +185,7 @@ def test_sandbox_command_reuses_shared_pinned_runtime_and_is_execution_disconnec
     assert "--uid\n17001" in joined
     assert "--gid\n17001" in joined
     assert "--ro-bind\n/var/lib/liltweak-qualification/rq_b/source\n/source" in joined
-    assert joined.index("/usr/sbin/aa-exec") < joined.index("/usr/bin/bwrap")
+    assert joined.index("/usr/bin/aa-exec") < joined.index("/usr/bin/bwrap")
     assert joined.index("/usr/bin/prlimit") < joined.index("/usr/bin/bwrap")
     assert "--fsize=131072" in command
     assert "/usr/local/bin/python3" in command

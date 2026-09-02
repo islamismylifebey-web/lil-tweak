@@ -206,7 +206,7 @@ def build_sandbox_command(
         except KeyError as exc:
             raise SandboxError("sandbox step is not authorized") from exc
     return (
-        "/usr/sbin/aa-exec",
+        "/usr/bin/aa-exec",
         "-p",
         APPARMOR_PROFILE,
         "--",

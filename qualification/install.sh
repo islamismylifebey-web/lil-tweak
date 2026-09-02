@@ -15,7 +15,7 @@ for path in \
   /usr/bin/bwrap \
   /usr/bin/prlimit \
   /usr/bin/python3 \
-  /usr/sbin/aa-exec \
+  /usr/bin/aa-exec \
   /usr/bin/git \
   /usr/bin/ssh \
   /usr/bin/mount \

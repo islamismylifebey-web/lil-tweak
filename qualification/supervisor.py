@@ -525,7 +525,7 @@ def build_sandbox_command(
     if sandbox_uid != 17001 or sandbox_gid != 17001:
         raise QualificationError("sandbox identity is invalid")
     return (
-        "/usr/sbin/aa-exec",
+        "/usr/bin/aa-exec",
         "-p",
         APPARMOR_PROFILE,
         "--",

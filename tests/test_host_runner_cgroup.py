@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runner.cgroup import CgroupManager
+from runner.cgroup import CgroupManager, _current_service_cgroup
+
+
+def test_current_service_cgroup_stays_under_unified_root(monkeypatch) -> None:
+    def fake_read_text(path: Path, *, encoding: str) -> str:
+        assert path == Path("/proc/self/cgroup")
+        assert encoding == "ascii"
+        return "0::/system.slice/liltweak-runner.service\n"
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+    assert _current_service_cgroup() == Path(
+        "/sys/fs/cgroup/system.slice/liltweak-runner.service"
+    )
 
 
 def test_cgroup_applies_cpu_memory_swap_and_pid_limits_and_emergency_kill(

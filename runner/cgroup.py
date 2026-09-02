@@ -56,7 +56,7 @@ def _current_service_cgroup() -> Path:
     unified = [line[3:] for line in lines if line.startswith("0::/")]
     if len(unified) != 1:
         raise CgroupError("unified cgroup v2 is required")
-    return Path("/sys/fs/cgroup") / unified[0]
+    return Path("/sys/fs/cgroup") / unified[0].lstrip("/")
 
 
 class CgroupManager:
