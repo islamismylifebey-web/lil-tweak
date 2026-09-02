@@ -203,7 +203,10 @@ class GitHubRunnerV3Provider:
         return self._result(
             lease.execution_id,
             ProviderExecutionStatus.RUNNING,
-            "Runner V3 GitHub builder workflow dispatched; independent verification remains separate",
+            (
+                "Runner V3 GitHub builder workflow dispatched; "
+                "independent verification remains separate"
+            ),
             operation_id=run_id,
         )
 
@@ -465,7 +468,10 @@ class GitHubRunnerV3Provider:
         return self._result(
             execution_id,
             ProviderExecutionStatus.FAILED,
-            "Runner V3 workflow did not produce trusted builder evidence; independent verification remains separate",
+            (
+                "Runner V3 workflow did not produce trusted builder evidence; "
+                "independent verification remains separate"
+            ),
             operation_id=run.run_id,
         )
 
