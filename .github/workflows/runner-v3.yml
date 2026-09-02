@@ -38,8 +38,6 @@ jobs:
     timeout-minutes: 30
     env:
       RUNNER_V3_PROFILE_ID: galor-tweak-runner-v3-github-01
-      RUNNER_V3_OUTPUT_DIR: ${{ runner.temp }}/runner-v3-output
-      RUNNER_V3_MANIFEST_PATH: ${{ runner.temp }}/runner-v3-manifest.json
       RUNNER_V3_LABEL: ubuntu-24.04
       UV_CACHE_DIR: /tmp/liltweak-uv-cache
       UV_NO_PROGRESS: "1"
@@ -55,6 +53,15 @@ jobs:
       LILTWEAK_REPOSITORY_EXECUTION_ENABLED: "false"
 
     steps:
+      - name: Initialize Runner V3 paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          printf 'RUNNER_V3_OUTPUT_DIR=%s\n' \
+            "$RUNNER_TEMP/runner-v3-output" >> "$GITHUB_ENV"
+          printf 'RUNNER_V3_MANIFEST_PATH=%s\n' \
+            "$RUNNER_TEMP/runner-v3-manifest.json" >> "$GITHUB_ENV"
+
       - name: Checkout exact Runner V3 source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
