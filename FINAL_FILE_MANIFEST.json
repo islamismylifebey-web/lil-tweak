@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "3b0b321ec6883c64573b63cf2f910c1b7ecfadb4815ecce251b56f8a54e6676f",
+  "manifest_scope_digest": "4e5cc8a553941e2e79dc574f40652e4b724184bea4b969b222c17cfb84bacd35",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 369,
@@ -42,9 +42,9 @@
       "relative_path": ".github/workflows/runner-qualification.yml",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "cb278e922e9f57e8d5c6b7d97f8d51ac9abeb19cf43c4381d0455364a4f0958d",
-      "git_blob_sha1": "0f92845af488bb9b3df809af05ea5f45aee570be",
-      "bytes": 18011
+      "sha256": "b31dbb028a8a0f26e7a21a255c9f0563ef2f85f3ddc1307b0c6599f7f7c427c5",
+      "git_blob_sha1": "57dfb06eff4080a11aeb0ccecc9bda6dd2ed3359",
+      "bytes": 17975
     },
     {
       "relative_path": ".gitignore",
@@ -106,8 +106,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2e4fb6b6f2e051268d583cbfc23870a6c7b5d9778e650c133812736140bd9815",
-      "git_blob_sha1": "6c7139cb899c60e6d0c7d530d8f1077a4c7bc2d4",
+      "sha256": "386a2ae6268bffed00539ff3b08d5ce078d97b46279593edd920e28f9be061f5",
+      "git_blob_sha1": "f7a1480cd7d5778e03aba52bab44b84aaef1384e",
       "bytes": 2471
     },
     {
@@ -162,8 +162,8 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "7235da014d220bbb43f3a597b8811de2338bdbfd13cb1900c28d58ac41259d1a",
-      "git_blob_sha1": "2a3c15dba5ee6d6f25f1018d3231e744566fd15a",
+      "sha256": "4cf97b5603df057b38b4a6b20e22f7bb90aa28fd56ad45dec0c7b12f4cc8361e",
+      "git_blob_sha1": "3622da0e89d31055a37fe73a06b768b67ca12a39",
       "bytes": 2261
     },
     {
@@ -2442,9 +2442,9 @@
       "relative_path": "tests/test_phase71_release.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "75547f104d546b6e561f931f89141a49a7a9faeed90ac61e3ea7bd423ff86804",
-      "git_blob_sha1": "cfa44cd458a61fb82791334ff2a373fabc97eba2",
-      "bytes": 12913
+      "sha256": "f7be1d652075af8a2ed51be86ca0e0db142d1583c9b0a09a1ee2dfa61524a05a",
+      "git_blob_sha1": "e6401c790d20dd83b9d9a661f96dc8b5d01a7ff5",
+      "bytes": 13093
     },
     {
       "relative_path": "tests/test_phase7_execution.py",
