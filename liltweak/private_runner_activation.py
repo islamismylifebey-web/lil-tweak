@@ -503,9 +503,7 @@ class PrivateRunnerQualificationOrchestrator:
             or prior_receipt.source_commit != verification.source_commit
             or prior_receipt.runner_evidence_digest != verification.runner_evidence_digest
         ):
-            raise PrivateRunnerActivationError(
-                "Job A independent verification binding mismatch"
-            )
+            raise PrivateRunnerActivationError("Job A independent verification binding mismatch")
 
     @staticmethod
     def _profile(qualification: PrivateRunnerQualificationEvidence) -> ResourceProfile:

@@ -9,10 +9,10 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "978a6330fa95d0f983fa3867daf8fa911c68877689543edc515198fcdd914cf1",
+  "manifest_scope_digest": "7dbb027ebd8ab6075e946b15239281a01f8804f998fbf434a0ffb15654db102b",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
-  "file_count_excluding_manifest": 371,
+  "file_count_excluding_manifest": 374,
   "files": [
     {
       "relative_path": ".env.example",
@@ -29,6 +29,30 @@
       "sha256": "f8693adc98c0457dc5b087d2b056802f0c60ac0946a6da2c96766fc79c664a51",
       "git_blob_sha1": "d4109cdd37453e8e366120c424db87fab1fbfd44",
       "bytes": 14872
+    },
+    {
+      "relative_path": ".github/workflows/pr12-bounded-repair.yml",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "4fd12443be958fff0066235202582c8e7805ba6e6aa2871808069a01423901e6",
+      "git_blob_sha1": "b7a7643b27412b905158e01dea7902c098dfc639",
+      "bytes": 10644
+    },
+    {
+      "relative_path": ".github/workflows/pr12-exact-completion-v2.yml",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "298212f8f66dfbb273139742bab82beaea0a04f9966946f3820e10fd8c5d545f",
+      "git_blob_sha1": "066f8e4ceeb3071f39a8aee658c74dcf87bb486c",
+      "bytes": 31480
+    },
+    {
+      "relative_path": ".github/workflows/pr12-exact-completion.yml",
+      "entry_type": "regular_file",
+      "git_mode": "100644",
+      "sha256": "247ea4a39ed49d7645d9a616ed407e16122d3c572abdb959cf065afa6e370e32",
+      "git_blob_sha1": "cd302e9ffe6d501973849df318dc48e4feccc143",
+      "bytes": 28570
     },
     {
       "relative_path": ".github/workflows/runner-ed25519-evidence.yml",
@@ -1290,9 +1314,9 @@
       "relative_path": "liltweak/private_runner_activation.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "6931e2f97663f7a102dd01c5873cb6d4a6a3a717c7073d768ad4d074998f0c90",
-      "git_blob_sha1": "51a9b35ca92ec6ee053b53a8d0476653d4769084",
-      "bytes": 34672
+      "sha256": "ed266d3144c67456f939eb8d3aadf76c35d53c5b155c4a77ac5c153c05c4b72c",
+      "git_blob_sha1": "f44fc4b0bc7a549f2c51c16e7525ce1f270ceca0",
+      "bytes": 34642
     },
     {
       "relative_path": "liltweak/private_runner_control_plane.py",
