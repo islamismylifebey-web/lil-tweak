@@ -68,7 +68,12 @@ def repository_oracle(repository: Path) -> str:
             ).encode("utf-8", errors="surrogateescape")
         )
         if stat.S_ISDIR(metadata.st_mode):
-            pending.extend(sorted(current.iterdir(), reverse=True))
+            pending.extend(
+                sorted(
+                    [entry for entry in current.iterdir() if entry.name != ".git"],
+                    reverse=True,
+                )
+            )
     digest.update(run_git(repository, "rev-parse", "HEAD").encode())
     digest.update(
         subprocess.run(
