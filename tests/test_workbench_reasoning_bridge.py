@@ -246,6 +246,8 @@ async def test_bridge_uses_canonical_prompt_profile_and_provider_evidence() -> N
     admission = SpyAdmission()
     adapter = CanonicalWorkbenchModelAdapter(
         provider=provider,  # type: ignore[arg-type]
+        input_token_ceiling=144_000,
+        output_token_ceiling=25_772,
         admission=admission,
     )
 
@@ -269,9 +271,13 @@ async def test_bridge_uses_canonical_prompt_profile_and_provider_evidence() -> N
     assert call["role"] == ReasoningRole.PLANNER
     assert call["profile_name"] == ReasoningProfileName.ORDINARY
     assert call["output_type"] is WorkbenchPlan
+    assert call["input_token_ceiling"] == 144_000
+    assert call["output_token_ceiling"] == 25_772
     assert call["instructions"] == PROMPT_DEFINITIONS[PromptName.WORKBENCH_PLAN].instructions
     assert "expected_status" not in str(call["input_text"])
     assert admission.claims[0]["model"] == "gpt-5.6-sol"
+    assert admission.claims[0]["input_token_ceiling"] == 144_000
+    assert admission.claims[0]["output_token_ceiling"] == 25_772
     assert admission.finishes == [
         {
             "admission_id": "model-admission:canonical",
