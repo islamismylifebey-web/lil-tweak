@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,6 +14,7 @@ from .limits import TRUSTED_WORK_ROOT_INODES
 
 
 _SIGNING_KEY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 CANONICAL_OWNER_SCOPE = "ab43c7488fb38a90c7bb9c4bcc0e23e5"
 
 
@@ -31,6 +32,10 @@ class Config:
     evidence_endpoint: str
     aws_access_key_id: str
     aws_secret_access_key: str
+    execution_backend: str = "local_podman"
+    galor_runner_gateway_url: str | None = None
+    galor_lil_tweak_service_token: str | None = field(default=None, repr=False)
+    repository_commit: str | None = None
     git_allowed_hosts: tuple[str, ...] = ()
     galor_readonly_url: str | None = None
     max_admitted_jobs: int = 1
@@ -80,6 +85,48 @@ class Config:
                 or galor_url.fragment
             ):
                 raise ValueError("invalid GALOR read-only URL")
+
+        execution_backend = values.get(
+            "LIL_TWEAK_EXECUTION_BACKEND", "local_podman"
+        ).strip()
+        if execution_backend not in {"local_podman", "galor_v3"}:
+            raise ValueError("invalid execution backend")
+
+        galor_runner_gateway_url = (
+            values.get("LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL", "").strip() or None
+        )
+        galor_lil_tweak_service_token = (
+            values.get("LIL_TWEAK_GALOR_SERVICE_TOKEN", "").strip() or None
+        )
+        repository_commit = values.get("LIL_TWEAK_REPOSITORY_COMMIT", "").strip() or None
+
+        if galor_runner_gateway_url:
+            gateway = urlsplit(galor_runner_gateway_url)
+            if (
+                gateway.scheme != "https"
+                or not gateway.hostname
+                or gateway.username is not None
+                or gateway.password is not None
+                or gateway.query
+                or gateway.fragment
+                or gateway.path not in {"", "/"}
+            ):
+                raise ValueError("invalid GALOR runner gateway URL")
+            galor_runner_gateway_url = f"https://{gateway.netloc}"
+        if galor_lil_tweak_service_token is not None and not (
+            32 <= len(galor_lil_tweak_service_token.encode("utf-8")) <= 4096
+        ):
+            raise ValueError("invalid GALOR service token")
+        if repository_commit is not None and not _GIT_COMMIT.fullmatch(repository_commit):
+            raise ValueError("invalid repository commit")
+        if execution_backend == "galor_v3":
+            if not galor_runner_gateway_url:
+                raise ValueError("missing configuration: LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL")
+            if not galor_lil_tweak_service_token:
+                raise ValueError("missing configuration: LIL_TWEAK_GALOR_SERVICE_TOKEN")
+            if not repository_commit:
+                raise ValueError("missing configuration: LIL_TWEAK_REPOSITORY_COMMIT")
+
         git_allowed_hosts = tuple(
             item.strip().lower()
             for item in values.get("LIL_TWEAK_GIT_ALLOWED_HOSTS", "").split(",")
@@ -125,6 +172,10 @@ class Config:
             evidence_endpoint=evidence_endpoint,
             aws_access_key_id=required("LIL_TWEAK_R2_ACCESS_KEY_ID"),
             aws_secret_access_key=required("LIL_TWEAK_R2_SECRET_ACCESS_KEY"),
+            execution_backend=execution_backend,
+            galor_runner_gateway_url=galor_runner_gateway_url,
+            galor_lil_tweak_service_token=galor_lil_tweak_service_token,
+            repository_commit=repository_commit,
             git_allowed_hosts=git_allowed_hosts,
             galor_readonly_url=galor,
             max_admitted_jobs=max_admitted_jobs,
