@@ -161,7 +161,7 @@ class Settings:
     workbench_rate_limit_per_minute: int = 120
     workbench_input_token_limit: int = 144_000
     workbench_output_token_limit: int = 25_772
-    workbench_cost_ceiling_usd: float = 0.20
+    workbench_cost_ceiling_usd: float = 1.50
     workbench_monthly_limit_usd: float = 5.0
     workbench_runner_enabled: bool = False
     workbench_runner_gateway_url: str | None = None
@@ -469,7 +469,7 @@ class Settings:
             ),
             workbench_input_token_limit=_int_env("LILTWEAK_WORKBENCH_INPUT_TOKEN_LIMIT", 144_000),
             workbench_output_token_limit=_int_env("LILTWEAK_WORKBENCH_OUTPUT_TOKEN_LIMIT", 25_772),
-            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 0.20),
+            workbench_cost_ceiling_usd=_float_env("LILTWEAK_WORKBENCH_COST_CEILING_USD", 1.50),
             workbench_monthly_limit_usd=_float_env("LILTWEAK_WORKBENCH_MONTHLY_LIMIT_USD", 5.0),
             workbench_runner_enabled=_bool_env("LILTWEAK_WORKBENCH_RUNNER_ENABLED", False),
             workbench_runner_gateway_url=os.getenv("LILTWEAK_WORKBENCH_RUNNER_GATEWAY_URL"),
