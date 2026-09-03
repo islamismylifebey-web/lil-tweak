@@ -128,7 +128,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
       return error(401, "unauthorized");
     }
     const body = parseOfferRequest(await readJson(request));
-    const verified = await verifyDispatchAttestation(body.attestation, env, Date.now());
+    const nowMs = Date.now();
+    const verified = await verifyDispatchAttestation(body.attestation, env, nowMs);
     if (
       (await sha256Hex(canonicalJson(body.manifest))) !==
       verified.attestation.attestation.commands_digest
@@ -136,7 +137,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       throw new InputError("manifest digest does not match the signed commands digest");
     }
     return resultResponse(
-      await controlObject(env).offer(verified, body.manifest, Date.now()),
+      await controlObject(env).offer(verified, body.manifest, nowMs),
       201,
     );
   }

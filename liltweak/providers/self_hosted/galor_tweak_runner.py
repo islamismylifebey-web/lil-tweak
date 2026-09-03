@@ -488,11 +488,11 @@ class GalorTweakRunnerProvider:
                 minimum_authorization_sequence=(self._gate3_config.minimum_authorization_sequence),
                 revocation_epoch=self._gate3_config.revocation_epoch,
             )
-        except ExecutionLeaseError:
+        except ExecutionLeaseError as exc:
             return self._result(
                 validated_lease.execution_id,
                 ProviderExecutionStatus.BLOCKED,
-                "execution lease was rejected",
+                f"execution lease rejected: {exc}",
             )
         try:
             response = await self._client.offer(
