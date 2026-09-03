@@ -1,0 +1,756 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "57d1c9aa-7fa7-4e6f-bbf4-e03acb0f671d",
+  "prevId": "aa2e56eb-8c70-4447-96fb-58c65b8b7a76",
+  "tables": {
+    "engineering_audit_events": {
+      "name": "engineering_audit_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_key": {
+          "name": "owner_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor": {
+          "name": "actor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "correlation_id": {
+          "name": "correlation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "detail_json": {
+          "name": "detail_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_engineering_audit_job_created": {
+          "name": "idx_engineering_audit_job_created",
+          "columns": [
+            "job_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "idx_engineering_audit_correlation": {
+          "name": "idx_engineering_audit_correlation",
+          "columns": [
+            "owner_key",
+            "correlation_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "engineering_audit_events_job_id_engineering_jobs_id_fk": {
+          "name": "engineering_audit_events_job_id_engineering_jobs_id_fk",
+          "tableFrom": "engineering_audit_events",
+          "tableTo": "engineering_jobs",
+          "columnsFrom": [
+            "job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "engineering_audit_actor_check": {
+          "name": "engineering_audit_actor_check",
+          "value": "\"engineering_audit_events\".\"actor\" in ('owner','worker','core')"
+        }
+      }
+    },
+    "engineering_evidence": {
+      "name": "engineering_evidence",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_key": {
+          "name": "owner_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "r2_key": {
+          "name": "r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_engineering_evidence_owner_job": {
+          "name": "idx_engineering_evidence_owner_job",
+          "columns": [
+            "owner_key",
+            "job_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "engineering_evidence_job_id_engineering_jobs_id_fk": {
+          "name": "engineering_evidence_job_id_engineering_jobs_id_fk",
+          "tableFrom": "engineering_evidence",
+          "tableTo": "engineering_jobs",
+          "columnsFrom": [
+            "job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "engineering_evidence_size_check": {
+          "name": "engineering_evidence_size_check",
+          "value": "\"engineering_evidence\".\"size_bytes\" >= 0 and \"engineering_evidence\".\"size_bytes\" <= 2097152"
+        }
+      }
+    },
+    "engineering_jobs": {
+      "name": "engineering_jobs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_key": {
+          "name": "owner_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "create_idempotency_key": {
+          "name": "create_idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "create_request_digest": {
+          "name": "create_request_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "git_repository_url": {
+          "name": "git_repository_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "git_commit": {
+          "name": "git_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_digest": {
+          "name": "prompt_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_preview": {
+          "name": "prompt_preview",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "proposal_digest": {
+          "name": "proposal_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_digest": {
+          "name": "source_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approval_proposal_json": {
+          "name": "approval_proposal_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approval_consumed": {
+          "name": "approval_consumed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "remote_job_id": {
+          "name": "remote_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "core_revision": {
+          "name": "core_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dispatch_reserved_at": {
+          "name": "dispatch_reserved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "authorized_decision": {
+          "name": "authorized_decision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "authorized_proposal_digest": {
+          "name": "authorized_proposal_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "authorized_at": {
+          "name": "authorized_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "request_r2_key": {
+          "name": "request_r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_r2_prefix": {
+          "name": "source_r2_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_r2_prefix": {
+          "name": "evidence_r2_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_polled_at": {
+          "name": "last_polled_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_engineering_jobs_owner_updated": {
+          "name": "idx_engineering_jobs_owner_updated",
+          "columns": [
+            "owner_key",
+            "updated_at"
+          ],
+          "isUnique": false
+        },
+        "idx_engineering_jobs_owner_state": {
+          "name": "idx_engineering_jobs_owner_state",
+          "columns": [
+            "owner_key",
+            "state"
+          ],
+          "isUnique": false
+        },
+        "idx_engineering_jobs_owner_create_key": {
+          "name": "idx_engineering_jobs_owner_create_key",
+          "columns": [
+            "owner_key",
+            "create_idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "idx_engineering_jobs_remote_id": {
+          "name": "idx_engineering_jobs_remote_id",
+          "columns": [
+            "remote_job_id"
+          ],
+          "isUnique": true,
+          "where": "\"engineering_jobs\".\"remote_job_id\" is not null"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "engineering_jobs_mode_check": {
+          "name": "engineering_jobs_mode_check",
+          "value": "\"engineering_jobs\".\"mode\" in ('build','debug','refactor','test','architect','chat')"
+        },
+        "engineering_jobs_state_check": {
+          "name": "engineering_jobs_state_check",
+          "value": "\"engineering_jobs\".\"state\" in ('draft','uploading','queued','ingesting','planning','executing','testing','collecting','awaiting_approval','applying','completed','rejected','cancelled','failed','timed_out')"
+        },
+        "engineering_jobs_approval_consumed_check": {
+          "name": "engineering_jobs_approval_consumed_check",
+          "value": "\"engineering_jobs\".\"approval_consumed\" in (0,1)"
+        },
+        "engineering_jobs_authorized_decision_check": {
+          "name": "engineering_jobs_authorized_decision_check",
+          "value": "\"engineering_jobs\".\"authorized_decision\" in ('approve','reject') or \"engineering_jobs\".\"authorized_decision\" is null"
+        }
+      }
+    },
+    "engineering_sources": {
+      "name": "engineering_sources",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_key": {
+          "name": "owner_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "r2_key": {
+          "name": "r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "r2_etag": {
+          "name": "r2_etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "uploaded_at": {
+          "name": "uploaded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revision_applied": {
+          "name": "revision_applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "idx_engineering_sources_job_filename": {
+          "name": "idx_engineering_sources_job_filename",
+          "columns": [
+            "job_id",
+            "filename"
+          ],
+          "isUnique": true
+        },
+        "idx_engineering_sources_owner_job": {
+          "name": "idx_engineering_sources_owner_job",
+          "columns": [
+            "owner_key",
+            "job_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "engineering_sources_job_id_engineering_jobs_id_fk": {
+          "name": "engineering_sources_job_id_engineering_jobs_id_fk",
+          "tableFrom": "engineering_sources",
+          "tableTo": "engineering_jobs",
+          "columnsFrom": [
+            "job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "engineering_sources_size_check": {
+          "name": "engineering_sources_size_check",
+          "value": "\"engineering_sources\".\"size_bytes\" > 0 and \"engineering_sources\".\"size_bytes\" <= 25000000"
+        },
+        "engineering_sources_sha256_check": {
+          "name": "engineering_sources_sha256_check",
+          "value": "\"engineering_sources\".\"sha256\" is null or (length(\"engineering_sources\".\"sha256\") = 64 and \"engineering_sources\".\"sha256\" not glob '*[^a-f0-9]*')"
+        },
+        "engineering_sources_revision_applied_check": {
+          "name": "engineering_sources_revision_applied_check",
+          "value": "\"engineering_sources\".\"revision_applied\" in (0,1)"
+        }
+      }
+    },
+    "workspace_projects": {
+      "name": "workspace_projects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_email": {
+          "name": "owner_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'planned'"
+        },
+        "record_json": {
+          "name": "record_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "create_idempotency_key": {
+          "name": "create_idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "create_request_digest": {
+          "name": "create_request_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "create_complete": {
+          "name": "create_complete",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_workspace_projects_owner_updated": {
+          "name": "idx_workspace_projects_owner_updated",
+          "columns": [
+            "owner_email",
+            "updated_at"
+          ],
+          "isUnique": false
+        },
+        "idx_workspace_projects_owner_status": {
+          "name": "idx_workspace_projects_owner_status",
+          "columns": [
+            "owner_email",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "idx_workspace_projects_owner_create_key": {
+          "name": "idx_workspace_projects_owner_create_key",
+          "columns": [
+            "owner_email",
+            "create_idempotency_key"
+          ],
+          "isUnique": true,
+          "where": "\"workspace_projects\".\"create_idempotency_key\" is not null"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "workspace_projects_create_complete_check": {
+          "name": "workspace_projects_create_complete_check",
+          "value": "\"workspace_projects\".\"create_complete\" in (0,1)"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
