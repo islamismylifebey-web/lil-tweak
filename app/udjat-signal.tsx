@@ -19,7 +19,7 @@ export function UdjatSignal({ usage }: { usage?: LocalPreparationUsage }) {
 
   return (
     <span
-      className="udjat-signal"
+      className="lil-tueeq-signal"
       data-pressure={usage?.pressure ?? "steady"}
       data-percent={usage?.percent ?? 0}
       data-tier={visibleFractions}
@@ -29,13 +29,13 @@ export function UdjatSignal({ usage }: { usage?: LocalPreparationUsage }) {
     >
       <span
         key={`${usage?.pressure ?? "steady"}:${visibleFractions}`}
-        className="udjat-mark"
+        className="lil-tueeq-avatar"
         aria-hidden="true"
       />
       {usage && PREPARATION_FRACTIONS.map((fraction) => (
         <span
           key={fraction.id}
-          className={`udjat-fraction fraction-${fraction.id}`}
+          className={`lil-tueeq-fraction fraction-${fraction.id}`}
           data-visible={usage.ratio >= fraction.threshold}
           aria-hidden="true"
         >
