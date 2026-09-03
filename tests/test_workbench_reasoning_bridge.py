@@ -31,7 +31,11 @@ from liltweak.reasoning_provider import (
     ProviderFailureKind,
     ReasoningProviderError,
 )
-from liltweak.workbench_agent import CanonicalWorkbenchModelAdapter, WorkbenchModelError
+from liltweak.workbench_agent import (
+    CanonicalWorkbenchModelAdapter,
+    PersistentModelCallAdmission,
+    WorkbenchModelError,
+)
 from liltweak.workbench_contract import (
     CommandRequest,
     StepPhase,
@@ -242,6 +246,8 @@ async def test_bridge_uses_canonical_prompt_profile_and_provider_evidence() -> N
     admission = SpyAdmission()
     adapter = CanonicalWorkbenchModelAdapter(
         provider=provider,  # type: ignore[arg-type]
+        input_token_ceiling=144_000,
+        output_token_ceiling=25_772,
         admission=admission,
     )
 
@@ -265,9 +271,13 @@ async def test_bridge_uses_canonical_prompt_profile_and_provider_evidence() -> N
     assert call["role"] == ReasoningRole.PLANNER
     assert call["profile_name"] == ReasoningProfileName.ORDINARY
     assert call["output_type"] is WorkbenchPlan
+    assert call["input_token_ceiling"] == 144_000
+    assert call["output_token_ceiling"] == 25_772
     assert call["instructions"] == PROMPT_DEFINITIONS[PromptName.WORKBENCH_PLAN].instructions
     assert "expected_status" not in str(call["input_text"])
     assert admission.claims[0]["model"] == "gpt-5.6-sol"
+    assert admission.claims[0]["input_token_ceiling"] == 144_000
+    assert admission.claims[0]["output_token_ceiling"] == 25_772
     assert admission.finishes == [
         {
             "admission_id": "model-admission:canonical",
@@ -439,6 +449,38 @@ def enabled_settings(tmp_path: Path) -> Settings:
         execution_runtime_root=tmp_path / "runtime-root",
         workbench_workspace_root=tmp_path / "workbench-tasks",
     )
+
+
+class CostAdmissionStore:
+    def __init__(self) -> None:
+        self.claims: list[dict[str, object]] = []
+
+    def claim_model_admission(self, **values: object) -> None:
+        self.claims.append(values)
+
+
+@pytest.mark.asyncio
+async def test_expanded_token_capacity_passes_configured_cost_admission(tmp_path: Path) -> None:
+    configured = enabled_settings(tmp_path)
+    store = CostAdmissionStore()
+    admission = PersistentModelCallAdmission(
+        store=store,  # type: ignore[arg-type]
+        reservation_usd=configured.workbench_cost_ceiling_usd,
+        monthly_limit_usd=configured.workbench_monthly_limit_usd,
+    )
+
+    await admission.claim(
+        task_digest="d" * 64,
+        model=configured.workbench_model,
+        input_token_ceiling=configured.workbench_input_token_limit,
+        output_token_ceiling=configured.workbench_output_token_limit,
+    )
+
+    assert configured.workbench_input_token_limit == 144_000
+    assert configured.workbench_output_token_limit == 25_772
+    assert configured.workbench_cost_ceiling_usd == 1.50
+    assert configured.workbench_monthly_limit_usd == 5.0
+    assert len(store.claims) == 1
 
 
 def model_capability(client: TestClient) -> dict[str, object]:
