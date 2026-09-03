@@ -40,6 +40,31 @@ def test_frontend_has_required_screens_controls_and_no_embedded_secrets() -> Non
     assert "disabled = true" in script
 
 
+def test_lil_tueeq_ui_is_visual_only_and_keeps_one_stable_planning_composer() -> None:
+    root = Path(__file__).parents[1] / "web" / "workbench"
+    html = (root / "index.html").read_text(encoding="utf-8")
+    css = (root / "styles.css").read_text(encoding="utf-8")
+    script = (root / "app.js").read_text(encoding="utf-8")
+
+    assert 'class="lil-tueeq-avatar"' in html
+    assert 'alt="Lil Tueeq"' in html
+    assert html.count('id="planning-turn-form"') == 1
+    assert html.count('id="planning-message"') == 1
+    assert "data:image/png;base64," in html
+    assert "udjat" not in html.casefold() + css.casefold()
+    assert "--surface: #ffffff" in css
+    assert "--ink: #071b3a" in css
+    assert "--primary: #146cff" in css
+    assert "--cyan: #00bfe8" in css
+    assert "html, body" in css and "overflow-y: auto" in css
+    assert ".app-shell" in css and "overflow: visible" in css
+    assert "min-height: 8rem" in css
+    assert "resize: vertical" in css
+    assert "height = \"0px\"" not in script
+    assert '"/v1/workbench/planning/conversations/"' in script
+    assert "!state.health.runner_connected" in script
+
+
 def test_disconnected_model_and_runner_disable_their_controls_with_exact_reasons() -> None:
     script = (Path(__file__).parents[1] / "web" / "workbench" / "app.js").read_text(
         encoding="utf-8"
