@@ -26,9 +26,11 @@ test("engineering connection status fails closed without runtime bridge configur
     "CORE_ACCESS_CLIENT_ID",
     "CORE_ACCESS_CLIENT_SECRET",
   ]);
+  assert.equal(status.runner.state, "disconnected");
+  assert.equal(status.runner.qualified, false);
 });
 
-test("engineering connection status exposes merged provenance without leaking secrets", async () => {
+test("core health never masquerades as Runner V3 connection or qualification", async () => {
   const secret = "status-secret-value-that-must-not-leak";
   const calls = [];
   const status = await engineeringConnectionStatus({
@@ -52,11 +54,16 @@ test("engineering connection status exposes merged provenance without leaking se
   assert.equal(status.bridge.state, "health_reachable");
   assert.equal(status.bridge.origin, "sites_private_tunnel");
   assert.equal(status.bridge.access, "not_required");
-  assert.equal(status.github.lilTweak.head, "191189c515b9dbd8ddb82e9ad3fc86853cc815df");
+  assert.equal(status.github.lilTweak.head, "63522fa027836b47808eeff201b84ce49a9ae1b6");
   assert.equal(status.github.lilTweak.pr6Merge, "08e3705227ec428d0b6ce6bc6d58dca3657b2683");
-  assert.equal(status.github.galorHub.pr28Merge, "ac15ba6cf794375339528fe7c7e5b21a81bf34f0");
-  assert.equal(status.galor.version, "1.0.0");
-  assert.equal(status.galor.executionHost, "galor-private-cloud-01");
+  assert.equal(status.github.galorHub.head, "3955152831f7b61c105c44b2faf0f5f02d1f4d07");
+  assert.equal(status.github.galorHub.pr28Merge, "3955152831f7b61c105c44b2faf0f5f02d1f4d07");
+  assert.equal(status.galor.version, "3.0.0");
+  assert.equal(status.galor.executionHost, "galor-tweak-runner-01");
+  assert.equal(status.galor.integration, "awaiting_authenticated_runner_proof");
+  assert.equal(status.runner.state, "disconnected");
+  assert.equal(status.runner.qualified, false);
+  assert.equal(status.runner.label, "Runner V3 connection not proven");
   assert.deepEqual(calls, [{ url: "https://core.example/healthz", headers: { Accept: "application/json" } }]);
   assert.doesNotMatch(JSON.stringify(status), new RegExp(secret));
 });
