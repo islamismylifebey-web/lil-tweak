@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "08955a8a699431f6509094546df8a06aab1365db64ace73dc8b8cf1f754a8a0c",
+  "manifest_scope_digest": "2352afb97fa54c9fe160562507d5364568110ef66500b22fa7df67d525a2389c",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 323,
@@ -122,8 +122,8 @@
       "relative_path": "BUILD_PROVENANCE.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a6d2d5b7c4649940d609e447dd60f2ef72af7601048bd74c3039d8fc223812cd",
-      "git_blob_sha1": "9f5fe5e576534644c4a8052ed4d5368dd42b7543",
+      "sha256": "4eb7af1b2ec98bd49764cc17579eddb382ad2cd98f9f27611cb966d1f251b5d9",
+      "git_blob_sha1": "a0153ed8c043009cd9654f5eb7e2f58ab58be257",
       "bytes": 2471
     },
     {
@@ -178,8 +178,8 @@
       "relative_path": "DEPENDENCY_SECURITY_SCAN_REPORT.json",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "c4b1884cd3ff8bd029077457cddf0e965eed7df3e0711d007d31a91f3f842765",
-      "git_blob_sha1": "efe617dd4c634f18fbd9ea8d5ba2788bdc4dbd40",
+      "sha256": "1c591333d850834bc79c2790ae82b0a2fd20ca46e5468f3c20ac48b50d8a4b23",
+      "git_blob_sha1": "19029386a80acaac2313cd92123476ad8bb8be99",
       "bytes": 2261
     },
     {
