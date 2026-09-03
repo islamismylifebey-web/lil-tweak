@@ -51,7 +51,7 @@ test("official branding and two-header authentication stay release-bound", async
 
   assert.match(layout, /Lil'Tweak\.AI/);
   assert.match(layout, /manifest:\s*["']\/manifest\.webmanifest["']/);
-  assert.match(layout, /lil-tweak-192\.png/);
+  assert.match(layout, /lil-tueeq-galor-icon\.jpg/);
   assert.match(auth, /if \(!userId \|\| !email\) return null/);
   assert.doesNotMatch(auth, /userId:\s*userId\s*\|\|\s*email/);
   assert.match(page, /<LilTweakWorkbench\s+signedIn=\{Boolean\(user\)\}/);
@@ -284,9 +284,9 @@ test("locks the document to a snow-white viewport and contains scrolling", async
     readFile(new URL("../app/public-shell.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(css, /html,\s*body\s*\{[^}]*overflow:\s*hidden/s);
-  assert.match(css, /\.workbench-shell,\s*\.public-shell\s*\{[^}]*height:\s*100dvh[^}]*overflow:\s*hidden/s);
-  assert.match(css, /\.task-output\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /html,\s*body\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /\.workbench-shell,\s*\.public-shell\s*\{[^}]*min-height:\s*100dvh[^}]*overflow:\s*visible/s);
+  assert.doesNotMatch(css, /\.task-output\s*\{[^}]*overflow-y:\s*auto/s);
   assert.match(css, /\.task-box\s*\{[^}]*overflow:\s*visible/s);
   assert.match(css, /\.task-composer textarea\s*\{[^}]*max-height:\s*160px[^}]*resize:\s*none/s);
   assert.match(css, /\.staged-files\s*\{[^}]*overflow-x:\s*auto/s);
@@ -299,18 +299,18 @@ test("locks the document to a snow-white viewport and contains scrolling", async
   assert.match(css, /\.task-box\s*\{[^}]*border:\s*0[^}]*box-shadow:\s*none/s);
   assert.match(css, /\.composer-icon\s*\{[^}]*width:\s*15px[^}]*height:\s*15px/s);
   assert.match(css, /\.composer-paperclip\s*\{[^}]*transform:\s*rotate\(-45deg\)/s);
-  assert.match(css, /\.udjat-mark\s*\{[^}]*url\("\/udjat-gold\.png"\)[^}]*animation:\s*udjat-pulse[^}]*2;/s);
-  assert.match(css, /\.udjat-fraction\s*\{[^}]*transition:/s);
+  assert.match(css, /\.lil-tueeq-avatar\s*\{[^}]*url\("\/lil-tueeq-avatar\.png"\)[^}]*animation:\s*tueeq-pulse[^}]*2;/s);
+  assert.match(css, /\.lil-tueeq-fraction\s*\{[^}]*transition:/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*animation:\s*none !important[\s\S]*transition:\s*none !important/);
   assert.match(css, /\.chat-controls\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/s);
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.tweak-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto[^}]*gap:\s*0\.35rem/s);
-  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.udjat-signal\s*\{[^}]*width:\s*60px[^}]*height:\s*40px/s);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.lil-tueeq-signal\s*\{[^}]*width:\s*60px[^}]*height:\s*40px/s);
   assert.match(css, /\.editor-fields textarea\s*\{[^}]*overflow-y:\s*auto[^}]*resize:\s*none/s);
   assert.match(css, /\.workspace-sidebar\s*\{[^}]*position:\s*fixed/s);
   assert.match(css, /\.workspace-sidebar\s*\{[^}]*overflow-y:\s*auto/s);
   assert.match(css, /\.file-action:focus-within\s*\{[^}]*outline:/s);
   assert.match(layout, /colorScheme:\s*"light"/);
-  assert.match(layout, /themeColor:\s*"#ffffff"/);
+  assert.match(layout, /themeColor:\s*"#146cff"/);
   assert.match(workbench, /aria-expanded=\{sidebarOpen\}/);
   assert.match(workbench, /event\.key !== "Escape"/);
   assert.match(workbench, /measureLocalPreparation/);
@@ -335,7 +335,7 @@ test("removes the disposable starter and declares durable bindings", async () =>
   });
   assert.match(layout, /title: "Lil'Tweak\.AI"/);
   assert.match(layout, /manifest:\s*"\/manifest\.webmanifest"/);
-  assert.match(layout, /lil-tweak-192\.png/);
+  assert.match(layout, /lil-tueeq-galor-icon\.jpg/);
   assert.match(layout, /robots:\s*\{ index: false/);
   assert.match(page, /LilTweakWorkbench/);
   assert.match(page, /PublicShell/);
@@ -455,13 +455,60 @@ test("measures only real local preparation pressure", async () => {
   assert.doesNotMatch(source, /token|context window|model capacity|runner capacity/i);
 });
 
-test("ships only the transparent Udjat asset from the supplied artwork", async () => {
-  const png = await readFile(new URL("../public/udjat-gold.png", import.meta.url));
+test("ships the transparent Lil Tueeq avatar extracted from the lighter GALOR artwork", async () => {
+  const png = await readFile(new URL("../public/lil-tueeq-avatar.png", import.meta.url));
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  assert.equal(png.readUInt32BE(16), 224);
-  assert.equal(png.readUInt32BE(20), 175);
   assert.equal(png[25], 6);
-  assert.ok(png.length < 60_000);
+  assert.ok(png.length > 100_000);
+});
+
+test("uses Lil Tueeq visuals with one stable owner composer and viewport scrolling", async () => {
+  const [css, signal, workbench, publicShell] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/udjat-signal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/workbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/public-shell.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(signal, /className="lil-tueeq-avatar"/);
+  assert.match(css, /url\("\/lil-tueeq-avatar\.png"\)/);
+  assert.doesNotMatch(`${signal}\n${workbench}\n${publicShell}\n${css}`, /udjat-gold\.png/i);
+  assert.match(css, /--navy:\s*#0b1f3a/i);
+  assert.match(css, /--blue:\s*#146cff/i);
+  assert.match(css, /--cyan:\s*#00b8d9/i);
+  assert.match(css, /html,\s*body\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /\.workbench-shell,\s*\.public-shell\s*\{[^}]*min-height:\s*100dvh[^}]*overflow:\s*visible/s);
+  assert.doesNotMatch(css, /\.task-output\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /\.task-composer textarea\s*\{[^}]*min-height:\s*46px[^}]*resize:\s*none/s);
+  assert.match(workbench, /input\.style\.height\s*=\s*"auto"/);
+  assert.doesNotMatch(workbench, /input\.style\.height\s*=\s*"0px"/);
+
+  const response = await render("/", {
+    "oai-authenticated-user-id": "site-scoped-owner-id",
+    "oai-authenticated-user-email": "islamismylifebey@gmail.com",
+  });
+  const html = await response.text();
+  assert.equal((html.match(/class="composer-shell"/g) ?? []).length, 1);
+  assert.equal((html.match(/id="next-task"/g) ?? []).length, 1);
+  assert.match(html, /class="lil-tueeq-avatar"/);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.lil-tueeq-signal\s*\{[^}]*width:\s*60px[^}]*height:\s*40px/s);
+});
+
+test("leaves authentication, API, model, runner, and approval contracts untouched", async () => {
+  const [auth, chatRoute, engineeringRoute, decisionRoute] = await Promise.all([
+    readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/engineering/jobs/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/engineering/jobs/[id]/decision/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(auth, /if \(!userId \|\| !email\) return null/);
+  assert.match(chatRoute, /ownerFor\(request\)/);
+  assert.match(chatRoute, /OPENAI_API_KEY/);
+  assert.match(engineeringRoute, /createCoreJob/);
+  assert.match(engineeringRoute, /reserveDispatch/);
+  assert.match(decisionRoute, /recordDecisionIntent/);
+  assert.match(decisionRoute, /approvalProposal/);
 });
 
 test("keeps engineering source intake bounded and accessible", async () => {

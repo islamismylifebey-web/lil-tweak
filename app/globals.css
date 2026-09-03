@@ -1,13 +1,16 @@
 :root {
   --snow: #ffffff;
-  --snow-soft: #fafafa;
-  --ink: #171719;
-  --muted: #74747b;
-  --line: #e8e8eb;
-  --line-strong: #d8d8dd;
-  --gold: #8a6a13;
-  --danger: #a33a42;
-  --focus: #6554dc;
+  --snow-soft: #f6f9fd;
+  --navy: #0b1f3a;
+  --blue: #146cff;
+  --cyan: #00b8d9;
+  --ink: var(--navy);
+  --muted: #48627d;
+  --line: #d9e4f0;
+  --line-strong: #abc1d9;
+  --gold: var(--blue);
+  --danger: #b4233d;
+  --focus: var(--cyan);
 }
 
 * {
@@ -19,8 +22,9 @@ body {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
   background: var(--snow);
 }
 
@@ -101,15 +105,14 @@ button:disabled {
 .public-shell {
   position: relative;
   width: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
+  min-height: 100dvh;
+  overflow: visible;
   background: var(--snow);
 }
 
 .workbench-shell {
   display: grid;
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: 72px auto;
 }
 
 .tweak-header {
@@ -277,57 +280,57 @@ button:disabled {
   white-space: nowrap;
 }
 
-.udjat-signal {
-  --udjat-pressure: #765b12;
-  --udjat-duration: 2.1s;
+.lil-tueeq-signal {
+  --avatar-pressure: var(--blue);
+  --avatar-duration: 2.1s;
   position: relative;
   display: grid;
   width: 88px;
   height: 54px;
   flex: 0 0 auto;
   place-items: center;
-  color: var(--udjat-pressure);
+  color: var(--avatar-pressure);
   isolation: isolate;
 }
 
-.udjat-mark {
+.lil-tueeq-avatar {
   position: absolute;
   inset: 4px 7px;
   z-index: 2;
-  background: center / contain no-repeat url("/udjat-gold.png");
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--udjat-pressure) 44%, transparent));
-  animation: udjat-pulse var(--udjat-duration) ease-in-out 2;
+  background: center / contain no-repeat url("/lil-tueeq-avatar.png");
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--avatar-pressure) 44%, transparent));
+  animation: tueeq-pulse var(--avatar-duration) ease-in-out 2;
 }
 
-.udjat-signal::after {
+.lil-tueeq-signal::after {
   content: "";
   position: absolute;
   inset: 6px 18px;
   z-index: 1;
-  background: radial-gradient(circle, color-mix(in srgb, var(--udjat-pressure) 18%, transparent), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--avatar-pressure) 18%, transparent), transparent 70%);
   border-radius: 50%;
-  animation: udjat-halo var(--udjat-duration) ease-in-out 2;
+  animation: tueeq-halo var(--avatar-duration) ease-in-out 2;
 }
 
-.udjat-signal[data-pressure="elevated"] {
-  --udjat-pressure: #8a5500;
-  --udjat-duration: 1.8s;
+.lil-tueeq-signal[data-pressure="elevated"] {
+  --avatar-pressure: var(--cyan);
+  --avatar-duration: 1.8s;
 }
 
-.udjat-signal[data-pressure="high"] {
-  --udjat-pressure: #8a3d00;
-  --udjat-duration: 1.35s;
+.lil-tueeq-signal[data-pressure="high"] {
+  --avatar-pressure: #0f8bff;
+  --avatar-duration: 1.35s;
 }
 
-.udjat-signal[data-pressure="limit"] {
-  --udjat-pressure: #8f2934;
-  --udjat-duration: 0.9s;
+.lil-tueeq-signal[data-pressure="limit"] {
+  --avatar-pressure: var(--danger);
+  --avatar-duration: 0.9s;
 }
 
-.udjat-fraction {
+.lil-tueeq-fraction {
   position: absolute;
   z-index: 3;
-  color: var(--udjat-pressure);
+  color: var(--avatar-pressure);
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.47rem;
   font-weight: 650;
@@ -337,7 +340,7 @@ button:disabled {
   transition: color 220ms ease, opacity 260ms ease, transform 260ms ease;
 }
 
-.udjat-fraction[data-visible="true"] {
+.lil-tueeq-fraction[data-visible="true"] {
   opacity: 0.94;
   transform: translateY(0) scale(1);
 }
@@ -349,12 +352,12 @@ button:disabled {
 .fraction-thirty-second { bottom: 0; left: 15px; }
 .fraction-sixty-fourth { right: 14px; bottom: 0; }
 
-@keyframes udjat-pulse {
+@keyframes tueeq-pulse {
   0%, 100% { opacity: 0.86; transform: scale(0.97); }
   50% { opacity: 1; transform: scale(1.035); }
 }
 
-@keyframes udjat-halo {
+@keyframes tueeq-halo {
   0%, 100% { opacity: 0.18; transform: scale(0.82); }
   50% { opacity: 0.64; transform: scale(1.1); }
 }
@@ -523,20 +526,21 @@ button:disabled {
 
 .tweak-stage {
   min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  min-height: calc(100dvh - 72px);
+  height: auto;
+  overflow: visible;
   outline: none;
 }
 
 .tweak-stage > section {
   width: 100%;
-  height: 100%;
-  min-height: 0;
+  min-height: calc(100dvh - 72px);
+  height: auto;
 }
 
 .tweak-view {
   display: grid;
+  min-height: calc(100dvh - 72px);
   padding: clamp(0.75rem, 2.6vw, 2rem);
   place-items: center;
 }
@@ -546,9 +550,9 @@ button:disabled {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   width: min(48rem, 100%);
-  height: 100%;
-  max-height: 42rem;
-  min-height: 0;
+  height: auto;
+  max-height: none;
+  min-height: min(34rem, calc(100dvh - 10rem));
   overflow: visible;
   background: var(--snow);
   border: 0;
@@ -558,10 +562,10 @@ button:disabled {
 
 .task-output {
   display: flex;
-  min-height: 0;
+  min-height: 18rem;
   flex-direction: column;
   padding: 1.35rem;
-  overflow-y: auto;
+  overflow: visible;
   border-radius: var(--task-radius) var(--task-radius) 0 0;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -1390,9 +1394,7 @@ button:disabled {
 .project-editor {
   min-height: 0;
   flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .project-form {
@@ -1491,9 +1493,7 @@ button:disabled {
 .quiet-view {
   width: min(48rem, 100%);
   margin: 0 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .quiet-view .section-bar > div {
@@ -1973,16 +1973,25 @@ button:disabled {
 }
 
 .public-entry {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 0.9rem;
   text-align: center;
 }
 
-.public-entry .udjat-signal {
+.public-entry .lil-tueeq-signal {
   width: 112px;
   height: 70px;
   margin-bottom: 0.35rem;
+}
+
+.public-entry::before {
+  content: "";
+  width: min(12rem, 52vw);
+  height: 5rem;
+  background: url("/brand/lil-tueeq-bug-workshop.png") center 54% / cover no-repeat;
+  border-radius: 6px;
 }
 
 .public-entry h1 {
@@ -2005,7 +2014,13 @@ button:disabled {
 
 @media (max-width: 720px) {
   .workbench-shell {
-    grid-template-rows: 64px minmax(0, 1fr);
+    grid-template-rows: 64px auto;
+  }
+
+  .tweak-stage,
+  .tweak-stage > section,
+  .tweak-view {
+    min-height: calc(100dvh - 64px);
   }
 
   .tweak-header {
@@ -2027,12 +2042,12 @@ button:disabled {
     font-size: 0.66rem;
   }
 
-  .udjat-signal {
+  .lil-tueeq-signal {
     width: 60px;
     height: 40px;
   }
 
-  .udjat-fraction {
+  .lil-tueeq-fraction {
     font-size: 0.42rem;
   }
 
@@ -2178,7 +2193,13 @@ button:disabled {
 
 @media (max-height: 520px) {
   .workbench-shell {
-    grid-template-rows: 58px minmax(0, 1fr);
+    grid-template-rows: 58px auto;
+  }
+
+  .tweak-stage,
+  .tweak-stage > section,
+  .tweak-view {
+    min-height: calc(100dvh - 58px);
   }
 
   .sidebar-toggle {
@@ -2222,11 +2243,11 @@ button:disabled {
 }
 
 @media (forced-colors: active) {
-  .udjat-mark {
+  .lil-tueeq-avatar {
     forced-color-adjust: none;
   }
 
-  .udjat-fraction {
+  .lil-tueeq-fraction {
     color: CanvasText;
   }
 }

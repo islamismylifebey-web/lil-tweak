@@ -1311,7 +1311,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     onChange={(event) => setTaskDraft(event.target.value)}
                     onInput={(event) => {
                       const input = event.currentTarget;
-                      input.style.height = "0px";
+                      input.style.height = "auto";
                       input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
                       input.style.overflowY = input.scrollHeight > 160 ? "auto" : "hidden";
                     }}
