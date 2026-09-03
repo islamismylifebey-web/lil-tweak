@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "40e2444ea72ce924518a40b1705b0f35e1502bfdbf8b1c55a9471e679ae6acde",
+  "manifest_scope_digest": "726fef5a5a0cee046259ee098cc64410db474a1862b5a9ab7e8221c11a0652a1",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 307,
@@ -18,9 +18,9 @@
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "06cc629db15d6fe64202bc06de10e075275eabe56dc7b4536520abc4de23d0b7",
-      "git_blob_sha1": "c131a75b05649746f0a880431fbb82cdd1e6e858",
-      "bytes": 3305
+      "sha256": "60d1e2ff8e7b21944a678b13f9bd6e281d9ae498b753f48f48953fa1f97fdb91",
+      "git_blob_sha1": "d20dadc3c65b90c0f7d1288277fcf72f7cce5dc1",
+      "bytes": 3307
     },
     {
       "relative_path": ".github/workflows/ci.yml",
@@ -938,9 +938,9 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "2210924b6054a05d88a9d8321793420ca547c90ab3ae079a7ea9fa177b8b06a3",
-      "git_blob_sha1": "831cf494834792acc8cf7e9cc69be8434b22056b",
-      "bytes": 22931
+      "sha256": "e8ee22c51c7cb10a6487431dea6899d2cb58b1059b4d6bf18f52bf1be7899aae",
+      "git_blob_sha1": "a7b9641c0cbf4d9388547d7c8f1851094d52e764",
+      "bytes": 22935
     },
     {
       "relative_path": "liltweak/context_manifest.py",
@@ -1762,8 +1762,8 @@
       "relative_path": "tests/test_config_reasoning_policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "07f09eec0d5f36295c6bc26a28aa62e41b9352980ecd2af6f5f0162d8536c0ce",
-      "git_blob_sha1": "c7f50e19826069bd358a07385be49b3b16eedea3",
+      "sha256": "42389bd56eefcbde75eadc02901fb67d483a9424f25e0cd15e03e3b4ef5b5fa4",
+      "git_blob_sha1": "0e0f46d4182e47ba0f1a027ce133d40379aea797",
       "bytes": 4965
     },
     {
@@ -2394,9 +2394,9 @@
       "relative_path": "tests/test_workbench_reasoning_bridge.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "da182318fb8608ab25ed284f2b14b672dcd7407e363047f412076d6b056f2f77",
-      "git_blob_sha1": "16e27a9646cf2565ce852c679998587bf601c706",
-      "bytes": 17203
+      "sha256": "a173c69bcb82606f12a345ab3860c69957ed57fd0228bfceea6930d0b90024b2",
+      "git_blob_sha1": "933cf01c17d6c8bb0deeacb971fbc785a0c47329",
+      "bytes": 18399
     },
     {
       "relative_path": "tests/test_workbench_repository.py",
