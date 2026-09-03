@@ -30,7 +30,7 @@ def test_engineering_defaults_are_sol_standard_high_ordinary(tmp_path: Path) -> 
     assert configured.workbench_reasoning_tier == "high"
     assert configured.workbench_input_token_limit == 144_000
     assert configured.workbench_output_token_limit == 25_772
-    assert configured.workbench_cost_ceiling_usd == 0.20
+    assert configured.workbench_cost_ceiling_usd == 1.50
 
 
 def test_environment_loads_workbench_token_capacity_defaults(
@@ -98,7 +98,7 @@ def test_token_capacity_change_preserves_unrelated_workbench_defaults(tmp_path: 
     assert configured.workbench_reasoning_profile == "ordinary"
     assert configured.workbench_reasoning_mode == "standard"
     assert configured.workbench_reasoning_tier == "high"
-    assert configured.workbench_cost_ceiling_usd == 0.20
+    assert configured.workbench_cost_ceiling_usd == 1.50
     assert configured.workbench_monthly_limit_usd == 5.0
     assert configured.workbench_runner_enabled is False
     assert configured.repository_execution_enabled is False
