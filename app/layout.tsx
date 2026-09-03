@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#ffffff",
+  themeColor: "#146cff",
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,10 +38,9 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: "/manifest.webmanifest",
     icons: {
       icon: [
-        { url: "/icons/lil-tweak-192.png", sizes: "192x192", type: "image/png" },
-        { url: "/icons/lil-tweak-512.png", sizes: "512x512", type: "image/png" },
+        { url: "/icons/lil-tueeq-galor-icon.jpg", type: "image/jpeg" },
       ],
-      apple: [{ url: "/icons/lil-tweak-180.png", sizes: "180x180", type: "image/png" }],
+      apple: [{ url: "/icons/lil-tueeq-galor-icon.jpg", type: "image/jpeg" }],
     },
     robots: { index: false, follow: false, nocache: true },
     referrer: "no-referrer",
