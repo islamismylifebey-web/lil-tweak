@@ -14,15 +14,26 @@ permissions:
 jobs:
   runner-v3-core:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
       - name: Set up Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
-      - name: Runner V3 Core focused tests
-        run: python3 -m unittest core.tests.test_config core.tests.test_galor_runner_v3 core.tests.test_runner_v3_main_wiring -v
-      - name: Runner V3 Sites status test
-        run: node --test tests/engineering-connection.test.mjs
+      - name: Locked Node install
+        run: npm ci
+      - name: Install Core package
+        run: python3 -m pip install --disable-pip-version-check -e ./core
+      - name: Runner V3 focused regressions
+        run: |
+          python3 -m unittest core.tests.test_config core.tests.test_galor_runner_v3 core.tests.test_runner_v3_main_wiring -v
+          node --test tests/engineering-connection.test.mjs
+      - name: Full repository verification
+        run: npm run verify
