@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "726fef5a5a0cee046259ee098cc64410db474a1862b5a9ab7e8221c11a0652a1",
+  "manifest_scope_digest": "fcbc9bab20862690516317949ec47ada79c3303fda81ebef59f5be4122b1587a",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 307,
@@ -18,8 +18,8 @@
       "relative_path": ".env.example",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "60d1e2ff8e7b21944a678b13f9bd6e281d9ae498b753f48f48953fa1f97fdb91",
-      "git_blob_sha1": "d20dadc3c65b90c0f7d1288277fcf72f7cce5dc1",
+      "sha256": "e8b99778269d329bd5569bf824bd5d9a41f559d8409be6026faa90f4415716c5",
+      "git_blob_sha1": "d4bbd8c86f4d7d1358ba09291ccb7c15b7956211",
       "bytes": 3307
     },
     {
@@ -938,8 +938,8 @@
       "relative_path": "liltweak/config.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "e8ee22c51c7cb10a6487431dea6899d2cb58b1059b4d6bf18f52bf1be7899aae",
-      "git_blob_sha1": "a7b9641c0cbf4d9388547d7c8f1851094d52e764",
+      "sha256": "a0c5c2d5fc2e01213ce6f1f3e210ca810d4f461b3ff4d6197f7a0f6033d732ef",
+      "git_blob_sha1": "a3954eea41a55f6c2ea9e81bd2f2bf4cca3b3f89",
       "bytes": 22935
     },
     {
@@ -2394,9 +2394,9 @@
       "relative_path": "tests/test_workbench_reasoning_bridge.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "a173c69bcb82606f12a345ab3860c69957ed57fd0228bfceea6930d0b90024b2",
-      "git_blob_sha1": "933cf01c17d6c8bb0deeacb971fbc785a0c47329",
-      "bytes": 18399
+      "sha256": "9bab56af11dc5a242ea4655d95ce7834575540c92ddc89dae255beec5a419ea6",
+      "git_blob_sha1": "3c32f22af7ebe0156bec2d58b1e2ccbb0dd0e1b8",
+      "bytes": 18703
     },
     {
       "relative_path": "tests/test_workbench_repository.py",
