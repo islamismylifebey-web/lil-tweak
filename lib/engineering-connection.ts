@@ -1,10 +1,10 @@
 import { coreAccessHeaders, validateCoreSigningConfig, validateCoreTransportConfig } from "./core-transport.ts";
 
-const LIL_TWEAK_MAIN_COMMIT = "191189c515b9dbd8ddb82e9ad3fc86853cc815df";
+const LIL_TWEAK_MAIN_COMMIT = "63522fa027836b47808eeff201b84ce49a9ae1b6";
 const LIL_TWEAK_PR6_MERGE_COMMIT = "08e3705227ec428d0b6ce6bc6d58dca3657b2683";
-const GALOR_HUB_MAIN_COMMIT = "ac15ba6cf794375339528fe7c7e5b21a81bf34f0";
-const GALOR_RUNNER_CONTRACT_VERSION = "1.0.0";
-const GALOR_RUNNER_HOST = "galor-private-cloud-01";
+const GALOR_HUB_MAIN_COMMIT = "3955152831f7b61c105c44b2faf0f5f02d1f4d07";
+const GALOR_RUNNER_CONTRACT_VERSION = "3.0.0";
+const GALOR_RUNNER_HOST = "galor-tweak-runner-01";
 const CORE_HEALTH_TIMEOUT_MS = 5_000;
 const CORE_HEALTH_MAX_BYTES = 16 * 1024;
 
@@ -13,6 +13,11 @@ export type BridgeState =
   | "configured_pending_probe"
   | "health_reachable"
   | "health_unreachable";
+
+export type RunnerConnectionState =
+  | "disconnected"
+  | "connected_unqualified"
+  | "connected_qualified";
 
 export interface EngineeringConnectionBindings {
   DB?: unknown;
@@ -60,10 +65,11 @@ export interface EngineeringConnectionStatus {
     contract: "galor-runner";
     version: string;
     executionHost: string;
-    integration: "awaiting_runtime_probe";
+    integration: "awaiting_authenticated_runner_proof";
   };
   runner: {
-    state: BridgeState;
+    state: RunnerConnectionState;
+    qualified: boolean;
     label: string;
   };
 }
@@ -76,13 +82,6 @@ export interface EngineeringConnectionOptions {
 
 function clean(value: string | undefined) {
   return value?.trim() ?? "";
-}
-
-function statusLabel(state: BridgeState) {
-  if (state === "health_reachable") return "Core health reachable";
-  if (state === "health_unreachable") return "Core health check failed";
-  if (state === "configured_pending_probe") return "Runtime bridge configured";
-  return "Runtime bridge pending";
 }
 
 async function boundedHealthProbe(url: URL, headers: Record<string, string>, fetcher: typeof fetch) {
@@ -211,11 +210,16 @@ export async function engineeringConnectionStatus(
       contract: "galor-runner",
       version: GALOR_RUNNER_CONTRACT_VERSION,
       executionHost: GALOR_RUNNER_HOST,
-      integration: "awaiting_runtime_probe",
+      integration: "awaiting_authenticated_runner_proof",
     },
+    // /healthz proves only the Sites -> Core bridge. Runner V3 connection and
+    // qualification require the authenticated Core-owned GALOR handshake and
+    // subsequent qualification evidence, neither of which is exposed by this
+    // generic health probe.
     runner: {
-      state,
-      label: statusLabel(state),
+      state: "disconnected",
+      qualified: false,
+      label: "Runner V3 connection not proven",
     },
   };
 }
