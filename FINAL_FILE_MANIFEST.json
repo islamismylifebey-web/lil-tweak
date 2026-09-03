@@ -9,7 +9,7 @@
     "method": "external-post-commit-checkpoint",
     "reason": "Embedding the containing commit would create a self-reference cycle."
   },
-  "manifest_scope_digest": "bbad300fe748c70a1d82f0166d7aaa74d43def2a0041c82015af5bd943c563fe",
+  "manifest_scope_digest": "dad6198fa24c45094be52855e99427e6d100770cd5e81a5b50009fe0213d009b",
   "scope": "Every Git blob in the candidate tree, excluding only this self-referential manifest from its own entry list. Content is read from Git objects, not paths.",
   "self_excluded_from_hash_list": true,
   "file_count_excluding_manifest": 307,
@@ -1762,9 +1762,9 @@
       "relative_path": "tests/test_config_reasoning_policy.py",
       "entry_type": "regular_file",
       "git_mode": "100644",
-      "sha256": "96e9d56cad49285b7aab16b8f682aafb05da7291a9f108d749a5166d28d69954",
-      "git_blob_sha1": "ca0026c6344eaff2ad9c54dbcff9443d7f7daf86",
-      "bytes": 2571
+      "sha256": "36c5de89b49c0eaa39bf0fa92883830cf9c757b60964443de18b64d732ced82c",
+      "git_blob_sha1": "c7f50e19826069bd358a07385be49b3b16eedea3",
+      "bytes": 4965
     },
     {
       "relative_path": "tests/test_context_manifest.py",
