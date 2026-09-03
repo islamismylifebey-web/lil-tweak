@@ -34,6 +34,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Prepare owner-controlled test temp root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lil-tweak-tests"
+          chmod 700 "$RUNNER_TEMP/lil-tweak-tests"
+          test "$(stat -c '%u' "$RUNNER_TEMP/lil-tweak-tests")" = "$(id -u)"
+
       - name: Record toolchain
         run: |
           node --version
@@ -44,6 +52,10 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Verify complete repository
+        env:
+          TMPDIR: ${{ runner.temp }}/lil-tweak-tests
+          TMP: ${{ runner.temp }}/lil-tweak-tests
+          TEMP: ${{ runner.temp }}/lil-tweak-tests
         run: npm run verify
 
       - name: Reject production dependency vulnerabilities
