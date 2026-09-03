@@ -46,7 +46,7 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/$TARGET_BRANCH"
           git merge-base --is-ancestor "$EXPECTED_SOURCE_SHA" HEAD
           uv run --version >/dev/null 2>&1 || true
-          uv_allowed='^(.github/workflows/pr12-exact-completion(-v2)?\.yml|BUILD_PROVENANCE\.json|DEPENDENCY_SECURITY_SCAN_REPORT\.json|FINAL_FILE_MANIFEST\.json|LICENSE_INVENTORY\.json|SUPPLY_CHAIN_SBOM\.json|cloudflare/runner-control-plane/src/index\.ts|liltweak/providers/self_hosted/galor_tweak_runner\.py|tests/test_pr12_review_regressions\.py)$'
+          uv_allowed='^(.github/workflows/pr12-(bounded-repair|exact-completion(-v2)?)\.yml|BUILD_PROVENANCE\.json|DEPENDENCY_SECURITY_SCAN_REPORT\.json|FINAL_FILE_MANIFEST\.json|LICENSE_INVENTORY\.json|SUPPLY_CHAIN_SBOM\.json|cloudflare/runner-control-plane/src/index\.ts|liltweak/providers/self_hosted/galor_tweak_runner\.py|liltweak/private_runner_activation\.py|scripts/private_runner_operator\.py|tests/test_pr12_review_regressions\.py|tests/test_private_runner_activation\.py)$'
           unexpected="$(git diff --name-only "$EXPECTED_SOURCE_SHA"..HEAD | grep -Ev "$uv_allowed" || true)"
           test -z "$unexpected"
           test -z "$(git status --porcelain)"
