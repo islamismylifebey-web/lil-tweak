@@ -1,0 +1,29 @@
+ARG PYTHON_BASE_IMAGE
+FROM ${PYTHON_BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    CONTAINER_HOST=unix:///run/podman/podman.sock
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates git podman util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 10001 lil-tweak \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent lil-tweak
+
+WORKDIR /app
+COPY core/pyproject.toml /app/core/pyproject.toml
+COPY core/lil_tweak /app/core/lil_tweak
+RUN python -m pip install --no-cache-dir /app/core
+
+COPY core/main.py /app/main.py
+COPY core/prompts /app/prompts
+COPY deploy/healthcheck.py /app/deploy/healthcheck.py
+COPY deploy/verify_r2.py /app/deploy/verify_r2.py
+
+USER 10001:10001
+EXPOSE 8080
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--no-access-log"]

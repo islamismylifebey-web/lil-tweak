@@ -1,0 +1,11 @@
+{
+  "name": "Lil Tweak Worker service token only",
+  "decision": "non_identity",
+  "include": [
+    {
+      "service_token": {
+        "token_id": "__SERVICE_TOKEN_ID__"
+      }
+    }
+  ]
+}

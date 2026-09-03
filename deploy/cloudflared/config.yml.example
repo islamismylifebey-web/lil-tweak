@@ -1,0 +1,13 @@
+tunnel: __TUNNEL_ID__
+credentials-file: /etc/lil-tweak-cloudflared/tunnel.json
+metrics: 127.0.0.1:20241
+no-autoupdate: true
+
+originRequest:
+  connectTimeout: 10s
+  httpHostHeader: __CORE_HOSTNAME__
+
+ingress:
+  - hostname: __CORE_HOSTNAME__
+    service: http://127.0.0.1:8017
+  - service: http_status:404

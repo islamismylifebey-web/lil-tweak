@@ -1,0 +1,43 @@
+[Unit]
+Description=Lil Tweak trusted execution core
+Requires=lil-tweak-postgres.service podman.socket
+After=lil-tweak-postgres.service podman.socket network-online.target
+Wants=network-online.target
+
+[Container]
+Image=@@LIL_TWEAK_CORE_IMAGE@@
+Pull=never
+ContainerName=lil-tweak-core
+Label=com.galor.lil-tweak.max-concurrent-jobs=1
+Network=lil-tweak.network
+PublishPort=127.0.0.1:8017:8080
+Volume=lil-tweak-data.volume:/var/lib/lil-tweak:U,Z
+Tmpfs=/var/lib/lil-tweak/work:rw,exec,nosuid,nodev,size=1g,nr_inodes=204800,mode=0700,uid=10001,gid=10001
+Volume=%t/podman/podman.sock:/run/podman/podman.sock
+EnvironmentFile=%h/.config/lil-tweak/core.env
+Environment=LIL_TWEAK_MAX_CONCURRENT_JOBS=1
+Environment=LIL_TWEAK_MAX_ADMITTED_JOBS=1
+Environment=CONTAINER_HOST=unix:///run/podman/podman.sock
+UserNS=keep-id:uid=10001,gid=10001
+ReadOnly=true
+ReadOnlyTmpfs=true
+NoNewPrivileges=true
+DropCapability=all
+Memory=1536m
+PidsLimit=512
+Ulimit=nofile=4096:4096
+Tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m
+HealthCmd=/usr/local/bin/python /app/deploy/healthcheck.py
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=20s
+HealthTimeout=5s
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=90s
+
+[Install]
+WantedBy=default.target

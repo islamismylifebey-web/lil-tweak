@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "lil-tweak-d1-operations",
+  "main": "../../worker/index.ts",
+  "compatibility_date": "2026-08-13",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "REPLACE_WITH_EXACT_D1_DATABASE_NAME",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../drizzle",
+      "migrations_table": "d1_migrations"
+    }
+  ]
+}

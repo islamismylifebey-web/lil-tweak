@@ -1,0 +1,16 @@
+{
+  "secret": "0123456789abcdef0123456789abcdef",
+  "fields": {
+    "keyId": "primary",
+    "method": "get",
+    "pathAndQuery": "/v1/jobs/job-1?z=last&q=a+b&empty=",
+    "timestamp": "1786636800",
+    "nonce": "nonce-123",
+    "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "requestId": "request-123",
+    "idempotencyKey": "job:public-1:poll:7",
+    "ownerKey": "0123456789abcdef0123456789abcdef"
+  },
+  "canonical": "v2\nprimary\nGET\n/v1/jobs/job-1?empty=&q=a%20b&z=last\n1786636800\nnonce-123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nrequest-123\njob:public-1:poll:7\n0123456789abcdef0123456789abcdef",
+  "signature": "be48690be965859f8dda936b953937fa86d23557f250aae873135acedbd4d8be"
+}

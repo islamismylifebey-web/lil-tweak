@@ -1,0 +1,8 @@
+[Unit]
+Description=Lil Tweak private container network
+
+[Network]
+NetworkName=lil-tweak-private
+Driver=bridge
+IPv6=false
+DisableDNS=false

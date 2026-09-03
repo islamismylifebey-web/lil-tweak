@@ -1,0 +1,7 @@
+[Unit]
+Description=Lil Tweak PostgreSQL durable data
+
+[Volume]
+VolumeName=lil-tweak-postgres-data
+Label=app=lil-tweak
+Label=backup=daily

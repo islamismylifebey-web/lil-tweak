@@ -1,0 +1,38 @@
+[Unit]
+Description=Lil Tweak isolated PostgreSQL
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=@@LIL_TWEAK_POSTGRES_IMAGE@@
+Pull=never
+ContainerName=lil-tweak-postgres
+Network=lil-tweak.network
+Volume=lil-tweak-postgres-data.volume:/var/lib/postgresql/data:Z
+Secret=lil-tweak-postgres-admin-password,target=postgres-admin-password
+Environment=POSTGRES_DB=lil_tweak
+Environment=POSTGRES_USER=lil_tweak_admin
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres-admin-password
+ReadOnly=true
+ReadOnlyTmpfs=true
+NoNewPrivileges=true
+DropCapability=all
+AddCapability=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+Memory=512m
+PidsLimit=256
+Ulimit=nofile=4096:4096
+Tmpfs=/run/postgresql:rw,noexec,nosuid,nodev,size=32m
+HealthCmd=pg_isready --username lil_tweak_admin --dbname lil_tweak
+HealthInterval=30s
+HealthRetries=5
+HealthStartPeriod=30s
+HealthTimeout=5s
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=90s
+
+[Install]
+WantedBy=default.target

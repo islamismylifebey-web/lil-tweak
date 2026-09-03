@@ -1,0 +1,39 @@
+[Unit]
+Description=Lil Tweak outbound-only Cloudflare Tunnel
+Documentation=https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=lil-tweak-tunnel
+Group=lil-tweak-tunnel
+ExecStartPre=/usr/bin/python3 -I -B /usr/local/libexec/lil-tweak/cloudflared-verify-exec.py --expected-sha256 @@LIL_TWEAK_CLOUDFLARED_SHA256@@ --execute -- --config /etc/lil-tweak-cloudflared/config.yml tunnel ingress validate
+ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/lil-tweak/cloudflared-verify-exec.py --expected-sha256 @@LIL_TWEAK_CLOUDFLARED_SHA256@@ --execute -- --no-autoupdate --config /etc/lil-tweak-cloudflared/config.yml tunnel run
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

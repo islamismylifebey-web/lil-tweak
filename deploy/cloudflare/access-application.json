@@ -1,0 +1,8 @@
+{
+  "name": "Lil Tweak private core",
+  "domain": "__CORE_HOSTNAME__",
+  "type": "self_hosted",
+  "session_duration": "15m",
+  "http_only_cookie_attribute": true,
+  "same_site_cookie_attribute": "strict"
+}

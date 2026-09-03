@@ -1,0 +1,7 @@
+[Unit]
+Description=Lil Tweak trusted-core durable data
+
+[Volume]
+VolumeName=lil-tweak-data
+Label=app=lil-tweak
+Label=backup=daily

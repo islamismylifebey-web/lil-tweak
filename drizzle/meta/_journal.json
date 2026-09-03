@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786515520857,
+      "tag": "0000_gifted_sharon_ventura",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786668675835,
+      "tag": "0001_lil_tweak_engineering",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786675908628,
+      "tag": "0002_workspace_creation_idempotency",
+      "breakpoints": true
+    }
+  ]
+}
