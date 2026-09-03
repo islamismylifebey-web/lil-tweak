@@ -66,6 +66,85 @@ class ConfigTests(unittest.TestCase):
             environment["LIL_TWEAK_GALOR_READONLY_URL"],
         )
 
+    def test_runner_v3_backend_requires_exact_server_only_configuration(self):
+        environment = valid_environment()
+        token = "service-token-" + "x" * 32
+        environment.update(
+            {
+                "LIL_TWEAK_EXECUTION_BACKEND": "galor_v3",
+                "LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL": "https://galor.example",
+                "LIL_TWEAK_GALOR_SERVICE_TOKEN": token,
+                "LIL_TWEAK_REPOSITORY_COMMIT": "a" * 40,
+            }
+        )
+        config = Config.from_env(environment)
+        self.assertEqual(config.execution_backend, "galor_v3")
+        self.assertEqual(config.galor_runner_gateway_url, "https://galor.example")
+        self.assertEqual(config.galor_lil_tweak_service_token, token)
+        self.assertEqual(config.repository_commit, "a" * 40)
+        self.assertNotIn(token, repr(config))
+
+    def test_runner_v3_backend_fails_closed_on_missing_or_invalid_configuration(self):
+        required = (
+            "LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL",
+            "LIL_TWEAK_GALOR_SERVICE_TOKEN",
+            "LIL_TWEAK_REPOSITORY_COMMIT",
+        )
+        base = valid_environment()
+        base.update(
+            {
+                "LIL_TWEAK_EXECUTION_BACKEND": "galor_v3",
+                "LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL": "https://galor.example",
+                "LIL_TWEAK_GALOR_SERVICE_TOKEN": "s" * 32,
+                "LIL_TWEAK_REPOSITORY_COMMIT": "a" * 40,
+            }
+        )
+        for name in required:
+            with self.subTest(missing=name):
+                environment = dict(base)
+                del environment[name]
+                with self.assertRaises(ValueError):
+                    Config.from_env(environment)
+
+        for url in (
+            "http://galor.example",
+            "https://user:pass@galor.example",
+            "https://galor.example/base/path",
+            "https://galor.example?next=other",
+            "https://galor.example#fragment",
+        ):
+            with self.subTest(url=url):
+                environment = dict(base)
+                environment["LIL_TWEAK_GALOR_RUNNER_GATEWAY_URL"] = url
+                with self.assertRaisesRegex(ValueError, "invalid GALOR runner gateway URL"):
+                    Config.from_env(environment)
+
+        for token in ("short", "é" * 15):
+            with self.subTest(token=token):
+                environment = dict(base)
+                environment["LIL_TWEAK_GALOR_SERVICE_TOKEN"] = token
+                with self.assertRaisesRegex(ValueError, "invalid GALOR service token"):
+                    Config.from_env(environment)
+
+        for commit in ("a" * 39, "g" * 40, "A" * 40, "main"):
+            with self.subTest(commit=commit):
+                environment = dict(base)
+                environment["LIL_TWEAK_REPOSITORY_COMMIT"] = commit
+                with self.assertRaisesRegex(ValueError, "invalid repository commit"):
+                    Config.from_env(environment)
+
+    def test_runner_backend_defaults_to_local_podman_without_v3_secrets(self):
+        config = Config.from_env(valid_environment())
+        self.assertEqual(config.execution_backend, "local_podman")
+        self.assertIsNone(config.galor_runner_gateway_url)
+        self.assertIsNone(config.galor_lil_tweak_service_token)
+        self.assertIsNone(config.repository_commit)
+
+        environment = valid_environment()
+        environment["LIL_TWEAK_EXECUTION_BACKEND"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "invalid execution backend"):
+            Config.from_env(environment)
+
     def test_admission_and_job_deadline_are_bounded(self):
         environment = valid_environment()
         environment.update(
