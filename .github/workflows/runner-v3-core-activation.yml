@@ -24,3 +24,5 @@ jobs:
           python-version: '3.12'
       - name: Runner V3 Core focused tests
         run: python3 -m unittest core.tests.test_config core.tests.test_galor_runner_v3 core.tests.test_runner_v3_main_wiring -v
+      - name: Runner V3 Sites status test
+        run: node --test tests/engineering-connection.test.mjs
