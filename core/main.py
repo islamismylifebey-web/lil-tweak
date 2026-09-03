@@ -17,6 +17,7 @@ from lil_tweak.config import Config
 from lil_tweak.evidence import R2EvidenceStore
 from lil_tweak.git_source import ingest_git_source
 from lil_tweak.galor import GalorClient
+from lil_tweak.galor_runner_v3 import GalorRunnerV3Client
 from lil_tweak.limits import TRUSTED_WORK_ROOT_BYTES, TRUSTED_WORK_ROOT_INODES
 from lil_tweak.openai_agent import (
     CodeEngineer,
@@ -88,6 +89,7 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
     import boto3
     from botocore.config import Config as BotoConfig
 
+    execution_backend = getattr(config, "execution_backend", "local_podman")
     store = PostgresJobStore(lambda: psycopg.connect(config.database_url))
     r2_client = boto3.client(
         "s3",
@@ -110,6 +112,13 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
         Path(__file__).resolve().parent / "prompts" / "code_engineer.md"
     )
     galor = GalorClient(config.galor_readonly_url) if config.galor_readonly_url else None
+    galor_runner_v3 = None
+    if execution_backend == "galor_v3":
+        galor_runner_v3 = GalorRunnerV3Client(
+            config.galor_runner_gateway_url,
+            service_token=config.galor_lil_tweak_service_token,
+            repository_commit=config.repository_commit,
+        )
 
     work_root = config.work_root.resolve()
     if not is_bounded_work_root(work_root):
@@ -119,9 +128,11 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
     # probe. A held or unprovable lock must fail before cleanup can mutate the
     # active process's containers or recovery trees.
     with runtime_execution_lock(work_root):
-        # Eliminate live writers, then reconcile every durable promotion marker
-        # before deleting any proposal or snapshot recovery context.
-        PodmanSandbox.cleanup_stale()
+        # Eliminate live local writers only when local execution is selected,
+        # then reconcile every durable promotion marker before deleting any
+        # proposal or snapshot recovery context.
+        if execution_backend == "local_podman":
+            PodmanSandbox.cleanup_stale()
         reconcile_promotion_markers(work_root)
         cleanup_patch_remnants(work_root)
         try:
@@ -215,6 +226,11 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
         source_inventory: list[str],
         lease: Any = None,
     ) -> Any:
+        # This activation slice proves the authenticated V3 connection only.
+        # Until independent supervisor evidence and qualification are wired,
+        # selecting V3 must never downgrade to the local Podman executor.
+        if execution_backend == "galor_v3":
+            raise RuntimeError("GALOR_RUNNER_V3_NOT_QUALIFIED")
         workspace = workspace_for(job_id)
         sandbox = PodmanSandbox(
             image=config.runner_image,
@@ -280,6 +296,8 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
                 raise RuntimeError("sandbox lifecycle failed")
 
     def runtime_admission_available() -> bool:
+        if execution_backend == "galor_v3":
+            return False
         if recovery_latched["value"]:
             return False
         try:
@@ -315,7 +333,16 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
         except Exception:
             database = False
         runner = False
-        if shutil.which("podman") is not None:
+        galor_runner_connected = False
+        if execution_backend == "galor_v3":
+            try:
+                galor_runner_connected = bool(
+                    galor_runner_v3 is not None and galor_runner_v3.handshake().connected
+                )
+            except Exception:
+                galor_runner_connected = False
+            runner = galor_runner_connected
+        elif shutil.which("podman") is not None:
             try:
                 probe = subprocess.run(
                     ["podman", "image", "exists", config.runner_image],
@@ -338,7 +365,7 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             evidence = True
         except Exception:
             evidence = False
-        return {
+        checks = {
             "database": database,
             "runner": runner,
             "git": git,
@@ -347,6 +374,12 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             "signing": bool(config.signing_keys),
             "admission": job_runner.has_capacity,
         }
+        if execution_backend == "galor_v3":
+            checks["galor_runner_connected"] = galor_runner_connected
+            # Connection is deliberately not qualification. The next activation
+            # track must supply verified supervisor and qualification evidence.
+            checks["galor_runner_qualified"] = False
+        return checks
 
     return create_app(
         store=store,
