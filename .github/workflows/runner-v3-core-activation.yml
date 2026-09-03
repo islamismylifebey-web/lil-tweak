@@ -1,0 +1,26 @@
+name: Runner V3 Core Activation
+
+on:
+  push:
+    branches:
+      - infra/runner-v3-core-activation
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  core-config-red-green:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Runner V3 Core configuration tests
+        run: python3 -m unittest core.tests.test_config -v
