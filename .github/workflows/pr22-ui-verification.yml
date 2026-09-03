@@ -1,0 +1,86 @@
+name: PR 22 UI verification
+
+on:
+  push:
+    branches:
+      - ui/lil-tweak-galor-interface
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr22-ui-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify rebased Lil Tueeq UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify complete repository
+        run: npm run verify
+
+      - name: Reject production dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify clean patch formatting
+        run: git diff --check origin/main...HEAD
+
+      - name: Enforce UI-only change boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed=$(cat <<'EOF'
+          .github/workflows/pr22-ui-verification.yml
+          app/globals.css
+          app/layout.tsx
+          app/manifest.ts
+          app/udjat-signal.tsx
+          app/workbench.tsx
+          public/brand/lil-tueeq-bug-workshop.png
+          public/icons/lil-tueeq-galor-icon.jpg
+          public/lil-tueeq-avatar.png
+          public/udjat-gold.png
+          tests/rendered-html.test.mjs
+          EOF
+          )
+          changed=$(git diff --name-only origin/main...HEAD | sort)
+          unexpected=$(comm -23 <(printf '%s\n' "$changed") <(printf '%s\n' "$allowed" | sort))
+          if [[ -n "$unexpected" ]]; then
+            echo "::error::Unexpected files outside the authorized UI verification envelope:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+          expected_ui=$(printf '%s\n' "$allowed" | grep -v '^\.github/' | sort)
+          actual_ui=$(printf '%s\n' "$changed" | grep -v '^\.github/' | sort)
+          if [[ "$actual_ui" != "$expected_ui" ]]; then
+            echo "::error::The exact 10-file UI diff changed during verification."
+            diff -u <(printf '%s\n' "$expected_ui") <(printf '%s\n' "$actual_ui") || true
+            exit 1
+          fi
+
+      - name: Record exact verification identity
+        run: |
+          echo "verified_head=$(git rev-parse HEAD)"
+          echo "verified_tree=$(git rev-parse HEAD^{tree})"
+          echo "base_main=$(git rev-parse origin/main)"
