@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: pr12-exact-completion
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   EXPECTED_SOURCE_SHA: ba1b19fdd62798e36edb5498138cbe99a7892b1e
@@ -43,13 +43,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/$TARGET_BRANCH"
-          git merge-base --is-ancestor "$EXPECTED_SOURCE_SHA" HEAD
-          uv run --version >/dev/null 2>&1 || true
+          if [ "$GITHUB_REF" != "refs/heads/$TARGET_BRANCH" ]; then
+            echo "::error::expected ref refs/heads/$TARGET_BRANCH, got $GITHUB_REF" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$EXPECTED_SOURCE_SHA" HEAD; then
+            echo "::error::EXPECTED_SOURCE_SHA $EXPECTED_SOURCE_SHA is not an ancestor of HEAD" >&2
+            exit 1
+          fi
           uv_allowed='^(.github/workflows/pr12-(bounded-repair|exact-completion(-v2)?)\.yml|BUILD_PROVENANCE\.json|DEPENDENCY_SECURITY_SCAN_REPORT\.json|FINAL_FILE_MANIFEST\.json|LICENSE_INVENTORY\.json|SUPPLY_CHAIN_SBOM\.json|cloudflare/runner-control-plane/src/index\.ts|liltweak/providers/self_hosted/galor_tweak_runner\.py|liltweak/private_runner_activation\.py|scripts/private_runner_operator\.py|tests/test_pr12_review_regressions\.py|tests/test_private_runner_activation\.py)$'
           unexpected="$(git diff --name-only "$EXPECTED_SOURCE_SHA"..HEAD | grep -Ev "$uv_allowed" || true)"
-          test -z "$unexpected"
-          test -z "$(git status --porcelain)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::unexpected paths outside the authorized repair envelope:" >&2
+            echo "$unexpected" | sed 's/^/::error:: - /' >&2
+            exit 1
+          fi
+          dirty="$(git status --porcelain)"
+          if [ -n "$dirty" ]; then
+            echo "::error::working tree is dirty after checkout:" >&2
+            echo "$dirty" | sed 's/^/::error:: - /' >&2
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -217,10 +231,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git rm -f .github/workflows/pr12-exact-completion-v2.yml
-          if git ls-files --error-unmatch .github/workflows/pr12-exact-completion.yml >/dev/null 2>&1; then
-            git rm -f .github/workflows/pr12-exact-completion.yml
-          fi
+          for bootstrap in pr12-exact-completion.yml pr12-exact-completion-v2.yml pr12-bounded-repair.yml; do
+            if git ls-files --error-unmatch ".github/workflows/$bootstrap" >/dev/null 2>&1; then
+              git rm -f ".github/workflows/$bootstrap"
+            fi
+          done
           git add -A
           SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" uv run --no-sync --offline python \
             scripts/generate_final_manifest.py
@@ -232,6 +247,10 @@ jobs:
           allowed = {
               ".github/workflows/pr12-exact-completion-v2.yml",
               ".github/workflows/pr12-exact-completion.yml",
+              ".github/workflows/pr12-bounded-repair.yml",
+              "liltweak/private_runner_activation.py",
+              "scripts/private_runner_operator.py",
+              "tests/test_private_runner_activation.py",
               "BUILD_PROVENANCE.json",
               "DEPENDENCY_SECURITY_SCAN_REPORT.json",
               "FINAL_FILE_MANIFEST.json",
@@ -254,6 +273,7 @@ jobs:
           PY
           test ! -e .github/workflows/pr12-exact-completion.yml
           test ! -e .github/workflows/pr12-exact-completion-v2.yml
+          test ! -e .github/workflows/pr12-bounded-repair.yml
           SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" uv run --no-sync --offline python \
             scripts/generate_final_manifest.py --check
 
@@ -690,6 +710,7 @@ jobs:
           git checkout --detach "$MERGE_SHA"
           test ! -e .github/workflows/pr12-exact-completion.yml
           test ! -e .github/workflows/pr12-exact-completion-v2.yml
+          test ! -e .github/workflows/pr12-bounded-repair.yml
           uv sync --locked --group dev --python "$PYTHON_VERSION"
           uv run --no-sync --offline ruff check .
           uv run --no-sync --offline ruff format --check .
