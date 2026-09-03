@@ -61,6 +61,7 @@ class RunnerV3MainWiringTests(unittest.TestCase):
         handshake = SimpleNamespace(connected=connected)
         client = Mock()
         client.handshake.return_value = handshake
+        client_ctor = Mock(return_value=client)
         config = v3_config(directory)
 
         stack = (
@@ -76,14 +77,14 @@ class RunnerV3MainWiringTests(unittest.TestCase):
             patch.object(core_main, "BackgroundJobRunner", runner),
             patch.object(core_main, "DurableJobScheduler", scheduler),
             patch.object(core_main, "create_app", app_factory),
-            patch.object(core_main, "GalorRunnerV3Client", return_value=client),
+            patch.object(core_main, "GalorRunnerV3Client", new=client_ctor),
         )
-        return stack, config, runner, app_factory, podman, client
+        return stack, config, runner, app_factory, podman, client, client_ctor
 
     def test_v3_readiness_reports_authenticated_connection_without_qualification(self):
         for connected in (False, True):
             with self.subTest(connected=connected), tempfile.TemporaryDirectory() as directory:
-                stack, config, _runner, app_factory, podman, client = self.build(
+                stack, config, _runner, app_factory, podman, client, client_ctor = self.build(
                     directory, connected=connected
                 )
                 with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7], stack[8], stack[9], stack[10], stack[11], stack[12]:
@@ -95,7 +96,7 @@ class RunnerV3MainWiringTests(unittest.TestCase):
                 self.assertEqual(readiness["runner"], connected)
                 podman.cleanup_stale.assert_not_called()
                 client.handshake.assert_called_once_with()
-                core_main.GalorRunnerV3Client.assert_called_once_with(
+                client_ctor.assert_called_once_with(
                     config.galor_runner_gateway_url,
                     service_token=config.galor_lil_tweak_service_token,
                     repository_commit=config.repository_commit,
@@ -103,7 +104,7 @@ class RunnerV3MainWiringTests(unittest.TestCase):
 
     def test_v3_execution_never_falls_back_to_local_podman(self):
         with tempfile.TemporaryDirectory() as directory:
-            stack, _config, runner, _app_factory, podman, _client = self.build(
+            stack, _config, runner, _app_factory, podman, _client, _client_ctor = self.build(
                 directory, connected=True
             )
             with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7], stack[8], stack[9], stack[10], stack[11], stack[12]:
