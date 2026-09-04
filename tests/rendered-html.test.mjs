@@ -50,7 +50,9 @@ test("official branding and two-header authentication stay release-bound", async
   ]);
 
   assert.match(layout, /Lil'Tweak\.AI/);
-  assert.match(layout, /manifest:\s*["']\/manifest\.webmanifest["']/);
+  assert.match(layout, /manifest:\s*["']\/manifest\.webmanifest\?v=26["']/);
+  assert.match(layout, /favicon\.ico\?v=26/);
+  assert.match(layout, /apple-touch-icon\.png\?v=26/);
   assert.match(layout, /lil-tweak-192\.png/);
   assert.match(layout, /lil-tweak-512\.png/);
   assert.match(auth, /if \(!userId \|\| !email\) return null/);
@@ -334,7 +336,7 @@ test("removes the disposable starter and declares durable bindings", async () =>
     r2: "FILES",
   });
   assert.match(layout, /title: "Lil'Tweak\.AI"/);
-  assert.match(layout, /manifest:\s*"\/manifest\.webmanifest"/);
+  assert.match(layout, /manifest:\s*"\/manifest\.webmanifest\?v=26"/);
   assert.match(layout, /lil-tweak-192\.png/);
   assert.match(layout, /lil-tweak-512\.png/);
   assert.match(layout, /robots:\s*\{ index: false/);
