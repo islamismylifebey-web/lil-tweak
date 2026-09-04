@@ -79,7 +79,9 @@ class RecoveryPolicy:
             )
 
         if base.action is RecoveryAction.REROUTE_RESOURCE:
-            resource_failure = self._validate_resource(resource_decision)
+            resource_failure = self._validate_resource(
+                resource_decision, current_resource_id=context.resource_id
+            )
             if resource_failure is not None:
                 return self._blocked(resource_failure, requires_fresh_lease=True)
             base = replace(base, requires_fresh_lease=True)
@@ -132,9 +134,13 @@ class RecoveryPolicy:
     @staticmethod
     def _validate_resource(
         resource: ResourceRecoveryDecision | None,
+        *,
+        current_resource_id: str | None,
     ) -> str | None:
         if resource is None:
             return "alternate_resource_unavailable"
+        if current_resource_id is not None and resource.resource_id == current_resource_id:
+            return "alternate_resource_not_distinct"
         gates = (
             (resource.qualified, "alternate_resource_not_qualified"),
             (resource.healthy, "alternate_resource_unhealthy"),
