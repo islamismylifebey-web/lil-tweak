@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 from .test_world import (
+    AttemptMode,
     AttemptStatus,
     TestCheck,
     TestWorld,
@@ -33,7 +34,7 @@ _WORLD_COLUMNS = (
     "world_fingerprint,judge_version,extract(epoch from created_at),extract(epoch from updated_at)"
 )
 _ATTEMPT_COLUMNS = (
-    "id,world_id,owner_id,attempt_number,status,world_fingerprint,judge_version,outcome,"
+    "id,world_id,owner_id,attempt_number,status,attempt_mode,world_fingerprint,judge_version,outcome,"
     "previous_attempt_id,feedback,cumulative_patch,plan,summary,tests,model_calls,input_tokens,"
     "output_tokens,total_tokens,duration_ms,judge_duration_ms,extract(epoch from created_at),"
     "extract(epoch from started_at),extract(epoch from finished_at)"
@@ -74,31 +75,32 @@ def _world_from_row(row: Sequence[Any]) -> TestWorld:
 
 
 def _attempt_from_row(row: Sequence[Any]) -> TestWorldAttempt:
-    feedback_value = _json_value(row[9]) or []
+    feedback_value = _json_value(row[10]) or []
     return TestWorldAttempt(
         id=str(row[0]),
         world_id=str(row[1]),
         owner_id=str(row[2]),
         number=int(row[3]),
         status=AttemptStatus(str(row[4])),
-        world_fingerprint=str(row[5]),
-        judge_version=str(row[6]),
-        outcome=None if row[7] is None else str(row[7]),
-        previous_attempt_id=None if row[8] is None else str(row[8]),
+        mode=AttemptMode(str(row[5])),
+        world_fingerprint=str(row[6]),
+        judge_version=str(row[7]),
+        outcome=None if row[8] is None else str(row[8]),
+        previous_attempt_id=None if row[9] is None else str(row[9]),
         feedback=tuple(dict(item) for item in feedback_value),
-        cumulative_patch=str(row[10] or ""),
-        plan=str(row[11] or ""),
-        summary=str(row[12] or ""),
-        tests=str(row[13] or ""),
-        model_calls=int(row[14] or 0),
-        input_tokens=int(row[15] or 0),
-        output_tokens=int(row[16] or 0),
-        total_tokens=int(row[17] or 0),
-        duration_ms=int(row[18] or 0),
-        judge_duration_ms=int(row[19] or 0),
-        created_at=float(row[20]),
-        started_at=None if row[21] is None else float(row[21]),
-        finished_at=None if row[22] is None else float(row[22]),
+        cumulative_patch=str(row[11] or ""),
+        plan=str(row[12] or ""),
+        summary=str(row[13] or ""),
+        tests=str(row[14] or ""),
+        model_calls=int(row[15] or 0),
+        input_tokens=int(row[16] or 0),
+        output_tokens=int(row[17] or 0),
+        total_tokens=int(row[18] or 0),
+        duration_ms=int(row[19] or 0),
+        judge_duration_ms=int(row[20] or 0),
+        created_at=float(row[21]),
+        started_at=None if row[22] is None else float(row[22]),
+        finished_at=None if row[23] is None else float(row[23]),
     )
 
 
@@ -238,20 +240,31 @@ class PostgresTestWorldStore:
             row = cursor.fetchone()
             return None if row is None else _attempt_from_row(row)
 
-    def enqueue_attempt(self, world_id: str, owner_id: str, *, idempotency_key: str) -> TestWorldAttempt:
+    def enqueue_attempt(
+        self,
+        world_id: str,
+        owner_id: str,
+        *,
+        idempotency_key: str,
+        mode: AttemptMode | str = AttemptMode.RETRY,
+    ) -> TestWorldAttempt:
         if not idempotency_key or len(idempotency_key.encode("utf-8")) > 200:
             raise ValueError("invalid idempotency key")
+        try:
+            attempt_mode = AttemptMode(mode)
+        except (TypeError, ValueError):
+            raise ValueError("invalid attempt mode") from None
         identity = f"test-world-attempt\n{owner_id}\n{idempotency_key}"
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (identity,))
             cursor.execute(
-                "SELECT id,world_id FROM lil_tweak_test_world_attempts "
+                "SELECT id,world_id,attempt_mode FROM lil_tweak_test_world_attempts "
                 "WHERE owner_id=%s AND attempt_idempotency_key=%s FOR UPDATE",
                 (owner_id, idempotency_key),
             )
             existing = cursor.fetchone()
             if existing is not None:
-                if str(existing[1]) != world_id:
+                if str(existing[1]) != world_id or str(existing[2]) != attempt_mode.value:
                     raise TestWorldConflict("idempotency key reused")
                 return self._fetch_attempt(cursor, str(existing[0]), owner_id)
             world = self._fetch_world(cursor, world_id, owner_id, for_update=True)
@@ -272,14 +285,15 @@ class PostgresTestWorldStore:
             attempt_id = f"attempt:{uuid.uuid4().hex}"
             cursor.execute(
                 "INSERT INTO lil_tweak_test_world_attempts "
-                "(id,world_id,owner_id,attempt_number,status,world_fingerprint,judge_version,expected_check_count,"
+                "(id,world_id,owner_id,attempt_number,status,attempt_mode,world_fingerprint,judge_version,expected_check_count,"
                 "previous_attempt_id,attempt_idempotency_key) "
-                "VALUES (%s,%s,%s,%s,'queued',%s,%s,%s,%s,%s)",
+                "VALUES (%s,%s,%s,%s,'queued',%s,%s,%s,%s,%s,%s)",
                 (
                     attempt_id,
                     world_id,
                     owner_id,
                     attempt_number,
+                    attempt_mode.value,
                     world.fingerprint,
                     world.judge_version,
                     len(world.checks),
