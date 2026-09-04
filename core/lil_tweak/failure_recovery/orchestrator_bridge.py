@@ -6,27 +6,22 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ..contracts import JobState
 from ..orchestrator import EngineeringOrchestrator
 from ..store import Job, JobLease, JobNotFound, JobStore
-from .contracts import RecoveryContext, RecoveryDecision
+from .contracts import FailureCode, FailureSignal, RecoveryContext, RecoveryDecision
 from .controller import FailureRecoveryController
 
 
 _REVISION = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
 
-class _RecoveryCapturingAgent:
-    def __init__(
-        self,
-        delegate: Any,
-        controller: FailureRecoveryController,
-        context: RecoveryContext,
-    ) -> None:
+class _FailureObservingAgent:
+    """Observe one model failure without deciding recovery before source binding."""
+
+    def __init__(self, delegate: Any) -> None:
         self._delegate = delegate
-        self._controller = controller
-        self._context = context
-        self.decision: RecoveryDecision | None = None
-        self.recovery_unavailable = False
+        self.error: Exception | None = None
 
     @property
     def tools(self) -> Any:
@@ -36,17 +31,12 @@ class _RecoveryCapturingAgent:
         try:
             return self._delegate.run(**kwargs)
         except Exception as error:
-            try:
-                self.decision = self._controller.decide(
-                    self._controller.signal_from_exception(error), self._context
-                )
-            except Exception:
-                self.recovery_unavailable = True
+            self.error = error
             raise
 
 
 class RecoveryAwareEngineeringOrchestrator:
-    """Drop-in orchestrator adapter that records, but never executes, recovery."""
+    """Record recovery decisions after authoritative orchestration has settled."""
 
     def __init__(
         self,
@@ -83,16 +73,15 @@ class RecoveryAwareEngineeringOrchestrator:
         source_inventory: tuple[str, ...] = (),
         workspace: str | Path | None = None,
     ) -> Job:
-        job = self.store.get_job(job_id, owner_id)
-        if job is None:
+        initial = self.store.get_job(job_id, owner_id)
+        if initial is None:
             raise JobNotFound("job not found")
-        context = self._context(job)
-        capturing_agent = _RecoveryCapturingAgent(
-            self.agent, self.recovery_controller, context
-        )
+        self.last_recovery_decision = None
+        self.recovery_unavailable = False
+        observing_agent = _FailureObservingAgent(self.agent)
         kwargs: dict[str, Any] = {
             "store": self.store,
-            "agent": capturing_agent,
+            "agent": observing_agent,
             "evidence_store": self.evidence_store,
             "job_timeout_seconds": self.job_timeout_seconds,
             "galor": self.galor,
@@ -103,15 +92,51 @@ class RecoveryAwareEngineeringOrchestrator:
             kwargs["clock"] = self.clock
         if self.monotonic is not None:
             kwargs["monotonic"] = self.monotonic
-        result = EngineeringOrchestrator(**kwargs).run_job(
-            job_id,
-            owner_id,
-            source_inventory=source_inventory,
-            workspace=workspace,
-        )
-        self.last_recovery_decision = capturing_agent.decision
-        self.recovery_unavailable = capturing_agent.recovery_unavailable
+        orchestrator = EngineeringOrchestrator(**kwargs)
+        try:
+            result = orchestrator.run_job(
+                job_id,
+                owner_id,
+                source_inventory=source_inventory,
+                workspace=workspace,
+            )
+        except Exception as error:
+            latest = self.store.get_job(job_id, owner_id) or initial
+            self._record(self.recovery_controller.signal_from_exception(error), latest)
+            raise
+
+        if result.state is JobState.TIMED_OUT:
+            signal = (
+                self.recovery_controller.signal_from_exception(observing_agent.error)
+                if observing_agent.error is not None
+                else FailureSignal(
+                    code=FailureCode.TIMEOUT,
+                    exception_type="ObservedCommandTimeout",
+                    failed_checks=("command_timeout",),
+                    transient=True,
+                )
+            )
+            self._record(signal, result)
+        elif result.state is JobState.FAILED:
+            signal = (
+                self.recovery_controller.signal_from_exception(observing_agent.error)
+                if observing_agent.error is not None
+                else FailureSignal(
+                    code=FailureCode.UNKNOWN_FAILURE,
+                    exception_type="OrchestratorTerminalFailure",
+                )
+            )
+            self._record(signal, result)
         return result
+
+    def _record(self, signal: FailureSignal, job: Job) -> None:
+        try:
+            self.last_recovery_decision = self.recovery_controller.decide(
+                signal, self._context(job)
+            )
+        except Exception:
+            self.last_recovery_decision = None
+            self.recovery_unavailable = True
 
     def _context(self, job: Job) -> RecoveryContext:
         source_revision = None
@@ -119,7 +144,7 @@ class RecoveryAwareEngineeringOrchestrator:
             source_revision = job.git_source.commit
         elif job.source_digest is not None and _REVISION.fullmatch(job.source_digest):
             source_revision = job.source_digest
-        attempt = self.lease.generation if self.lease is not None else max(1, job.revision + 1)
+        attempt = self.lease.generation if self.lease is not None else 1
         lease_id = None
         if self.lease is not None:
             lease_id = f"{self.lease.worker_id}:{self.lease.generation}"
