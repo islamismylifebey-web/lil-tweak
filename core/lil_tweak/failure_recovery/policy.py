@@ -78,6 +78,17 @@ class RecoveryPolicy:
                 requires_reauthorization=True,
             )
 
+        if (
+            not context.approval_present
+            and base.action not in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}
+        ):
+            return self._blocked(
+                "missing_required_approval",
+                disposition=RecoveryDisposition.APPROVAL_REQUIRED,
+                action=RecoveryAction.ESCALATE,
+                requires_reauthorization=True,
+            )
+
         if base.action is RecoveryAction.REROUTE_RESOURCE:
             resource_failure = self._validate_resource(
                 resource_decision, current_resource_id=context.resource_id
@@ -120,7 +131,9 @@ class RecoveryPolicy:
         action_limit = budgets.limit_for(base.action)
         if base.action is RecoveryAction.RETRY_STEP:
             prior_same_action = [
-                entry for entry in fingerprint_decisions if entry.action is base.action
+                entry
+                for entry in mission_decisions
+                if entry.node_id == context.node_id and entry.action is base.action
             ]
         else:
             prior_same_action = [
