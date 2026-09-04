@@ -103,6 +103,28 @@ class FailureRecoveryReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "blocking_recovery_cannot_be_allowed"):
             replace(decision, action=RecoveryAction.BLOCK, allowed=True)
 
+    def test_validly_shaped_but_unissued_decision_cannot_record_outcome(self):
+        controller = FailureRecoveryController(history=InMemoryRecoveryHistoryStore())
+        decision = controller.decide(
+            FailureSignal(code=FailureCode.TEST_FAILURE), context()
+        )
+        forged = replace(decision, decision_digest="f" * 64)
+        with self.assertRaisesRegex(ValueError, "recovery_decision_not_issued"):
+            controller.record_outcome(
+                forged,
+                context(),
+                RecoveryOutcome(status=RecoveryOutcomeStatus.FAILED, progress=False),
+            )
+
+    def test_validly_shaped_but_unissued_decision_cannot_generate_handoff(self):
+        controller = FailureRecoveryController(history=InMemoryRecoveryHistoryStore())
+        decision = controller.decide(
+            FailureSignal(code=FailureCode.TEST_FAILURE), context()
+        )
+        forged = replace(decision, decision_digest="e" * 64)
+        with self.assertRaisesRegex(ValueError, "recovery_decision_not_issued"):
+            controller.dag_handoff(forged)
+
 
 if __name__ == "__main__":
     unittest.main()
