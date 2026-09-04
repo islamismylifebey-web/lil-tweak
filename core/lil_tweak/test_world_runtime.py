@@ -54,8 +54,8 @@ class TestWorldRuntime:
         if not runner_image or not model or not instructions or not 1 <= job_timeout_seconds <= 86_400:
             raise ValueError("invalid Test World runtime configuration")
         hosts = tuple(git_allowed_hosts)
-        if not hosts or any(not isinstance(item, str) or not item for item in hosts):
-            raise ValueError("git allowlist is required")
+        if any(not isinstance(item, str) or not item for item in hosts):
+            raise ValueError("invalid git allowlist")
         self.work_root = root
         self.runner_image = runner_image
         self.git_allowed_hosts = hosts
