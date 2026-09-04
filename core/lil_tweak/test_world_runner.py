@@ -8,7 +8,13 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from .openai_agent import AgentResult
-from .test_world import TestWorldAttempt, TestWorldConflict, TestWorldNotFound, TestWorldStore
+from .test_world import (
+    AttemptMode,
+    TestWorldAttempt,
+    TestWorldConflict,
+    TestWorldNotFound,
+    TestWorldStore,
+)
 
 
 _MAX_PRIOR_FEEDBACK_BYTES = 32 * 1024
@@ -73,6 +79,10 @@ def _judge_feedback(check: Any, result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _elapsed_ms(start: float, end: float) -> int:
+    return max(0, min(86_400_000, int(round((end - start) * 1000))))
+
+
 class TestWorldAttemptRunner:
     """Claims one durable attempt, executes Tueiq, then persists judge truth."""
 
@@ -89,6 +99,7 @@ class TestWorldAttemptRunner:
         run_check: Callable[[Any, Any], Mapping[str, Any]],
         cleanup_workspace: Callable[[Any], None],
         clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not worker_id or not 1 <= lease_seconds <= 3600:
             raise ValueError("invalid Test World runner configuration")
@@ -102,6 +113,7 @@ class TestWorldAttemptRunner:
         self.run_check = run_check
         self.cleanup_workspace = cleanup_workspace
         self.clock = clock
+        self.monotonic = monotonic
 
     def run_attempt(self, attempt_id: str, owner_id: str) -> TestWorldAttempt:
         attempt = self.store.get_attempt(attempt_id, owner_id)
@@ -127,10 +139,11 @@ class TestWorldAttemptRunner:
             raise TestWorldNotFound("world not found")
 
         workspace: Any | None = None
+        attempt_started = self.monotonic()
         try:
             workspace = self.prepare_workspace(world, attempt)
             previous = None
-            if attempt.previous_attempt_id is not None:
+            if attempt.mode is AttemptMode.RETRY and attempt.previous_attempt_id is not None:
                 previous = self.store.get_attempt(attempt.previous_attempt_id, owner_id)
                 if previous is None:
                     raise TestWorldNotFound("previous attempt not found")
@@ -147,10 +160,13 @@ class TestWorldAttemptRunner:
 
             feedback: list[dict[str, Any]] = []
             all_passed = True
+            judge_started = self.monotonic()
             for check in world.checks:
                 result = _judge_feedback(check, self.run_check(workspace, check))
                 feedback.append(result)
                 all_passed = all_passed and result["passed"]
+            judge_finished = self.monotonic()
+            attempt_finished = judge_finished
 
             return self.store.complete_attempt(
                 lease,
@@ -164,6 +180,8 @@ class TestWorldAttemptRunner:
                 input_tokens=agent_result.input_tokens,
                 output_tokens=agent_result.output_tokens,
                 total_tokens=agent_result.total_tokens,
+                duration_ms=_elapsed_ms(attempt_started, attempt_finished),
+                judge_duration_ms=_elapsed_ms(judge_started, judge_finished),
                 now=self.clock(),
             )
         except (TestWorldConflict, TestWorldNotFound):
@@ -177,6 +195,7 @@ class TestWorldAttemptRunner:
                 lease,
                 feedback=({"code": "attempt_runtime_failed"},),
                 summary="Attempt runtime failed before a trustworthy judge result was produced.",
+                duration_ms=_elapsed_ms(attempt_started, self.monotonic()),
                 now=self.clock(),
             )
         finally:
