@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from core.lil_tweak.contracts import JobMode, JobState
@@ -135,6 +136,33 @@ class FailureRecoveryReviewRemediationTests(unittest.TestCase):
             ),
         )
         self.assertTrue(entry.progress)
+
+    def _make_orchestrator(self, store, agent):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        return RecoveryAwareEngineeringOrchestrator(
+            store=store,
+            agent=agent,
+            evidence_store=LocalEvidenceStore(Path(directory.name) / "evidence"),
+            recovery_controller=FailureRecoveryController(
+                history=InMemoryRecoveryHistoryStore()
+            ),
+        )
+
+    def test_pending_approval_proposal_is_not_recovery_authority(self):
+        store = MemoryJobStore()
+        job = store.create_job("owner", "pending", JobMode.BUILD, "Build")
+        pending = replace(
+            job,
+            source_digest="1" * 64,
+            proposal_digest="2" * 64,
+            approval_proposal={"status": "pending"},
+            approval_consumed=False,
+        )
+        orchestrator = self._make_orchestrator(store, Agent(error=RuntimeError("x")))
+        self.assertFalse(orchestrator._context(pending).approval_present)
+        consumed = replace(pending, approval_consumed=True)
+        self.assertTrue(orchestrator._context(consumed).approval_present)
 
     def _run_orchestrator(self, *, agent, evidence_store=None):
         directory = tempfile.TemporaryDirectory()
