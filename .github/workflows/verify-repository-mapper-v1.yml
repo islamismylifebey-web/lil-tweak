@@ -1,0 +1,242 @@
+name: Verify Repository Mapper V1 Exact Candidate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify-exact-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      BASE_SHA: 72810ca4e06bbef7eceabad7b9edf406cba6b66e
+      CANDIDATE_SHA: 8529e029548258736fd9ad971b4402755bb70843
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8529e029548258736fd9ad971b4402755bb70843
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove exact source identity and boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git merge-base "$BASE_SHA" "$CANDIDATE_SHA")" = "$BASE_SHA"
+          git diff --check "$BASE_SHA...$CANDIDATE_SHA"
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import subprocess
+
+          base = os.environ["BASE_SHA"]
+          candidate = os.environ["CANDIDATE_SHA"]
+          expected = {
+              "core/lil_tweak/repository_mapper/__init__.py",
+              "core/lil_tweak/repository_mapper/contracts.py",
+              "core/lil_tweak/repository_mapper/dependencies.py",
+              "core/lil_tweak/repository_mapper/impact.py",
+              "core/lil_tweak/repository_mapper/languages.py",
+              "core/lil_tweak/repository_mapper/mapper.py",
+              "core/lil_tweak/repository_mapper/routes.py",
+              "core/lil_tweak/repository_mapper/serialization.py",
+              "core/lil_tweak/repository_mapper/symbols.py",
+              "core/lil_tweak/repository_mapper/tests.py",
+              "core/tests/repository_mapper_fixture.py",
+              "core/tests/test_repository_mapper_contracts.py",
+              "core/tests/test_repository_mapper_impact.py",
+              "core/tests/test_repository_mapper_mapping.py",
+          }
+          output = subprocess.check_output(
+              ["git", "diff", "--name-only", f"{base}...{candidate}"], text=True
+          )
+          actual = {line for line in output.splitlines() if line}
+          if actual != expected:
+              raise SystemExit(f"candidate_boundary_mismatch:{sorted(actual ^ expected)}")
+          print(f"exact_candidate={candidate}")
+          print(f"exact_file_boundary={len(actual)}")
+          print("runner_behavior_boundary=unchanged")
+          print("deployment_boundary=not_invoked")
+          PY
+          mkdir -p verification
+          printf 'passed\n' > verification/source-boundary.status
+
+      - name: Set up Node 24.19.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+
+      - name: Set up Python 3.12.14
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.12.14
+          cache: pip
+          cache-dependency-path: core/pyproject.toml
+
+      - name: Create frozen Python environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.8.15"
+          uv lock --project core
+          uv sync --frozen --project core
+          uv pip install --python core/.venv/bin/python "ruff==0.12.12" "mypy==1.17.1"
+          echo "$GITHUB_WORKSPACE/core/.venv/bin" >> "$GITHUB_PATH"
+          printf 'passed\n' > verification/uv-sync.status
+
+      - name: Install exact Node dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          printf 'passed\n' > verification/npm-ci.status
+
+      - name: Run canonical repository verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run verify 2>&1 | tee verification/npm-verify.log
+          printf 'passed\n' > verification/canonical-verify.status
+
+      - name: Run Ruff, format, mypy, and environment checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd core
+            ruff check . 2>&1 | tee ../verification/ruff-check.log
+            ruff format --check . 2>&1 | tee ../verification/ruff-format.log
+            mypy --ignore-missing-imports lil_tweak 2>&1 | tee ../verification/mypy.log
+          )
+          python -m pip check 2>&1 | tee verification/pip-check.log
+          printf 'passed\n' > verification/static-analysis.status
+
+      - name: Run deterministic evaluation and smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' 2>&1 | tee verification/deterministic-evaluation.log
+          from __future__ import annotations
+
+          import json
+          import tempfile
+          from pathlib import Path
+
+          from core.lil_tweak.repository_mapper import (
+              MapBinding,
+              RepositoryMapService,
+              RepositoryMapper,
+              canonical_json,
+              verify_map_digest,
+          )
+          from core.tests.repository_mapper_fixture import make_repository, source_digest
+
+          with tempfile.TemporaryDirectory() as directory:
+              root = Path(directory)
+              make_repository(root)
+              digest = source_digest(root)
+              binding = MapBinding(
+                  repository_id="verification-fixture",
+                  source_commit="a" * 40,
+                  source_tree_digest=digest,
+              )
+              mapper = RepositoryMapper()
+              first = mapper.map(root, binding)
+              second = mapper.map(root, binding)
+              if canonical_json(first) != canonical_json(second):
+                  raise SystemExit("deterministic_json_mismatch")
+              if first.map_digest != second.map_digest or not verify_map_digest(first):
+                  raise SystemExit("deterministic_digest_mismatch")
+              service = RepositoryMapService()
+              stored = service.create_map(root, binding)
+              if service.get_map(stored.map_digest) != stored:
+                  raise SystemExit("service_round_trip_failed")
+              fragment = stored.context_manifest_fragment()
+              if fragment["authority"] != "none" or fragment["mayExecute"]:
+                  raise SystemExit("authority_boundary_failed")
+              print(
+                  json.dumps(
+                      {
+                          "mapDigest": first.map_digest,
+                          "nodeCount": len(first.nodes),
+                          "edgeCount": len(first.edges),
+                          "findingCount": len(first.findings),
+                          "deterministic": True,
+                          "authority": "none",
+                      },
+                      sort_keys=True,
+                  )
+              )
+          PY
+          python -m compileall -q core/lil_tweak/repository_mapper core/tests/test_repository_mapper_*.py
+          git diff --exit-code
+          printf 'passed\n' > verification/deterministic-smoke.status
+
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --audit-level=high --json > verification/npm-audit.json
+          printf 'passed\n' > verification/audit.status
+
+      - name: Build verification report
+        if: always()
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path("verification")
+          root.mkdir(exist_ok=True)
+          log = (root / "npm-verify.log").read_text(encoding="utf-8") if (root / "npm-verify.log").exists() else ""
+          node_tests = [int(value) for value in re.findall(r"^# tests (\d+)$", log, re.MULTILINE)]
+          node_pass = [int(value) for value in re.findall(r"^# pass (\d+)$", log, re.MULTILINE)]
+          python_tests = [int(value) for value in re.findall(r"^Ran (\d+) tests? in", log, re.MULTILINE)]
+          statuses = {
+              path.stem: path.read_text(encoding="utf-8").strip()
+              for path in root.glob("*.status")
+          }
+          report = {
+              "jobStatus": os.environ.get("JOB_STATUS", "unknown"),
+              "baseSha": os.environ["BASE_SHA"],
+              "candidateSha": os.environ["CANDIDATE_SHA"],
+              "legacyBaseline": {"node": 118, "python": 275, "total": 393},
+              "newMapperTests": 35,
+              "nodeTests": node_tests[-1] if node_tests else None,
+              "nodePassing": node_pass[-1] if node_pass else None,
+              "pythonTests": python_tests[-1] if python_tests else None,
+              "statuses": statuses,
+              "deploymentOccurred": False,
+              "runnerFilesChanged": False,
+          }
+          (root / "verification-report.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-mapper-v1-8529e029-verification
+          path: verification
+          if-no-files-found: error
+          retention-days: 14
