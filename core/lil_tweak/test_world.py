@@ -56,6 +56,11 @@ class AttemptStatus(str, Enum):
     ERROR = "error"
 
 
+class AttemptMode(str, Enum):
+    RETRY = "retry"
+    FRESH = "fresh"
+
+
 @dataclass(frozen=True, slots=True)
 class TestCheck:
     name: str
@@ -108,6 +113,7 @@ class TestWorldAttempt:
     status: AttemptStatus
     world_fingerprint: str
     judge_version: str
+    mode: AttemptMode = AttemptMode.RETRY
     outcome: str | None = None
     previous_attempt_id: str | None = None
     feedback: tuple[Mapping[str, Any], ...] = ()
@@ -142,7 +148,14 @@ class TestWorldStore(Protocol):
     def get_world(self, world_id: str, owner_id: str) -> TestWorld | None: ...
     def list_attempts(self, world_id: str, owner_id: str) -> list[TestWorldAttempt]: ...
     def get_attempt(self, attempt_id: str, owner_id: str) -> TestWorldAttempt | None: ...
-    def enqueue_attempt(self, world_id: str, owner_id: str, *, idempotency_key: str) -> TestWorldAttempt: ...
+    def enqueue_attempt(
+        self,
+        world_id: str,
+        owner_id: str,
+        *,
+        idempotency_key: str,
+        mode: AttemptMode | str = AttemptMode.RETRY,
+    ) -> TestWorldAttempt: ...
     def list_schedulable_attempts(self, *, now: float | None = None, limit: int = 10) -> list[TestWorldAttempt]: ...
     def reconcile_active_attempts(self, *, now: float | None = None, limit: int = 100) -> list[TestWorldAttempt]: ...
     def claim_attempt(self, attempt_id: str, worker_id: str, *, lease_seconds: int, now: float | None = None) -> TestWorldLease | None: ...
@@ -266,7 +279,7 @@ class MemoryTestWorldStore:
         self._attempts: dict[str, TestWorldAttempt] = {}
         self._attempt_ids: dict[str, list[str]] = {}
         self._world_idempotency: dict[tuple[str, str], tuple[str, str]] = {}
-        self._attempt_idempotency: dict[tuple[str, str], tuple[str, str]] = {}
+        self._attempt_idempotency: dict[tuple[str, str], tuple[str, str, AttemptMode]] = {}
         self._claims: dict[str, TestWorldLease] = {}
         self._generations: dict[str, int] = {}
 
@@ -352,15 +365,26 @@ class MemoryTestWorldStore:
                 return None
             return _copy_attempt(attempt)
 
-    def enqueue_attempt(self, world_id: str, owner_id: str, *, idempotency_key: str) -> TestWorldAttempt:
+    def enqueue_attempt(
+        self,
+        world_id: str,
+        owner_id: str,
+        *,
+        idempotency_key: str,
+        mode: AttemptMode | str = AttemptMode.RETRY,
+    ) -> TestWorldAttempt:
         if not idempotency_key or len(idempotency_key.encode("utf-8")) > 200:
             raise ValueError("invalid idempotency key")
+        try:
+            attempt_mode = AttemptMode(mode)
+        except (TypeError, ValueError):
+            raise ValueError("invalid attempt mode") from None
         identity = (owner_id, idempotency_key)
         with self._lock:
             previous = self._attempt_idempotency.get(identity)
             if previous is not None:
-                previous_world_id, attempt_id = previous
-                if previous_world_id != world_id:
+                previous_world_id, attempt_id, previous_mode = previous
+                if previous_world_id != world_id or previous_mode is not attempt_mode:
                     raise TestWorldConflict("idempotency key reused")
                 return _copy_attempt(self._attempts[attempt_id])
             world = self._worlds.get(world_id)
@@ -383,12 +407,13 @@ class MemoryTestWorldStore:
                 status=AttemptStatus.QUEUED,
                 world_fingerprint=world.fingerprint,
                 judge_version=world.judge_version,
+                mode=attempt_mode,
                 previous_attempt_id=previous_attempt_id,
                 created_at=now,
             )
             self._attempts[attempt.id] = attempt
             attempt_ids.append(attempt.id)
-            self._attempt_idempotency[identity] = (world_id, attempt.id)
+            self._attempt_idempotency[identity] = (world_id, attempt.id, attempt_mode)
             self._worlds[world_id] = replace(world, status=WorldStatus.RUNNING, updated_at=now)
             return _copy_attempt(attempt)
 
