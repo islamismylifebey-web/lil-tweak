@@ -7,11 +7,12 @@ function source(path) {
 }
 
 test("configuration and operations docs keep only the retired Hub tombstone", async () => {
-  const [readme, deployEnvironment, coreEnvironment, runbook] = await Promise.all([
+  const [readme, deployEnvironment, coreEnvironment, runbook, offlineDependencies] = await Promise.all([
     source("README.md"),
     source("deploy/core.env.example"),
     source("core/.env.example"),
     source("docs/operations/digitalocean.md"),
+    source("docs/operations/offline-dependencies.md"),
   ]);
 
   for (const [path, document] of [
@@ -35,6 +36,8 @@ test("configuration and operations docs keep only the retired Hub tombstone", as
   assert.match(coreEnvironment, /Retired boundary:.*LIL_TWEAK_GALOR_READONLY_URL.*rejected/i);
   assert.doesNotMatch(deployEnvironment, /^\s*#\s*LIL_TWEAK_GALOR_READONLY_URL=/m);
   assert.doesNotMatch(coreEnvironment, /^\s*#\s*LIL_TWEAK_GALOR_READONLY_URL=/m);
+  assert.doesNotMatch(offlineDependencies, /GALOR credentials/i);
+  assert.match(offlineDependencies, /other-product credentials/i);
 });
 
 test("browser connection contract has no Hub status surface", async () => {
