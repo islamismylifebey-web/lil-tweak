@@ -51,6 +51,18 @@ def sdk_modules(boto3, psycopg):
 
 
 class MainWiringTests(unittest.TestCase):
+    def setUp(self):
+        for name in (
+            "PostgresTestWorldStore",
+            "TestWorldRuntime",
+            "TestWorldAttemptRunner",
+            "TestWorldScheduler",
+            "TestWorldApi",
+        ):
+            patcher = patch.object(core_main, name)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_startup_reconciliation_finishes_before_runner_and_scheduler(self):
         boto3 = Mock()
         psycopg = Mock()
