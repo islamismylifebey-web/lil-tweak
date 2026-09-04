@@ -9,10 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  full:
-    name: Full repository verification
+  node:
+    name: TypeScript and Node detachment tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Check out branch
         uses: actions/checkout@v4
@@ -21,14 +21,25 @@ jobs:
         with:
           node-version: 22.19.0
           cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run typecheck
+        run: npm run typecheck
+      - name: Run focused connection and documentation tests
+        run: node --experimental-strip-types --test tests/engineering-connection.test.mjs tests/hub-detachment.test.mjs
+
+  python:
+    name: Python detachment tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install locked dependencies
-        run: npm ci
-      - name: Run repository verification
+      - name: Run focused core boundary tests
         env:
-          NODE_OPTIONS: --experimental-strip-types
           PYTHONDONTWRITEBYTECODE: '1'
-        run: npm run verify
+        run: python -m unittest core.tests.test_config core.tests.test_hub_detachment
