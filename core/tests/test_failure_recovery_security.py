@@ -119,13 +119,8 @@ class FailureRecoverySecurityTests(unittest.TestCase):
             history=InMemoryRecoveryHistoryStore(),
             budgets=RecoveryBudgets(max_node_retries=2, max_fingerprint_retries=1),
         )
-        first = controller.decide(
+        controller.decide(
             FailureSignal(code=FailureCode.TIMEOUT, transient=True), context()
-        )
-        controller.record_outcome(
-            first,
-            context(),
-            RecoveryOutcome(status=RecoveryOutcomeStatus.FAILED, progress=True),
         )
         second = controller.decide(
             FailureSignal(code=FailureCode.TIMEOUT, transient=True), context(attempt=2)
