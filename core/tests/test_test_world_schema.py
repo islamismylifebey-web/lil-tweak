@@ -42,7 +42,7 @@ class TestWorldSchemaContractTests(unittest.TestCase):
         for required in (
             'MIGRATION_003_SOURCE="${PROJECT_DIR}/core/migrations/003_test_world.sql"',
             '003_test_world.sql',
-            'schema_version" == "3"',
+            '[[ "${schema_version}" == "3" ]]',
         ):
             self.assertIn(required, installer)
 
