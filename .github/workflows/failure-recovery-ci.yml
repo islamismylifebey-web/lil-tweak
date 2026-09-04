@@ -63,6 +63,7 @@ jobs:
             core.tests.test_failure_recovery_orchestrator \
             core.tests.test_failure_recovery_resource_binding \
             core.tests.test_failure_recovery_review \
+            core.tests.test_failure_recovery_review_remediation \
             core.tests.test_failure_recovery_security
       - name: Validate complete branch diff
         run: git diff --check origin/main...HEAD
