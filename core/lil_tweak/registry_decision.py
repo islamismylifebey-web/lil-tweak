@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 from .registry_canonical import decision_binding, sha256_digest
+from .registry_validation import validate_approval, validate_evidence
 from .registry_types import (
     Asset,
     ContractVersion,
@@ -274,6 +275,82 @@ def resolve_contracts(
                 now=decision_time,
                 mode=ExecutionMode.BLOCKED,
                 reasons=(ReasonCode.PROHIBITED_ACTION,),
+                contracts=active_matches,
+                required_approval_ids=required_approval_ids,
+                required_evidence_types=required_evidence_types,
+            )
+
+        references = tuple(
+            sorted(
+                (ContractVersionRef(c.contract_id, c.version, sha256_digest(c)) for c in active_matches),
+                key=lambda ref: (ref.contract_id, ref.version, ref.digest),
+            )
+        )
+        decision_target = decision_binding(request, tuple(ref.digest for ref in references))
+        contract_targets = {c.contract_id: sha256_digest(c) for c in active_matches}
+
+        approval_records = tuple(approvals)
+        evidence_records = tuple(evidence)
+        approval_reasons: list[ReasonCode] = []
+        evidence_reasons: list[ReasonCode] = []
+
+        for contract in active_matches:
+            for approval_id in contract.required_approval_ids:
+                candidates = tuple(
+                    record for record in approval_records
+                    if getattr(record, "owner_id", None) == request.owner_id
+                    and getattr(record, "approval_id", None) == approval_id
+                )
+                if not candidates:
+                    approval_reasons.append(ReasonCode.MISSING_REQUIRED_APPROVAL)
+                    continue
+                if len(candidates) != 1:
+                    approval_reasons.append(ReasonCode.INTEGRITY_CHECK_FAILED)
+                    continue
+                record = candidates[0]
+                target = (
+                    decision_target
+                    if getattr(record, "target_digest", None) == decision_target
+                    else contract_targets[contract.contract_id]
+                )
+                reason = validate_approval(record, request, target, decision_time)
+                if reason is not None:
+                    approval_reasons.append(reason)
+
+        allowed_evidence_targets = (decision_target,) + tuple(ref.digest for ref in references)
+        for evidence_type in required_evidence_types:
+            candidates = tuple(
+                reference for reference in evidence_records
+                if getattr(reference, "owner_id", None) == request.owner_id
+                and getattr(reference, "evidence_type", None) == evidence_type
+            )
+            if not candidates:
+                evidence_reasons.append(ReasonCode.MISSING_REQUIRED_EVIDENCE)
+                continue
+            valid = False
+            candidate_reasons: list[ReasonCode] = []
+            for reference in candidates:
+                target = getattr(reference, "target_digest", None)
+                expected = target if target in allowed_evidence_targets else decision_target
+                reason = validate_evidence(reference, request, expected)
+                if reason is None:
+                    valid = True
+                    break
+                candidate_reasons.append(reason)
+            if not valid:
+                evidence_reasons.append(
+                    sorted(candidate_reasons, key=lambda reason: reason.value)[0]
+                    if candidate_reasons
+                    else ReasonCode.MISSING_REQUIRED_EVIDENCE
+                )
+
+        validation_reasons = approval_reasons + evidence_reasons
+        if validation_reasons:
+            return _make_decision(
+                request,
+                now=decision_time,
+                mode=ExecutionMode.BLOCKED,
+                reasons=validation_reasons,
                 contracts=active_matches,
                 required_approval_ids=required_approval_ids,
                 required_evidence_types=required_evidence_types,
