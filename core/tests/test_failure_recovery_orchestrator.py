@@ -8,6 +8,7 @@ from core.lil_tweak.failure_recovery import (
     FailureRecoveryController,
     InMemoryRecoveryHistoryStore,
     RecoveryAction,
+    RecoveryAwareEngineeringOrchestrator,
 )
 from core.lil_tweak.openai_agent import AgentDeadlineError
 from core.lil_tweak.orchestrator import EngineeringOrchestrator
@@ -27,7 +28,7 @@ class FailingAgent:
 
 
 class BrokenRecoveryController:
-    def decide(self, *_args, **_kwargs):
+    def signal_from_exception(self, _error):
         raise RuntimeError("recovery internals must not leak")
 
 
@@ -38,42 +39,52 @@ class FailureRecoveryOrchestratorTests(unittest.TestCase):
         store = MemoryJobStore()
         job = store.create_job("owner", "failure", JobMode.BUILD, "Build")
         agent = FailingAgent(error)
-        result = EngineeringOrchestrator(
-            store=store,
-            agent=agent,
-            evidence_store=LocalEvidenceStore(Path(directory.name) / "evidence"),
-            recovery_controller=recovery_controller,
-        ).run_job(job.id, "owner")
-        return store, job, agent, result
+        common = {
+            "store": store,
+            "agent": agent,
+            "evidence_store": LocalEvidenceStore(Path(directory.name) / "evidence"),
+        }
+        if recovery_controller is None:
+            orchestrator = EngineeringOrchestrator(**common)
+        else:
+            orchestrator = RecoveryAwareEngineeringOrchestrator(
+                **common,
+                recovery_controller=recovery_controller,
+            )
+        result = orchestrator.run_job(job.id, "owner")
+        return store, job, agent, orchestrator, result
 
     def test_unknown_failure_is_recorded_and_job_remains_failed(self):
         controller = FailureRecoveryController(history=InMemoryRecoveryHistoryStore())
-        store, job, agent, result = self.run_failure(RuntimeError("secret detail"), controller)
+        _store, _job, agent, orchestrator, result = self.run_failure(
+            RuntimeError("secret detail"), controller
+        )
         self.assertEqual(result.state, JobState.FAILED)
-        events = store.list_events(job.id, "owner")
-        recovery = next(event for event in events if event.kind == "failure_recovery_decision")
-        self.assertEqual(recovery.data["action"], RecoveryAction.BLOCK.value)
-        self.assertEqual(recovery.data["failure_code"], "unknown_failure")
-        self.assertNotIn("secret detail", str(recovery.data))
+        decision = orchestrator.last_recovery_decision
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.action, RecoveryAction.BLOCK)
+        self.assertEqual(decision.failure_code.value, "unknown_failure")
+        self.assertNotIn("secret detail", str(decision))
+        self.assertEqual(len(controller.history.list("owner")), 1)
         self.assertEqual(agent.calls, 1)
 
     def test_deadline_records_bounded_retry_recommendation_but_does_not_retry(self):
         controller = FailureRecoveryController(history=InMemoryRecoveryHistoryStore())
-        store, job, agent, result = self.run_failure(
+        _store, _job, agent, orchestrator, result = self.run_failure(
             AgentDeadlineError("deadline"), controller
         )
         self.assertEqual(result.state, JobState.TIMED_OUT)
-        recovery = next(
-            event
-            for event in store.list_events(job.id, "owner")
-            if event.kind == "failure_recovery_decision"
-        )
-        self.assertEqual(recovery.data["action"], RecoveryAction.RETRY_STEP.value)
-        self.assertTrue(recovery.data["allowed"])
+        decision = orchestrator.last_recovery_decision
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.action, RecoveryAction.RETRY_STEP)
+        self.assertTrue(decision.allowed)
         self.assertEqual(agent.calls, 1)
 
     def test_existing_behavior_is_unchanged_when_controller_is_absent(self):
-        store, job, agent, result = self.run_failure(RuntimeError("boom"), None)
+        store, job, agent, orchestrator, result = self.run_failure(
+            RuntimeError("boom"), None
+        )
+        self.assertIsInstance(orchestrator, EngineeringOrchestrator)
         self.assertEqual(result.state, JobState.FAILED)
         self.assertNotIn(
             "failure_recovery_decision",
@@ -82,16 +93,12 @@ class FailureRecoveryOrchestratorTests(unittest.TestCase):
         self.assertEqual(agent.calls, 1)
 
     def test_recovery_controller_failure_fails_closed_without_masking_job_failure(self):
-        store, job, agent, result = self.run_failure(
+        _store, _job, agent, orchestrator, result = self.run_failure(
             RuntimeError("boom"), BrokenRecoveryController()
         )
         self.assertEqual(result.state, JobState.FAILED)
-        unavailable = next(
-            event
-            for event in store.list_events(job.id, "owner")
-            if event.kind == "failure_recovery_unavailable"
-        )
-        self.assertEqual(unavailable.data, {"code": "failure_recovery_unavailable"})
+        self.assertTrue(orchestrator.recovery_unavailable)
+        self.assertIsNone(orchestrator.last_recovery_decision)
         self.assertEqual(agent.calls, 1)
 
 
