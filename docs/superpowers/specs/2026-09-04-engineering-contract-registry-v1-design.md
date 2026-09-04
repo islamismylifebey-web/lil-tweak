@@ -76,6 +76,14 @@ The decision engine performs these steps in order:
 7. Return the permitted mode and requirements.
 8. Append the decision audit event.
 
+Contract selection precedence is mechanical:
+
+- any explicit prohibition wins;
+- among compatible permissions, the lowest-authority mode wins;
+- required approvals and evidence are the union of all compatible matching contracts;
+- logically incompatible scopes or requirements produce `BLOCKED` with `conflicting_active_contracts`;
+- a broader contract cannot weaken a narrower contract that covers the same request.
+
 The initial execution modes, from least to most authority, are:
 
 - `BLOCKED`
@@ -88,6 +96,60 @@ The initial execution modes, from least to most authority, are:
 V1 never grants production mutation, push, merge, publish, or deployment authority. Those actions remain prohibited even if a malformed or overly broad contract requests them.
 
 When no contract matches, the result is `EXPLAIN_ONLY` with reason `no_matching_contract`.
+
+#### Governed vocabulary
+
+Environment is a closed V1 enumeration:
+
+- `DOCUMENT_ONLY`
+- `REPOSITORY`
+- `SANDBOX`
+- `NON_PRODUCTION`
+- `PRODUCTION`
+
+Action class and operation intent are separate dimensions.
+
+Action classes:
+
+- `ANALYSIS`
+- `CODE_GENERATION`
+- `PATCH_PREPARATION`
+- `PATCH_APPLICATION`
+- `APPROVAL_BINDING`
+- `EVIDENCE_BINDING`
+
+Operation intents:
+
+- `READ`
+- `PROPOSE`
+- `MODIFY`
+- `APPLY`
+- `PUBLISH`
+- `DEPLOY`
+
+`PUBLISH` and `DEPLOY` are always prohibited in V1. `APPLY` is permitted only in `SANDBOX` or `NON_PRODUCTION` when a matching contract and every required approval and evidence reference allow it.
+
+Reason codes are a closed, tested V1 registry:
+
+- `no_matching_contract`
+- `invalid_request`
+- `ambiguous_request`
+- `inactive_principal`
+- `unknown_asset`
+- `contract_not_effective`
+- `contract_expired`
+- `conflicting_active_contracts`
+- `missing_required_approval`
+- `stale_approval`
+- `revoked_approval`
+- `wrong_digest_binding`
+- `missing_required_evidence`
+- `prohibited_target`
+- `prohibited_action`
+- `audit_persist_failed`
+- `integrity_check_failed`
+
+Unknown internal failures are mapped to `integrity_check_failed` at the public decision boundary and remain blocked. New public reason codes require a versioned contract change and tests.
 
 ### 3. Persistence
 
@@ -110,7 +172,8 @@ Database constraints enforce owner scoping, immutable version identity, uniquene
 
 All governed records use canonical JSON and SHA-256 fingerprints. Each audit event stores:
 
-- event ID and monotonic sequence;
+- a globally unique event ID;
+- an owner-scoped monotonic sequence;
 - owner scope;
 - subject type and ID;
 - event type;
@@ -120,9 +183,36 @@ All governed records use canonical JSON and SHA-256 fingerprints. Each audit eve
 - authenticated actor;
 - recorded time.
 
-The chain makes rewriting, deletion, or reordering detectable. HMAC request signing and nonce replay protection reuse the trusted Core's existing authentication model. Cryptographic signing-key rotation and external transparency anchoring are future work; V1 must not pretend a hash chain alone proves external identity.
+The hash chain is maintained per owner scope. Each event binds its owner-scoped sequence and prior owner event hash, making rewriting, deletion, cross-owner insertion, or reordering detectable. HMAC request signing and nonce replay protection reuse the trusted Core's existing authentication model. Cryptographic signing-key rotation and external transparency anchoring are future work; V1 must not pretend a hash chain alone proves external identity.
 
-### 5. Service boundary
+### 5. Approval and evidence validity
+
+An approval is valid only when all of these conditions hold at decision time:
+
+- it is authenticated through the trusted owner mechanism;
+- it has not been revoked;
+- its issue time is not later than the decision time;
+- its expiry is later than the decision time;
+- its digest exactly matches the governed contract version or decision;
+- its scope exactly covers the principal, asset, action class, operation intent, and environment tuple;
+- no governed contract version it approves was superseded after the approval was issued.
+
+Any failure returns a specific approval reason code and blocks the request.
+
+An evidence reference is valid only when it contains:
+
+- a supported digest algorithm and valid content digest;
+- a closed trusted-locator class and bounded locator value;
+- a closed evidence type;
+- a recognized source system;
+- creation time;
+- exact source revision when the evidence concerns source code;
+- an explicit redaction/asserted-safe flag;
+- scope binding to the governed decision or contract digest.
+
+A reference proves that a trusted record was supplied; it does not independently prove an external artifact still exists. Missing, wrong-revision, unsafe, or wrong-digest evidence blocks the request.
+
+### 6. Service boundary
 
 A small authenticated trusted-Core endpoint accepts decision requests and returns deterministic decisions. It follows current API limits, exact JSON validation, owner isolation, idempotency, and generic authentication failures.
 
@@ -136,7 +226,7 @@ Shadow-mode responses expose both:
 
 No call from the orchestrator or runner is blocked in V1. Integration points are recorded and tested without changing live execution behavior.
 
-### 6. Initial authority policy
+### 7. Initial authority policy
 
 The seed policy identifies:
 
@@ -175,8 +265,8 @@ V1 requires:
 - decision-table tests for every action/mode combination;
 - unmatched-contract explain-only tests;
 - conflict and most-restrictive-result tests;
-- expired/revoked/stale approval tests;
-- evidence digest binding tests;
+- expired, revoked, wrong-scope, superseded-version, future-issued, and wrong-digest approval tests;
+- evidence completeness, trusted-locator, redaction flag, source-revision, and digest-binding tests;
 - owner-isolation tests;
 - idempotency and replay tests;
 - audit-chain tamper, deletion, and reordering detection tests;
@@ -200,6 +290,18 @@ Completion evidence must identify the exact commit tested. A passing test from a
 - unlimited or silent exceptions;
 - automatic merge, push, publish, or deploy;
 - legal or business contract management.
+
+## Non-claims
+
+V1 does not claim:
+
+- authenticated human identity solely from a display name;
+- execution control over external systems;
+- independent proof that an external artifact exists beyond its referenced trusted record;
+- production enforcement;
+- runner connection or qualification;
+- legal authorization outside the authenticated trusted owner scope;
+- external identity proof from an internal hash chain alone.
 
 ## Acceptance criteria
 
