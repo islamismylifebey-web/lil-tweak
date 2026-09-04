@@ -418,7 +418,7 @@ def main(argv: list[str]) -> int:
         if environment["LIL_TWEAK_WORK_ROOT_INODES"] != str(CORE_WORK_ROOT_INODES):
             raise ProbeError("work root inode configuration is invalid")
         if "LIL_TWEAK_GALOR_READONLY_URL" in environment:
-            raise ProbeError("GALOR must remain disabled for this release")
+            raise ProbeError("retired LIL_TWEAK_GALOR_READONLY_URL is rejected")
         runtime_root = Path(os.environ.get("XDG_RUNTIME_DIR", ""))
         expected_runtime = Path(f"/run/user/{os.getuid()}")
         if runtime_root != expected_runtime:
