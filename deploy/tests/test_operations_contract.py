@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import os
+import re
+import shutil
 import stat
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -21,6 +25,42 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+class QualificationInventoryTests(unittest.TestCase):
+    def test_deployment_check_executes_qualification_and_cannot_contact_live_services(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("scripts", "deploy", "core"):
+                shutil.copytree(ROOT / name, root / name, ignore=shutil.ignore_patterns("__pycache__", "tests"))
+            guards = root / "guards"
+            guards.mkdir()
+            for command in ("curl", "git", "podman", "docker", "runuser", "ssh", "wget", "aws", "rclone"):
+                guard = guards / command
+                guard.write_text("#!/bin/sh\necho 'forbidden live operation' >&2\nexit 91\n")
+                guard.chmod(0o755)
+            (guards / "sitecustomize.py").write_text(
+                "import sys\n"
+                "def forbid(event, args):\n"
+                "    if event.startswith('socket.') or event in ('subprocess.Popen', 'os.system'):\n"
+                "        raise RuntimeError('offline path attempted live operation')\n"
+                "sys.addaudithook(forbid)\n"
+            )
+            environment = {**os.environ, "PATH": str(guards) + os.pathsep + os.environ["PATH"], "PYTHONPATH": str(guards)}
+
+            def check():
+                return subprocess.run(["bash", "scripts/verify-deployment.sh", "--check"], cwd=root,
+                                      env=environment, capture_output=True, text=True, check=False, timeout=30)
+
+            success = check()
+            self.assertEqual((success.returncode, success.stdout, success.stderr), (0, "verify-deployment check: ok\n", ""))
+            helper = root / "scripts/lil-tweak-qualification.py"
+            helper.unlink()
+            missing = check()
+            self.assertNotEqual(missing.returncode, 0, "missing harness must fail inventory")
+            helper.write_text("raise SystemExit(77)\n")
+            failed_helper = check()
+            self.assertEqual(failed_helper.returncode, 77, "offline inventory must execute the harness check")
 
 
 class TunnelContractTests(unittest.TestCase):
@@ -528,6 +568,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                 )
                 environment_path.chmod(0o600)
                 with (
+                    redirect_stderr(io.StringIO()) as errors,
                     patch.dict(
                         verify_runtime.os.environ,
                         {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
@@ -540,6 +581,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                     patch.object(verify_runtime, "probe_installed_runtime"),
                 ):
                     self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+                self.assertEqual(errors.getvalue(), "runtime probe failed\n")
 
     def test_main_rejects_any_effective_galor_configuration_before_live_probes(self) -> None:
         base = (
@@ -558,6 +600,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                     environment_path.write_text(base + galor_line, encoding="utf-8")
                     environment_path.chmod(0o600)
                     with (
+                        redirect_stderr(io.StringIO()) as errors,
                         patch.dict(
                             verify_runtime.os.environ,
                             {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
@@ -570,7 +613,39 @@ class RuntimeAndBackupTests(unittest.TestCase):
                         patch.object(verify_runtime, "probe_installed_runtime"),
                     ):
                         self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+                    self.assertEqual(errors.getvalue(), "runtime probe failed\n")
                     socket_probe.assert_not_called()
+
+    def test_main_rejects_an_unapproved_environment_name_before_runtime_probes(self) -> None:
+        environment = {
+            "LIL_TWEAK_RUNNER_IMAGE": "runner@sha256:" + "a" * 64,
+            "LIL_TWEAK_WORK_ROOT": "/var/lib/lil-tweak/work",
+            "LIL_TWEAK_WORK_ROOT_INODES": "204800",
+            "UNAPPROVED_SETTING": "stale",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            environment_path = Path(directory) / "core.env"
+            environment_path.write_text(
+                "".join(f"{name}={value}\n" for name, value in environment.items()),
+                encoding="utf-8",
+            )
+            environment_path.chmod(0o600)
+            with (
+                redirect_stderr(io.StringIO()) as errors,
+                patch.dict(
+                    verify_runtime.os.environ,
+                    {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
+                    clear=False,
+                ),
+                patch.object(verify_runtime, "probe_socket") as socket_probe,
+                patch.object(verify_runtime, "probe_image"),
+                patch.object(verify_runtime, "probe_core_work_root"),
+                patch.object(verify_runtime, "probe_service_swap"),
+                patch.object(verify_runtime, "probe_installed_runtime"),
+            ):
+                self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+            self.assertEqual(errors.getvalue(), "runtime probe failed\n")
+            socket_probe.assert_not_called()
 
     def test_r2_probe_is_read_only(self) -> None:
         probe = text("deploy/verify_r2.py")

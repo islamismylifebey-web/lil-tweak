@@ -10,6 +10,7 @@ READY_PROBE="${PROJECT_DIR}/deploy/verify_ready.py"
 RUNTIME_PROBE="${PROJECT_DIR}/deploy/verify_runtime.py"
 R2_PROBE="${PROJECT_DIR}/deploy/verify_r2.py"
 DATA_INTEGRITY="${PROJECT_DIR}/scripts/verify-data-integrity.sh"
+QUALIFICATION="${PROJECT_DIR}/scripts/lil-tweak-qualification.py"
 
 die() {
   printf 'verify-deployment: %s\n' "$*" >&2
@@ -18,12 +19,13 @@ die() {
 
 offline_check() {
   [[ -f "${READY_PROBE}" && -f "${RUNTIME_PROBE}" && -f "${R2_PROBE}" \
-      && -f "${DATA_INTEGRITY}" ]] \
+      && -f "${DATA_INTEGRITY}" && -f "${QUALIFICATION}" && ! -L "${QUALIFICATION}" ]] \
     || die 'missing deployment probe'
   python3 "${READY_PROBE}" --check >/dev/null
   python3 "${RUNTIME_PROBE}" --check >/dev/null
   python3 "${R2_PROBE}" --check >/dev/null
   bash "${DATA_INTEGRITY}" --check >/dev/null
+  python3 "${QUALIFICATION}" --check >/dev/null
   grep -Fq '127.0.0.1:8017/healthz' "${BASH_SOURCE[0]}" \
     || die 'loopback health probe is missing'
   ! grep -Eq 'curl[[:space:]]+[^#]*(--insecure|-k)([[:space:]]|$)' "${BASH_SOURCE[0]}" \
