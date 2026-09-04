@@ -31,6 +31,15 @@ class PolicyDecision:
 class RecoveryPolicy:
     """Choose the narrowest allowed recovery action; ambiguity always blocks."""
 
+    _APPROVAL_REQUIRED_ACTIONS = frozenset(
+        {
+            RecoveryAction.REPAIR_CANDIDATE,
+            RecoveryAction.ROLLBACK,
+            RecoveryAction.REROUTE_RESOURCE,
+            RecoveryAction.REQUALIFY_RESOURCE,
+        }
+    )
+
     def decide(
         self,
         classified: ClassifiedFailure,
@@ -80,7 +89,7 @@ class RecoveryPolicy:
 
         if (
             not context.approval_present
-            and base.action not in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}
+            and base.action in self._APPROVAL_REQUIRED_ACTIONS
         ):
             return self._blocked(
                 "missing_required_approval",
