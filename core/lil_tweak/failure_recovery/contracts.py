@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, ClassVar, Mapping
 
 
 SCHEMA_VERSION = "failure-recovery-v1"
@@ -160,6 +160,12 @@ def _freeze(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
     return frozen
 
 
+def _normalize_strings(values: tuple[str, ...], code: str) -> tuple[str, ...]:
+    if any(not isinstance(value, str) or not value or len(value) > 256 for value in values):
+        raise ValueError(code)
+    return tuple(sorted(set(values)))
+
+
 @dataclass(frozen=True, slots=True)
 class EvidenceRef:
     evidence_id: str
@@ -252,7 +258,11 @@ class FailureSignal:
         ):
             _require_bool(value, "failure_flag_must_be_boolean")
         object.__setattr__(self, "code", normalized)
-        object.__setattr__(self, "failed_checks", tuple(sorted(set(self.failed_checks))))
+        object.__setattr__(
+            self,
+            "failed_checks",
+            _normalize_strings(self.failed_checks, "failed_check_invalid"),
+        )
         object.__setattr__(
             self,
             "evidence",
@@ -270,7 +280,7 @@ class RecoveryBudgets:
     max_resource_reroutes: int = 1
     max_rollbacks: int = 1
 
-    _HARD_MAXIMUMS = (3, 2, 2, 3, 1, 1)
+    _HARD_MAXIMUMS: ClassVar[tuple[int, ...]] = (3, 2, 2, 3, 1, 1)
 
     def __post_init__(self) -> None:
         values = (
@@ -281,9 +291,15 @@ class RecoveryBudgets:
             self.max_resource_reroutes,
             self.max_rollbacks,
         )
-        if any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in values):
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in values
+        ):
             raise ValueError("recovery_budget_invalid")
-        if any(value > maximum for value, maximum in zip(values, self._HARD_MAXIMUMS, strict=True)):
+        if any(
+            value > maximum
+            for value, maximum in zip(values, self._HARD_MAXIMUMS, strict=True)
+        ):
             raise ValueError("recovery_budget_exceeds_hard_limit")
 
     def limit_for(self, action: RecoveryAction) -> int:
@@ -339,6 +355,7 @@ class ClassifiedFailure:
             for reason in self.reason_codes
         ):
             raise ValueError("reason_codes_invalid")
+        object.__setattr__(self, "reason_codes", tuple(sorted(set(self.reason_codes))))
         for value in (
             self.automatic_recovery_prohibited,
             self.requires_reauthorization,
@@ -361,6 +378,7 @@ class RecoveryDecision:
     execution_id: str | None
     lease_id: str | None
     resource_id: str | None
+    target_resource_id: str | None
     attempt: int
     failure_class: FailureClass
     failure_code: FailureCode
@@ -398,6 +416,7 @@ class RecoveryDecision:
             (self.execution_id, "execution_id_invalid"),
             (self.lease_id, "lease_id_invalid"),
             (self.resource_id, "resource_id_invalid"),
+            (self.target_resource_id, "target_resource_id_invalid"),
         ):
             if value is not None:
                 _require_id(value, code)
@@ -417,11 +436,19 @@ class RecoveryDecision:
             _require_bool(value, "recovery_decision_flag_must_be_boolean")
         if self.allowed and self.action in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}:
             raise ValueError("blocking_recovery_cannot_be_allowed")
+        if self.action is RecoveryAction.REROUTE_RESOURCE:
+            if self.target_resource_id is None:
+                raise ValueError("reroute_target_required")
+            if self.resource_id == self.target_resource_id:
+                raise ValueError("reroute_target_must_be_distinct")
+        elif self.target_resource_id is not None:
+            raise ValueError("target_resource_only_valid_for_reroute")
         if not self.reason_codes or any(
             not isinstance(reason, str) or not _REASON.fullmatch(reason)
             for reason in self.reason_codes
         ):
             raise ValueError("reason_codes_invalid")
+        object.__setattr__(self, "reason_codes", tuple(sorted(set(self.reason_codes))))
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,7 +472,9 @@ class RecoveryOutcome:
         object.__setattr__(
             self,
             "remaining_failed_checks",
-            tuple(sorted(set(self.remaining_failed_checks))),
+            _normalize_strings(
+                self.remaining_failed_checks, "remaining_failed_check_invalid"
+            ),
         )
         _require_digest(self.resulting_plan_digest, "resulting_plan_digest_invalid")
         _require_digest(self.resulting_candidate_digest, "resulting_candidate_digest_invalid")
@@ -473,6 +502,7 @@ class RecoveryHistoryEntry:
     resulting_resource_id: str | None = None
     node_id: str = "unknown"
     attempt: int = 1
+    target_resource_id: str | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.owner_id, "owner_id_invalid")
@@ -495,9 +525,15 @@ class RecoveryHistoryEntry:
         object.__setattr__(
             self,
             "remaining_failed_checks",
-            tuple(sorted(set(self.remaining_failed_checks))),
+            _normalize_strings(
+                self.remaining_failed_checks, "remaining_failed_check_invalid"
+            ),
         )
         _require_digest(self.resulting_plan_digest, "resulting_plan_digest_invalid")
         _require_digest(self.resulting_candidate_digest, "resulting_candidate_digest_invalid")
-        if self.resulting_resource_id is not None:
-            _require_id(self.resulting_resource_id, "resulting_resource_id_invalid")
+        for value, code in (
+            (self.resulting_resource_id, "resulting_resource_id_invalid"),
+            (self.target_resource_id, "target_resource_id_invalid"),
+        ):
+            if value is not None:
+                _require_id(value, code)
