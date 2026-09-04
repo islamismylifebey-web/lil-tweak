@@ -145,6 +145,7 @@ class TestWorldLease:
 class TestWorldStore(Protocol):
     def create_world(self, owner_id: str, **fields: Any) -> TestWorld: ...
     def list_worlds(self, owner_id: str, *, limit: int = 20) -> list[TestWorld]: ...
+    def list_worlds_with_attempt_counts(self, owner_id: str, *, limit: int = 20) -> list[tuple[TestWorld, int]]: ...
     def get_world(self, world_id: str, owner_id: str) -> TestWorld | None: ...
     def list_attempts(self, world_id: str, owner_id: str) -> list[TestWorldAttempt]: ...
     def get_attempt(self, attempt_id: str, owner_id: str) -> TestWorldAttempt | None: ...
@@ -343,6 +344,11 @@ class MemoryTestWorldStore:
             values = [item for item in self._worlds.values() if item.owner_id == owner_id]
             values.sort(key=lambda item: (item.updated_at, item.created_at, item.id), reverse=True)
             return [_copy_world(item) for item in values[:limit]]
+
+    def list_worlds_with_attempt_counts(self, owner_id: str, *, limit: int = 20) -> list[tuple[TestWorld, int]]:
+        worlds = self.list_worlds(owner_id, limit=limit)
+        with self._lock:
+            return [(world, len(self._attempt_ids[world.id])) for world in worlds]
 
     def get_world(self, world_id: str, owner_id: str) -> TestWorld | None:
         with self._lock:
@@ -608,10 +614,19 @@ class MemoryTestWorldStore:
         current_time = self._clock() if now is None else now
         bounded_feedback = _validate_feedback(feedback)
         duration_ms = _validate_duration(duration_ms, "duration")
+        if not isinstance(summary, str) or len(summary.encode("utf-8")) > 64 * 1024:
+            raise ValueError("invalid attempt text")
         with self._lock:
             current_lease = self._claims.get(lease.attempt_id)
             attempt = self._attempts.get(lease.attempt_id)
-            if current_lease is None or attempt is None or current_lease.generation != lease.generation or current_lease.worker_id != lease.worker_id:
+            if (
+                current_lease is None
+                or attempt is None
+                or attempt.status is not AttemptStatus.RUNNING
+                or attempt.world_id != lease.world_id
+                or attempt.owner_id != lease.owner_id
+                or current_lease != lease
+            ):
                 raise TestWorldConflict("stale attempt lease")
             failed = replace(
                 attempt,
