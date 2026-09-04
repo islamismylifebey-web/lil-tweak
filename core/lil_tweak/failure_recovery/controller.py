@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+from dataclasses import replace
 from typing import Any
 
 from .classifier import FailureClassifier
@@ -113,7 +114,7 @@ class FailureRecoveryController:
             reason_codes=reason_codes,
             decision_digest=decision_digest(material),
         )
-        self.history.append_decision(decision)
+        self.history.append_decision(decision, failed_checks=signal.failed_checks)
         return decision
 
     def record_outcome(
@@ -152,7 +153,7 @@ class FailureRecoveryController:
         )
         if expected != actual:
             raise ValueError("recovery_decision_binding_mismatch")
-        self._require_issued(decision)
+        issued = self._require_issued(decision)
         if decision.target_resource_id is not None:
             if (
                 outcome.resulting_resource_id is not None
@@ -164,7 +165,8 @@ class FailureRecoveryController:
                 and outcome.resulting_resource_id != decision.target_resource_id
             ):
                 raise ValueError("successful_reroute_target_evidence_required")
-        return self.history.append_outcome(decision, outcome)
+        normalized = self._normalize_progress(decision, issued, outcome)
+        return self.history.append_outcome(decision, normalized)
 
     def dag_handoff(self, decision: RecoveryDecision) -> dict[str, object]:
         self._require_issued(decision)
@@ -193,12 +195,60 @@ class FailureRecoveryController:
             "maySelectProvider": False,
         }
 
-    def _require_issued(self, decision: RecoveryDecision) -> None:
+    def _require_issued(self, decision: RecoveryDecision) -> RecoveryHistoryEntry:
         if not self.history.contains_decision(decision):
             raise ValueError("recovery_decision_not_issued")
         expected = decision_digest(self._material_from_decision(decision))
         if not hmac.compare_digest(expected, decision.decision_digest):
             raise ValueError("recovery_decision_digest_mismatch")
+        for entry in self.history.list(decision.owner_id):
+            if (
+                entry.outcome_status is None
+                and entry.decision_digest == decision.decision_digest
+                and entry.fingerprint == decision.fingerprint
+                and entry.task_id == decision.task_id
+                and entry.node_id == decision.node_id
+                and entry.attempt == decision.attempt
+                and entry.target_resource_id == decision.target_resource_id
+            ):
+                return entry
+        raise ValueError("recovery_decision_not_issued")
+
+    @staticmethod
+    def _normalize_progress(
+        decision: RecoveryDecision,
+        issued: RecoveryHistoryEntry,
+        outcome: RecoveryOutcome,
+    ) -> RecoveryOutcome:
+        if outcome.status is RecoveryOutcomeStatus.SUCCEEDED:
+            return outcome
+        initial_checks = set(issued.remaining_failed_checks)
+        remaining_checks = set(outcome.remaining_failed_checks)
+        checks_reduced = bool(initial_checks) and remaining_checks < initial_checks
+        plan_changed = (
+            outcome.resulting_plan_digest is not None
+            and outcome.resulting_plan_digest != decision.plan_digest
+        )
+        candidate_changed = (
+            outcome.resulting_candidate_digest is not None
+            and outcome.resulting_candidate_digest != decision.candidate_digest
+        )
+        resource_changed = (
+            outcome.resulting_resource_id is not None
+            and outcome.resulting_resource_id != decision.resource_id
+            and (
+                decision.target_resource_id is None
+                or outcome.resulting_resource_id == decision.target_resource_id
+            )
+        )
+        objective_progress = (
+            checks_reduced or plan_changed or candidate_changed or resource_changed
+        )
+        if outcome.progress and not objective_progress:
+            raise ValueError("unsupported_recovery_progress")
+        if objective_progress and not outcome.progress:
+            return replace(outcome, progress=True)
+        return outcome
 
     @staticmethod
     def _decision_material(
