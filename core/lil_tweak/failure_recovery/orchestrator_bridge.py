@@ -170,5 +170,5 @@ class RecoveryAwareEngineeringOrchestrator:
             execution_id=job.id,
             lease_id=lease_id,
             resource_id="current-runner",
-            approval_present=job.approval_consumed or bool(job.approval_proposal),
+            approval_present=job.approval_consumed,
         )
