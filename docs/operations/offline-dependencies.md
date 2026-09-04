@@ -10,7 +10,7 @@ Missing dependencies are a bounded test failure, not permission to fetch from th
 
 ## Trusted preparation
 
-Prepare dependencies on a separate, trusted workstation or CI fetch job. That fetch environment may use the network; the resulting source must be scanned and reviewed before upload. It receives no Lil Tweak signing, OpenAI, R2, Tunnel, database, or GALOR credentials.
+Prepare dependencies on a separate, trusted workstation or CI fetch job. That fetch environment may use the network; the resulting source must be scanned and reviewed before upload. It receives no Lil Tweak signing, OpenAI, R2, Tunnel, database, or other-product credentials.
 
 Run the preflight before creating the source ZIP:
 
