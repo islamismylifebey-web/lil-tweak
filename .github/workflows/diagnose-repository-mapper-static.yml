@@ -1,0 +1,68 @@
+name: Diagnose Repository Mapper Static Gates
+
+on:
+  push:
+    branches:
+      - diagnose/repository-mapper-static-8529e029
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 8529e029548258736fd9ad971b4402755bb70843
+          persist-credentials: false
+
+      - name: Set up Python 3.12.14
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
+        with:
+          python-version: 3.12.14
+
+      - name: Install exact diagnostic tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.8.15"
+          uv lock --project core
+          uv sync --frozen --project core
+          uv pip install --python core/.venv/bin/python "ruff==0.12.12" "mypy==1.17.1"
+          echo "$GITHUB_WORKSPACE/core/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Collect all static-gate results
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostics
+          (cd core && ruff check .) > diagnostics/ruff-check.log 2>&1
+          ruff_check=$?
+          (cd core && ruff format --check .) > diagnostics/ruff-format.log 2>&1
+          ruff_format=$?
+          (cd core && mypy --ignore-missing-imports lil_tweak) > diagnostics/mypy.log 2>&1
+          mypy_code=$?
+          core/.venv/bin/python -m pip check > diagnostics/pip-check.log 2>&1
+          pip_check=$?
+          cat > diagnostics/status.json <<JSON
+          {
+            "candidate": "8529e029548258736fd9ad971b4402755bb70843",
+            "ruffCheck": $ruff_check,
+            "ruffFormat": $ruff_format,
+            "mypy": $mypy_code,
+            "pipCheck": $pip_check
+          }
+          JSON
+          cat diagnostics/status.json
+          exit 0
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-mapper-static-diagnostics-8529e029
+          path: diagnostics
+          if-no-files-found: error
+          retention-days: 7
