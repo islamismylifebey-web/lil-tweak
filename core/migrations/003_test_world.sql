@@ -25,6 +25,7 @@ CREATE TABLE lil_tweak_test_world_attempts (
     owner_id text NOT NULL,
     attempt_number integer NOT NULL CHECK (attempt_number BETWEEN 1 AND 10),
     status text NOT NULL CHECK (status IN ('queued','running','passed','failed','error')),
+    attempt_mode text NOT NULL CHECK (attempt_mode IN ('retry','fresh')),
     world_fingerprint text NOT NULL CHECK (world_fingerprint ~ '^[0-9a-f]{64}$'),
     judge_version text NOT NULL CHECK (judge_version ~ '^[0-9a-f]{64}$'),
     expected_check_count integer NOT NULL CHECK (expected_check_count BETWEEN 1 AND 8),
