@@ -11,11 +11,13 @@ from .contracts import (
     SCHEMA_VERSION,
     FailureCode,
     FailureSignal,
+    RecoveryAction,
     RecoveryBudgets,
     RecoveryContext,
     RecoveryDecision,
     RecoveryHistoryEntry,
     RecoveryOutcome,
+    RecoveryOutcomeStatus,
     ResourceRecoveryDecision,
 )
 from .fingerprints import decision_digest, failure_fingerprint
@@ -68,9 +70,17 @@ class FailureRecoveryController:
             fingerprint=fingerprint,
             resource_decision=resource_decision,
         )
+        target_resource_id = (
+            resource_decision.resource_id
+            if policy_decision.allowed
+            and policy_decision.action is RecoveryAction.REROUTE_RESOURCE
+            and resource_decision is not None
+            else None
+        )
         reason_codes = tuple(sorted(set(policy_decision.reason_codes)))
         material = self._decision_material(
             context=context,
+            target_resource_id=target_resource_id,
             fingerprint=fingerprint,
             failure_class=classified.failure_class.value,
             failure_code=classified.code.value,
@@ -90,6 +100,7 @@ class FailureRecoveryController:
             execution_id=context.execution_id,
             lease_id=context.lease_id,
             resource_id=context.resource_id,
+            target_resource_id=target_resource_id,
             attempt=context.attempt,
             failure_class=classified.failure_class,
             failure_code=classified.code,
@@ -142,6 +153,17 @@ class FailureRecoveryController:
         if expected != actual:
             raise ValueError("recovery_decision_binding_mismatch")
         self._require_issued(decision)
+        if decision.target_resource_id is not None:
+            if (
+                outcome.resulting_resource_id is not None
+                and outcome.resulting_resource_id != decision.target_resource_id
+            ):
+                raise ValueError("recovery_outcome_resource_mismatch")
+            if (
+                outcome.status is RecoveryOutcomeStatus.SUCCEEDED
+                and outcome.resulting_resource_id != decision.target_resource_id
+            ):
+                raise ValueError("successful_reroute_target_evidence_required")
         return self.history.append_outcome(decision, outcome)
 
     def dag_handoff(self, decision: RecoveryDecision) -> dict[str, object]:
@@ -160,6 +182,8 @@ class FailureRecoveryController:
             "failureCode": decision.failure_code.value,
             "disposition": decision.disposition.value,
             "action": decision.action.value,
+            "resourceId": decision.resource_id,
+            "targetResourceId": decision.target_resource_id,
             "allowed": decision.allowed,
             "requiresReauthorization": decision.requires_reauthorization,
             "requiresFreshLease": decision.requires_fresh_lease,
@@ -180,6 +204,7 @@ class FailureRecoveryController:
     def _decision_material(
         *,
         context: RecoveryContext,
+        target_resource_id: str | None,
         fingerprint: str,
         failure_class: str,
         failure_code: str,
@@ -198,6 +223,7 @@ class FailureRecoveryController:
             "executionId": context.execution_id,
             "leaseId": context.lease_id,
             "resourceId": context.resource_id,
+            "targetResourceId": target_resource_id,
             "attempt": context.attempt,
             "failureClass": failure_class,
             "failureCode": failure_code,
@@ -224,6 +250,7 @@ class FailureRecoveryController:
             "executionId": decision.execution_id,
             "leaseId": decision.lease_id,
             "resourceId": decision.resource_id,
+            "targetResourceId": decision.target_resource_id,
             "attempt": decision.attempt,
             "failureClass": decision.failure_class.value,
             "failureCode": decision.failure_code.value,
