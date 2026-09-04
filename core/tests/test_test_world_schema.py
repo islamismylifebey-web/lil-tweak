@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from core.lil_tweak.test_world import PostgresTestWorldStore
+from core.lil_tweak.test_world_postgres import PostgresTestWorldStore
 
 
 ROOT = Path(__file__).resolve().parents[2]
