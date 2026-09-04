@@ -43,7 +43,7 @@ def canonical_digest(value: Any) -> str:
 
 
 def failure_fingerprint(signal: FailureSignal, context: RecoveryContext) -> str:
-    """Fingerprint one causal failure without unstable prose or attempt metadata."""
+    """Fingerprint one causal failure without unstable prose or attempt identity."""
 
     code = signal.code.value if hasattr(signal.code, "value") else str(signal.code)
     payload = {
@@ -57,7 +57,6 @@ def failure_fingerprint(signal: FailureSignal, context: RecoveryContext) -> str:
             "planDigest": context.plan_digest,
             "candidateDigest": context.candidate_digest,
             "contractDigest": context.contract_digest,
-            "executionId": context.execution_id,
             "resourceId": context.resource_id,
         },
         "failure": {
