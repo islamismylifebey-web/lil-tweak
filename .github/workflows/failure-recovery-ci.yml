@@ -8,9 +8,18 @@ on:
       - "docs/superpowers/specs/2026-09-04-failure-recovery-engine-v1-design.md"
       - "docs/superpowers/plans/2026-09-04-failure-recovery-engine-v1.md"
       - ".github/workflows/failure-recovery-ci.yml"
+      - ".github/workflows/tueiq-test-world-ci.yml"
   push:
     branches:
+      - main
       - feature/failure-recovery-engine-v1
+    paths:
+      - "core/lil_tweak/failure_recovery/**"
+      - "core/tests/test_failure_recovery_*.py"
+      - "docs/superpowers/specs/2026-09-04-failure-recovery-engine-v1-design.md"
+      - "docs/superpowers/plans/2026-09-04-failure-recovery-engine-v1.md"
+      - ".github/workflows/failure-recovery-ci.yml"
+      - ".github/workflows/tueiq-test-world-ci.yml"
 
 permissions:
   contents: read
@@ -52,6 +61,7 @@ jobs:
             core.tests.test_failure_recovery_controller \
             core.tests.test_failure_recovery_history \
             core.tests.test_failure_recovery_orchestrator \
+            core.tests.test_failure_recovery_resource_binding \
             core.tests.test_failure_recovery_review \
             core.tests.test_failure_recovery_security
       - name: Validate complete branch diff
