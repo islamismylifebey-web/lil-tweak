@@ -151,10 +151,10 @@ class RecoveryAwareEngineeringOrchestrator:
 
     def _context(self, job: Job) -> RecoveryContext:
         source_revision = None
-        if job.git_source is not None and _REVISION.fullmatch(job.git_source.commit):
-            source_revision = job.git_source.commit
-        elif job.source_digest is not None and _REVISION.fullmatch(job.source_digest):
+        if job.source_digest is not None and _REVISION.fullmatch(job.source_digest):
             source_revision = job.source_digest
+        elif job.git_source is not None and _REVISION.fullmatch(job.git_source.commit):
+            source_revision = job.git_source.commit
         attempt = self.lease.generation if self.lease is not None else 1
         lease_id = None
         if self.lease is not None:
