@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from core.lil_tweak.test_world import (
     AttemptStatus,
@@ -185,6 +186,24 @@ class DurableTestWorldStoreTests(unittest.TestCase):
                 cumulative_patch="stale",
                 now=113.0,
             )
+
+    def test_fail_attempt_rejects_a_lease_for_another_owner_or_world(self):
+        world = self.create_world()
+        attempt = self.store.enqueue_attempt(world.id, OWNER, idempotency_key="attempt-1")
+        lease = self.store.claim_attempt(attempt.id, "worker-a", lease_seconds=30, now=100.0)
+
+        with self.assertRaises(TestWorldConflict):
+            self.store.fail_attempt(replace(lease, owner_id="f" * 32), feedback=(), now=101.0)
+        with self.assertRaises(TestWorldConflict):
+            self.store.fail_attempt(replace(lease, world_id="world:" + "f" * 32), feedback=(), now=101.0)
+
+    def test_fail_attempt_rejects_oversized_summary(self):
+        world = self.create_world()
+        attempt = self.store.enqueue_attempt(world.id, OWNER, idempotency_key="attempt-1")
+        lease = self.store.claim_attempt(attempt.id, "worker-a", lease_seconds=30, now=100.0)
+
+        with self.assertRaises(ValueError):
+            self.store.fail_attempt(lease, feedback=(), summary="x" * (64 * 1024 + 1), now=101.0)
 
 
 if __name__ == "__main__":
