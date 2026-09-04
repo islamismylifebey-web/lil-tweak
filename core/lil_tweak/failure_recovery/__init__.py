@@ -22,6 +22,7 @@ from .contracts import (
 from .controller import FailureRecoveryController
 from .fingerprints import canonical_digest, canonical_json, failure_fingerprint
 from .history import InMemoryRecoveryHistoryStore, RecoveryHistoryStore
+from .orchestrator_bridge import RecoveryAwareEngineeringOrchestrator
 from .policy import PolicyDecision, RecoveryPolicy
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "InMemoryRecoveryHistoryStore",
     "PolicyDecision",
     "RecoveryAction",
+    "RecoveryAwareEngineeringOrchestrator",
     "RecoveryBudgets",
     "RecoveryContext",
     "RecoveryDecision",
