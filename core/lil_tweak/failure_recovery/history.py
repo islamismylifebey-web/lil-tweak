@@ -18,11 +18,24 @@ from .contracts import (
 
 
 class RecoveryHistoryStore(Protocol):
-    def append_decision(self, decision: RecoveryDecision) -> RecoveryHistoryEntry: ...
-    def append_outcome(self, decision: RecoveryDecision, outcome: RecoveryOutcome) -> RecoveryHistoryEntry: ...
+    def append_decision(
+        self,
+        decision: RecoveryDecision,
+        *,
+        failed_checks: tuple[str, ...] = (),
+    ) -> RecoveryHistoryEntry: ...
+
+    def append_outcome(
+        self, decision: RecoveryDecision, outcome: RecoveryOutcome
+    ) -> RecoveryHistoryEntry: ...
+
     def contains_decision(self, decision: RecoveryDecision) -> bool: ...
+
     def list(self, owner_id: str) -> list[RecoveryHistoryEntry]: ...
-    def for_fingerprint(self, owner_id: str, fingerprint: str) -> list[RecoveryHistoryEntry]: ...
+
+    def for_fingerprint(
+        self, owner_id: str, fingerprint: str
+    ) -> list[RecoveryHistoryEntry]: ...
 
 
 class InMemoryRecoveryHistoryStore:
@@ -30,21 +43,32 @@ class InMemoryRecoveryHistoryStore:
         self._entries: dict[str, list[RecoveryHistoryEntry]] = {}
         self._lock = RLock()
 
-    def append_decision(self, decision: RecoveryDecision) -> RecoveryHistoryEntry:
+    def append_decision(
+        self,
+        decision: RecoveryDecision,
+        *,
+        failed_checks: tuple[str, ...] = (),
+    ) -> RecoveryHistoryEntry:
         with self._lock:
             if self.contains_decision(decision):
                 raise ValueError("recovery_decision_already_issued")
-            entry = _entry(decision, self._next(decision.owner_id))
+            entry = _entry(
+                decision,
+                self._next(decision.owner_id),
+                initial_failed_checks=failed_checks,
+            )
             self._entries.setdefault(decision.owner_id, []).append(entry)
             return entry
 
-    def append_outcome(self, decision: RecoveryDecision, outcome: RecoveryOutcome) -> RecoveryHistoryEntry:
+    def append_outcome(
+        self, decision: RecoveryDecision, outcome: RecoveryOutcome
+    ) -> RecoveryHistoryEntry:
         with self._lock:
             if not self.contains_decision(decision):
                 raise ValueError("recovery_decision_not_issued")
             if self._has_outcome(decision):
                 raise ValueError("recovery_outcome_already_recorded")
-            entry = _entry(decision, self._next(decision.owner_id), outcome)
+            entry = _entry(decision, self._next(decision.owner_id), outcome=outcome)
             self._entries.setdefault(decision.owner_id, []).append(entry)
             return entry
 
@@ -65,7 +89,9 @@ class InMemoryRecoveryHistoryStore:
         with self._lock:
             return list(self._entries.get(owner_id, ()))
 
-    def for_fingerprint(self, owner_id: str, fingerprint: str) -> list[RecoveryHistoryEntry]:
+    def for_fingerprint(
+        self, owner_id: str, fingerprint: str
+    ) -> list[RecoveryHistoryEntry]:
         return [item for item in self.list(owner_id) if item.fingerprint == fingerprint]
 
     def _next(self, owner_id: str) -> int:
@@ -73,7 +99,8 @@ class InMemoryRecoveryHistoryStore:
 
     def _has_outcome(self, decision: RecoveryDecision) -> bool:
         return any(
-            item.decision_digest == decision.decision_digest and item.outcome_status is not None
+            item.decision_digest == decision.decision_digest
+            and item.outcome_status is not None
             for item in self._entries.get(decision.owner_id, ())
         )
 
@@ -103,13 +130,26 @@ class SQLiteRecoveryHistoryStore:
                 "CREATE INDEX IF NOT EXISTS recovery_history_decision ON recovery_history(owner_id, decision_digest, sequence)"
             )
 
-    def append_decision(self, decision: RecoveryDecision) -> RecoveryHistoryEntry:
-        return self._append(decision, None)
+    def append_decision(
+        self,
+        decision: RecoveryDecision,
+        *,
+        failed_checks: tuple[str, ...] = (),
+    ) -> RecoveryHistoryEntry:
+        return self._append(decision, None, initial_failed_checks=failed_checks)
 
-    def append_outcome(self, decision: RecoveryDecision, outcome: RecoveryOutcome) -> RecoveryHistoryEntry:
+    def append_outcome(
+        self, decision: RecoveryDecision, outcome: RecoveryOutcome
+    ) -> RecoveryHistoryEntry:
         return self._append(decision, outcome)
 
-    def _append(self, decision: RecoveryDecision, outcome: RecoveryOutcome | None) -> RecoveryHistoryEntry:
+    def _append(
+        self,
+        decision: RecoveryDecision,
+        outcome: RecoveryOutcome | None,
+        *,
+        initial_failed_checks: tuple[str, ...] = (),
+    ) -> RecoveryHistoryEntry:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -124,7 +164,12 @@ class SQLiteRecoveryHistoryStore:
                     "SELECT COALESCE(MAX(sequence), 0) + 1 FROM recovery_history WHERE owner_id = ?",
                     (decision.owner_id,),
                 ).fetchone()
-                entry = _entry(decision, int(row[0]), outcome)
+                entry = _entry(
+                    decision,
+                    int(row[0]),
+                    outcome=outcome,
+                    initial_failed_checks=initial_failed_checks,
+                )
                 self._connection.execute(
                     """INSERT INTO recovery_history (
                     owner_id, sequence, task_id, node_id, attempt, fingerprint, action,
@@ -147,8 +192,14 @@ class SQLiteRecoveryHistoryStore:
                 WHERE owner_id = ? AND decision_digest = ? AND fingerprint = ?
                 AND task_id = ? AND node_id = ? AND attempt = ?
                 AND outcome_status IS NULL LIMIT 1""",
-                (decision.owner_id, decision.decision_digest, decision.fingerprint,
-                 decision.task_id, decision.node_id, decision.attempt),
+                (
+                    decision.owner_id,
+                    decision.decision_digest,
+                    decision.fingerprint,
+                    decision.task_id,
+                    decision.node_id,
+                    decision.attempt,
+                ),
             ).fetchone()
             return row is not None and row[0] == decision.target_resource_id
 
@@ -164,7 +215,9 @@ class SQLiteRecoveryHistoryStore:
             ).fetchall()
         return [_decode(row) for row in rows]
 
-    def for_fingerprint(self, owner_id: str, fingerprint: str) -> list[RecoveryHistoryEntry]:
+    def for_fingerprint(
+        self, owner_id: str, fingerprint: str
+    ) -> list[RecoveryHistoryEntry]:
         return [item for item in self.list(owner_id) if item.fingerprint == fingerprint]
 
     def _has_outcome(self, decision: RecoveryDecision) -> bool:
@@ -179,7 +232,13 @@ class SQLiteRecoveryHistoryStore:
             self._connection.close()
 
 
-def _entry(decision: RecoveryDecision, sequence: int, outcome: RecoveryOutcome | None = None) -> RecoveryHistoryEntry:
+def _entry(
+    decision: RecoveryDecision,
+    sequence: int,
+    outcome: RecoveryOutcome | None = None,
+    *,
+    initial_failed_checks: tuple[str, ...] = (),
+) -> RecoveryHistoryEntry:
     return RecoveryHistoryEntry(
         owner_id=decision.owner_id,
         sequence=sequence,
@@ -192,7 +251,9 @@ def _entry(decision: RecoveryDecision, sequence: int, outcome: RecoveryOutcome |
         target_resource_id=decision.target_resource_id,
         outcome_status=outcome.status if outcome else None,
         progress=outcome.progress if outcome else None,
-        remaining_failed_checks=outcome.remaining_failed_checks if outcome else (),
+        remaining_failed_checks=(
+            outcome.remaining_failed_checks if outcome else initial_failed_checks
+        ),
         resulting_plan_digest=outcome.resulting_plan_digest if outcome else None,
         resulting_candidate_digest=outcome.resulting_candidate_digest if outcome else None,
         resulting_resource_id=outcome.resulting_resource_id if outcome else None,
@@ -201,24 +262,38 @@ def _entry(decision: RecoveryDecision, sequence: int, outcome: RecoveryOutcome |
 
 def _encode(entry: RecoveryHistoryEntry) -> tuple[object, ...]:
     return (
-        entry.owner_id, entry.sequence, entry.task_id, entry.node_id, entry.attempt,
-        entry.fingerprint, entry.action.value, entry.decision_digest,
+        entry.owner_id,
+        entry.sequence,
+        entry.task_id,
+        entry.node_id,
+        entry.attempt,
+        entry.fingerprint,
+        entry.action.value,
+        entry.decision_digest,
         entry.target_resource_id,
         entry.outcome_status.value if entry.outcome_status else None,
         None if entry.progress is None else int(entry.progress),
         json.dumps(list(entry.remaining_failed_checks), separators=(",", ":")),
-        entry.resulting_plan_digest, entry.resulting_candidate_digest,
+        entry.resulting_plan_digest,
+        entry.resulting_candidate_digest,
         entry.resulting_resource_id,
     )
 
 
 def _decode(row: tuple[object, ...]) -> RecoveryHistoryEntry:
     return RecoveryHistoryEntry(
-        owner_id=str(row[0]), sequence=int(row[1]), task_id=str(row[2]),
-        node_id=str(row[3]), attempt=int(row[4]), fingerprint=str(row[5]),
-        action=RecoveryAction(str(row[6])), decision_digest=str(row[7]),
+        owner_id=str(row[0]),
+        sequence=int(row[1]),
+        task_id=str(row[2]),
+        node_id=str(row[3]),
+        attempt=int(row[4]),
+        fingerprint=str(row[5]),
+        action=RecoveryAction(str(row[6])),
+        decision_digest=str(row[7]),
         target_resource_id=str(row[8]) if row[8] is not None else None,
-        outcome_status=RecoveryOutcomeStatus(str(row[9])) if row[9] is not None else None,
+        outcome_status=(
+            RecoveryOutcomeStatus(str(row[9])) if row[9] is not None else None
+        ),
         progress=None if row[10] is None else bool(row[10]),
         remaining_failed_checks=tuple(json.loads(str(row[11]))),
         resulting_plan_digest=str(row[12]) if row[12] is not None else None,
