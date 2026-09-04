@@ -1153,7 +1153,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
           </div>
         </div>
         <UdjatSignal usage={preparation} />
-        <span className="connection-state" data-runner-state="secure-gateway" data-live-runner-state={runnerState}>{engineerMode === "chat" ? "OpenAI direct chat" : runnerLabel}</span>
+        <span className="connection-state" data-runner-state="secure-gateway" data-live-runner-state={runnerState}>{engineerMode === "chat" ? null : runnerLabel}</span>
       </header>
 
       {(error || message) && (
