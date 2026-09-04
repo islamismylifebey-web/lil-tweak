@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
+import hmac
+from typing import Any
+
 from .classifier import FailureClassifier
 from .contracts import (
     HANDOFF_SCHEMA_VERSION,
     SCHEMA_VERSION,
     FailureCode,
     FailureSignal,
-    RecoveryAction,
     RecoveryBudgets,
     RecoveryContext,
     RecoveryDecision,
+    RecoveryHistoryEntry,
     RecoveryOutcome,
     ResourceRecoveryDecision,
 )
 from .fingerprints import decision_digest, failure_fingerprint
 from .history import InMemoryRecoveryHistoryStore, RecoveryHistoryStore
-from .policy import RecoveryPolicy
+from .policy import PolicyDecision, RecoveryPolicy
 
 
 _EXCEPTION_CODES: dict[str, tuple[FailureCode, bool]] = {
@@ -66,29 +69,14 @@ class FailureRecoveryController:
             resource_decision=resource_decision,
         )
         reason_codes = tuple(sorted(set(policy_decision.reason_codes)))
-        payload = {
-            "ownerId": context.owner_id,
-            "taskId": context.task_id,
-            "dagRunId": context.dag_run_id,
-            "nodeId": context.node_id,
-            "sourceRevision": context.source_revision,
-            "planDigest": context.plan_digest,
-            "candidateDigest": context.candidate_digest,
-            "contractDigest": context.contract_digest,
-            "executionId": context.execution_id,
-            "leaseId": context.lease_id,
-            "resourceId": context.resource_id,
-            "attempt": context.attempt,
-            "failureClass": classified.failure_class.value,
-            "failureCode": classified.code.value,
-            "fingerprint": fingerprint,
-            "disposition": policy_decision.disposition.value,
-            "action": policy_decision.action.value,
-            "allowed": policy_decision.allowed,
-            "requiresReauthorization": policy_decision.requires_reauthorization,
-            "requiresFreshLease": policy_decision.requires_fresh_lease,
-            "reasonCodes": reason_codes,
-        }
+        material = self._decision_material(
+            context=context,
+            fingerprint=fingerprint,
+            failure_class=classified.failure_class.value,
+            failure_code=classified.code.value,
+            policy_decision=policy_decision,
+            reason_codes=reason_codes,
+        )
         decision = RecoveryDecision(
             schema_version=SCHEMA_VERSION,
             owner_id=context.owner_id,
@@ -112,7 +100,7 @@ class FailureRecoveryController:
             requires_reauthorization=policy_decision.requires_reauthorization,
             requires_fresh_lease=policy_decision.requires_fresh_lease,
             reason_codes=reason_codes,
-            decision_digest=decision_digest(payload),
+            decision_digest=decision_digest(material),
         )
         self.history.append_decision(decision)
         return decision
@@ -122,7 +110,7 @@ class FailureRecoveryController:
         decision: RecoveryDecision,
         context: RecoveryContext,
         outcome: RecoveryOutcome,
-    ):
+    ) -> RecoveryHistoryEntry:
         expected = (
             decision.owner_id,
             decision.task_id,
@@ -153,10 +141,11 @@ class FailureRecoveryController:
         )
         if expected != actual:
             raise ValueError("recovery_decision_binding_mismatch")
+        self._require_issued(decision)
         return self.history.append_outcome(decision, outcome)
 
-    @staticmethod
-    def dag_handoff(decision: RecoveryDecision) -> dict[str, object]:
+    def dag_handoff(self, decision: RecoveryDecision) -> dict[str, object]:
+        self._require_issued(decision)
         return {
             "schemaVersion": HANDOFF_SCHEMA_VERSION,
             "decisionDigest": decision.decision_digest,
@@ -178,6 +167,73 @@ class FailureRecoveryController:
             "mayExecute": False,
             "mayAuthorize": False,
             "maySelectProvider": False,
+        }
+
+    def _require_issued(self, decision: RecoveryDecision) -> None:
+        if not self.history.contains_decision(decision):
+            raise ValueError("recovery_decision_not_issued")
+        expected = decision_digest(self._material_from_decision(decision))
+        if not hmac.compare_digest(expected, decision.decision_digest):
+            raise ValueError("recovery_decision_digest_mismatch")
+
+    @staticmethod
+    def _decision_material(
+        *,
+        context: RecoveryContext,
+        fingerprint: str,
+        failure_class: str,
+        failure_code: str,
+        policy_decision: PolicyDecision,
+        reason_codes: tuple[str, ...],
+    ) -> dict[str, Any]:
+        return {
+            "ownerId": context.owner_id,
+            "taskId": context.task_id,
+            "dagRunId": context.dag_run_id,
+            "nodeId": context.node_id,
+            "sourceRevision": context.source_revision,
+            "planDigest": context.plan_digest,
+            "candidateDigest": context.candidate_digest,
+            "contractDigest": context.contract_digest,
+            "executionId": context.execution_id,
+            "leaseId": context.lease_id,
+            "resourceId": context.resource_id,
+            "attempt": context.attempt,
+            "failureClass": failure_class,
+            "failureCode": failure_code,
+            "fingerprint": fingerprint,
+            "disposition": policy_decision.disposition.value,
+            "action": policy_decision.action.value,
+            "allowed": policy_decision.allowed,
+            "requiresReauthorization": policy_decision.requires_reauthorization,
+            "requiresFreshLease": policy_decision.requires_fresh_lease,
+            "reasonCodes": reason_codes,
+        }
+
+    @staticmethod
+    def _material_from_decision(decision: RecoveryDecision) -> dict[str, Any]:
+        return {
+            "ownerId": decision.owner_id,
+            "taskId": decision.task_id,
+            "dagRunId": decision.dag_run_id,
+            "nodeId": decision.node_id,
+            "sourceRevision": decision.source_revision,
+            "planDigest": decision.plan_digest,
+            "candidateDigest": decision.candidate_digest,
+            "contractDigest": decision.contract_digest,
+            "executionId": decision.execution_id,
+            "leaseId": decision.lease_id,
+            "resourceId": decision.resource_id,
+            "attempt": decision.attempt,
+            "failureClass": decision.failure_class.value,
+            "failureCode": decision.failure_code.value,
+            "fingerprint": decision.fingerprint,
+            "disposition": decision.disposition.value,
+            "action": decision.action.value,
+            "allowed": decision.allowed,
+            "requiresReauthorization": decision.requires_reauthorization,
+            "requiresFreshLease": decision.requires_fresh_lease,
+            "reasonCodes": decision.reason_codes,
         }
 
     @staticmethod
