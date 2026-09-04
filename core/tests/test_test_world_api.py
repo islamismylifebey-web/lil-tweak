@@ -51,7 +51,7 @@ class TestWorldApiTests(unittest.TestCase):
 
         async def fallback(_scope, _receive, send):
             await send({"type": "http.response.start", "status": 418, "headers": []})
-            await send({"type": "http.response.body", "body": b"fallback"})
+            await send({"type": "http.response.body", "body": b""})
 
         self.app = TestWorldApi(
             fallback=fallback,
