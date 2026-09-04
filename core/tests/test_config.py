@@ -46,25 +46,16 @@ class ConfigTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Config.from_env(environment)
 
-    def test_galor_endpoint_requires_exact_credential_free_https_url(self):
-        for url in (
-            "http://galor.internal/context",
-            "https://user:pass@galor.internal/context",
-            "https://galor.internal/context?redirect=other",
-        ):
-            with self.subTest(url=url):
-                environment = valid_environment()
-                environment["LIL_TWEAK_GALOR_READONLY_URL"] = url
-                with self.assertRaises(ValueError):
-                    Config.from_env(environment)
+    def test_retired_galor_hub_setting_is_rejected(self):
         environment = valid_environment()
         environment["LIL_TWEAK_GALOR_READONLY_URL"] = (
             "https://galor-readonly.internal/v1/project-context"
         )
-        self.assertEqual(
-            Config.from_env(environment).galor_readonly_url,
-            environment["LIL_TWEAK_GALOR_READONLY_URL"],
-        )
+        with self.assertRaisesRegex(
+            ValueError, "LIL_TWEAK_GALOR_READONLY_URL is retired"
+        ):
+            Config.from_env(environment)
+        self.assertFalse(hasattr(Config.from_env(valid_environment()), "galor_readonly_url"))
 
     def test_admission_and_job_deadline_are_bounded(self):
         environment = valid_environment()
