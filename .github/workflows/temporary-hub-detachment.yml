@@ -1,0 +1,32 @@
+name: Temporary Hub detachment verification
+
+on:
+  push:
+    branches:
+      - fix/detach-tweak-from-galor-hub
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: Focused detachment tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+      - name: Run connection boundary test
+        run: node --test tests/engineering-connection.test.mjs
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run core boundary tests
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m unittest core.tests.test_config core.tests.test_hub_detachment
