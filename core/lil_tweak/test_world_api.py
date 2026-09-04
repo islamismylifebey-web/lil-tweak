@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 from .api import ApiProblem, _headers, _json_body, _read_body
 from .signing import AuthenticationError, ReplayError, verify_request
 from .test_world import (
+    AttemptMode,
     TestCheck,
     TestWorld,
     TestWorldAttempt,
@@ -35,6 +36,7 @@ def _attempt_json(attempt: TestWorldAttempt) -> dict[str, Any]:
         "worldId": attempt.world_id,
         "worldFingerprint": attempt.world_fingerprint,
         "judgeVersion": attempt.judge_version,
+        "mode": attempt.mode.value,
         "number": attempt.number,
         "status": attempt.status.value,
         "outcome": attempt.outcome,
@@ -147,6 +149,15 @@ def _list_limit(query: str) -> int:
     return limit
 
 
+def _attempt_mode(payload: Mapping[str, Any]) -> AttemptMode:
+    if set(payload) - {"mode"}:
+        raise ApiProblem(400, "invalid_request")
+    try:
+        return AttemptMode(payload.get("mode", AttemptMode.RETRY.value))
+    except (TypeError, ValueError):
+        raise ApiProblem(400, "invalid_request") from None
+
+
 class TestWorldApi:
     """Route Test World calls while delegating every other request unchanged."""
 
@@ -235,8 +246,7 @@ class TestWorldApi:
                 if method != "POST" or query:
                     raise ApiProblem(405 if method != "POST" else 400, "method_not_allowed" if method != "POST" else "invalid_request")
                 payload = _json_body(body)
-                if payload:
-                    raise ApiProblem(400, "invalid_request")
+                mode = _attempt_mode(payload)
                 world_id = attempt_match.group(1)
                 if not valid_world_id(world_id):
                     raise ApiProblem(404, "world_not_found")
@@ -245,6 +255,7 @@ class TestWorldApi:
                         world_id,
                         owner_id,
                         idempotency_key=idempotency_key,
+                        mode=mode,
                     )
                 except TestWorldNotFound:
                     raise ApiProblem(404, "world_not_found") from None
