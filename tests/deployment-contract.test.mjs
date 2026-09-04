@@ -26,11 +26,23 @@ const requiredFiles = [
   "deploy/cloudflared/validate_credentials.py",
   "deploy/cloudflared/verify_binary.py",
   "scripts/verify-deployment.sh",
+  "scripts/lil-tweak-activation-finalizer.py",
+  "scripts/lil-tweak-independent-review.py",
+  "scripts/lil-tweak-live-evidence.py",
+  "docs/operations/tueiq-runner-activation.md",
   "docs/operations/digitalocean.md",
   "docs/operations/cloudflare-d1.md",
   "deploy/cloudflare/wrangler.d1.example.jsonc",
   "deploy/cloudflare/d1-schema-probe.sql",
 ];
+
+test("activation helper checks are executable offline inventory entries", () => {
+  for (const path of ["scripts/lil-tweak-activation-finalizer.py", "scripts/lil-tweak-independent-review.py", "scripts/lil-tweak-live-evidence.py"]) {
+    const result = spawnSync("python3", [path, "--check"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /CONNECTED|QUALIFIED|READY_TO_WORK/);
+  }
+});
 
 test("ships the complete isolated DigitalOcean deployment surface", () => {
   for (const path of requiredFiles) {

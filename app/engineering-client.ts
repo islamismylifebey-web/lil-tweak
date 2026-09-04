@@ -7,6 +7,12 @@ import type {
 } from "../lib/engineering.ts";
 import type { GitSourceInput } from "../lib/engineering-input.ts";
 import { sha256Hex } from "../lib/core-signing.ts";
+import { collectTueiqActivationEvidence } from "../lib/engineering-activation-collector.ts";
+
+// Explicit owner-invoked page evaluation; registration never starts collection.
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "collectTueiqActivationEvidence", { value: collectTueiqActivationEvidence, configurable: true });
+}
 
 const STATE_LABELS: Readonly<Record<JobState, string>> = {
   draft: "Draft",

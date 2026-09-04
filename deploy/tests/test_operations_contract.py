@@ -28,6 +28,20 @@ def text(relative: str) -> str:
 
 
 class QualificationInventoryTests(unittest.TestCase):
+    def test_activation_runbook_has_exact_order_and_six_key_contract(self):
+        document = text("docs/operations/tueiq-runner-activation.md")
+        order = ("Provider preflight and witness", "Approved guest entry", "Exact source and images", "Pre-mutation inventory", "New credentials and protected staging", "Combined installation", "DNS and private Site deployment", "Second provider witness", "Primary Site collection", "Independent cross-checks", "Post-deployment owner flow", "Local qualification", "Candidate replay", "Independent candidate review", "Reviewed finalization", "Independent final verification", "Redaction and rollback decision")
+        positions = [document.index("## " + item) for item in order]
+        self.assertEqual(positions, sorted(positions))
+        match = re.search(r"<!-- exact-site-additions -->\n```text\n(.*?)\n```", document, re.S)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1).splitlines(), ["MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET"])
+        self.assertIn("CUSTOMER_HTTP_LIL_TWEAK_CORE", document)
+        self.assertIn("OPENAI_API_KEY", document)
+        self.assertIn("scripts/install-lil-tweak-release.sh --install", document)
+        self.assertNotRegex(document, r"install-(?:digitalocean|cloudflare-tunnel)\.sh --install")
+        self.assertIn("A local receipt is insufficient", document)
+
     def test_deployment_check_executes_qualification_and_cannot_contact_live_services(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -96,7 +96,7 @@ def write_owner_flow_receipt(
 ) -> None:
     issued_at, expires_at = decision_window(stale=stale)
     values = {
-        "schema": "lil-tweak-owner-flow-receipt-v2",
+        "schema": "lil-tweak-owner-flow-receipt-v3",
         "decision": "PASS",
         "runtime_manifest_sha256": runtime_digest,
         "source_commit": state["SOURCE_COMMIT"],
@@ -105,6 +105,8 @@ def write_owner_flow_receipt(
         "sites_version_number": state["SITES_VERSION_NUMBER"],
         "sites_deployment_id": state["SITES_DEPLOYMENT_ID"],
         "sites_archive_sha256": state["SITES_ARCHIVE_HASH"],
+        "sites_deployed_at": state["SITES_DEPLOYED_AT"],
+        "owner_flow_job_sha256": hashlib.sha256(Path(state["OWNER_FLOW_JOB"]).read_bytes()).hexdigest(),
         "production_url": state["PRODUCTION_URL"],
         "issued_at": issued_at,
         "expires_at": expires_at,
@@ -913,6 +915,17 @@ class ReleaseToolingTests(unittest.TestCase):
             runtime, runtime_payload = self._create_canonical_runtime_manifest(root, fixture)
             runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
             state = root / "release-state.env"
+            from deploy.tests.test_activation_finalizer import load
+            activation = load()
+            q = activation.q
+            job = {"schema": "tueiq-owner-flow-job-v1", "checkedAt": decision_window()[0], "requestId": "00000000-0000-4000-8000-000000000000", "jobId": "job:" + "a" * 32,
+                "ownerScope": q.OWNER_SCOPE, "jobRevision": 3, "mode": "architect", "state": "completed", "gitSource": q.submission("architect")["gitSource"],
+                "sourceDigest": q.BASELINE_TREE_SHA256, "proposalDigest": "b" * 64, "approvalProposal": None, "approvalConsumed": False,
+                "evidence": [{"id": "evidence:" + str(i) * 32, "category": q.CATEGORIES[name], "filename": name, "mediaType": media, "sizeBytes": 0,
+                    "sha256": q.EMPTY_SHA256, "createdAt": decision_window()[0]} for i, (name, media) in enumerate(q.ARTIFACTS.items(), 1)],
+                "baselineTreeSha256": q.BASELINE_TREE_SHA256, "finalTreeSha256": q.BASELINE_TREE_SHA256, "fileSha256": q.SOURCE_SHA256, "commandDigest": "c" * 64, "editJournalDigest": "d" * 64}
+            job_path = root / "owner-job.json"
+            activation.publish(job_path, job)
             values = {
                 "RUNTIME_MANIFEST": str(runtime),
                 "RUNTIME_MANIFEST_SHA256": runtime_digest,
@@ -945,6 +958,8 @@ class ReleaseToolingTests(unittest.TestCase):
                 "PRODUCTION_URL": "https://tweak.example.invalid",
                 "PUBLIC_ORIGIN": "https://tweak.example.invalid",
                 "PRIOR_SITES_VERSION_NUMBER": "1",
+                "SITES_DEPLOYED_AT": (datetime.now(timezone.utc) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "OWNER_FLOW_JOB": str(job_path),
             }
             state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
             state.chmod(0o600)
@@ -962,6 +977,9 @@ class ReleaseToolingTests(unittest.TestCase):
 
             for label, options in (
                 ("stale", {"stale": True}),
+                ("old-v2", {"overrides": {"schema": "lil-tweak-owner-flow-receipt-v2"}}),
+                ("before-deployment", {"overrides": {"issued_at": (datetime.now(timezone.utc) - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")}}),
+                ("changed-job", {"overrides": {"owner_flow_job_sha256": "0" * 64}}),
                 (
                     "mismatched-deployment",
                     {"overrides": {"sites_deployment_id": "other-deployment"}},

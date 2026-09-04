@@ -5,6 +5,7 @@ import argparse
 from contextlib import contextmanager
 import gzip
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -16,6 +17,7 @@ import tarfile
 import tempfile
 import unicodedata
 from datetime import datetime, timezone
+from datetime import timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -1363,6 +1365,7 @@ def create_runtime_manifest(
     base_image_receipt: Path,
     image_scan_hashes: Path,
     output: Path,
+    activation_verification_receipt: Path | None = None,
 ) -> str:
     source, source_digest, source_manifest_size = load_canonical_manifest(
         Path(source_manifest), SOURCE_SCHEMA
@@ -1380,10 +1383,8 @@ def create_runtime_manifest(
         [python_base_image, runner_base_image, postgres_image],
     )
     image_scans = _scan_receipt(Path(image_scan_hashes))
-    host_go = _decision_receipt(
-        Path(host_go_receipt),
-        [
-            ("schema", "lil-tweak-host-go-receipt-v2"),
+    host_expected = [
+            ("schema", "lil-tweak-host-go-receipt-v3" if activation_verification_receipt is not None else "lil-tweak-host-go-receipt-v2"),
             ("decision", "GO"),
             ("source_commit", source["source"]["commit"]),
             ("source_tree", source["source"]["tree"]),
@@ -1396,9 +1397,13 @@ def create_runtime_manifest(
             ("runner_base_image", runner_base_image),
             ("base_image_receipt_sha256", base_images["sha256"]),
             ("image_scan_receipt_sha256", image_scans["receipt_sha256"]),
-        ],
-        "host_go_receipt_rejected",
-    )
+        ]
+    if activation_verification_receipt is not None:
+        a = _activation_helper()
+        verification = a.read_json(activation_verification_receipt)
+        a.validate_verification(verification, source["source"]["commit"], source["source"]["tree"], source_digest, archive_digest)
+        host_expected.append(("activation_verification_sha256", hashlib.sha256(a.read_bytes(activation_verification_receipt)).hexdigest()))
+    host_go = _decision_receipt(Path(host_go_receipt), host_expected, "host_go_receipt_rejected")
     payload = {
         "schema": RUNTIME_SCHEMA,
         "source": {
@@ -1591,6 +1596,59 @@ def _validated_runtime_manifest(runtime: Any) -> dict[str, Any]:
     return runtime
 
 
+def _activation_helper():
+    spec = importlib.util.spec_from_file_location("release_activation", Path(__file__).with_name("lil-tweak-activation-finalizer.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def owner_flow_expected(runtime, runtime_digest, sites, job_digest, deployed_at):
+    return [
+        ("schema", "lil-tweak-owner-flow-receipt-v3"), ("decision", "PASS"),
+        ("runtime_manifest_sha256", runtime_digest), ("source_commit", runtime["source"]["commit"]), ("source_tree", runtime["source"]["tree"]),
+        ("sites_version_id", sites["version_id"]), ("sites_version_number", str(sites["version_number"])),
+        ("sites_deployment_id", sites["deployment_id"]), ("sites_archive_sha256", sites["archive_sha256"]),
+        ("sites_deployed_at", deployed_at), ("owner_flow_job_sha256", job_digest), ("production_url", sites["production_url"]),
+    ]
+
+
+def _owner_job_binding(state):
+    a = _activation_helper()
+    path = Path(_required_state(state, "OWNER_FLOW_JOB"))
+    try:
+        job = a.validate_owner_job(a.read_json(path))
+        deployed_at = _required_state(state, "SITES_DEPLOYED_AT")
+        if not a.timestamp(deployed_at) <= a.timestamp(job["checkedAt"]) <= datetime.now(timezone.utc).timestamp():
+            raise ReleaseError("owner_flow_receipt_rejected")
+        a.fresh(deployed_at); a.fresh(job["checkedAt"])
+    except Exception:
+        raise ReleaseError("owner_flow_receipt_rejected") from None
+    return job, hashlib.sha256(a.read_bytes(path)).hexdigest(), deployed_at
+
+
+def create_owner_flow_receipt(runtime_manifest, release_state, owner_flow_job, output):
+    runtime, digest, _ = load_canonical_manifest(Path(runtime_manifest), RUNTIME_SCHEMA)
+    _validated_runtime_manifest(runtime)
+    state = _parse_state(Path(release_state))
+    if Path(_required_state(state, "OWNER_FLOW_JOB")) != Path(owner_flow_job):
+        raise ReleaseError("owner_flow_receipt_rejected")
+    job, job_digest, deployed_at = _owner_job_binding(state)
+    if (_required_state(state, "RUNTIME_MANIFEST_SHA256") != digest
+        or _required_state(state, "SOURCE_COMMIT") != runtime["source"]["commit"]
+        or _required_state(state, "SOURCE_TREE") != runtime["source"]["tree"]
+        or _required_state(state, "SITES_SOURCE_COMMIT") != runtime["source"]["commit"]):
+        raise ReleaseError("owner_flow_receipt_rejected")
+    sites = {"version_id": _identifier(state, "SITES_VERSION_ID"), "version_number": _decimal(state, "SITES_VERSION_NUMBER"),
+        "deployment_id": _identifier(state, "SITES_DEPLOYMENT_ID"), "archive_sha256": _required_state(state, "SITES_ARCHIVE_HASH"), "production_url": _https_origin(_required_state(state, "PRODUCTION_URL"))}
+    if not SHA256.fullmatch(sites["archive_sha256"]): raise ReleaseError("owner_flow_receipt_rejected")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    if _activation_helper().timestamp(job["checkedAt"]) > now.timestamp(): raise ReleaseError("owner_flow_receipt_rejected")
+    values = owner_flow_expected(runtime, digest, sites, job_digest, deployed_at) + [
+        ("issued_at", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("expires_at", (now + timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")), ("nonce", secrets.token_hex(16))]
+    return _activation_helper().publish(Path(output), raw="".join(k + "=" + v + "\n" for k, v in values).encode("ascii"))
+
+
 def create_production_manifest(
     runtime_manifest: Path,
     release_state: Path,
@@ -1633,22 +1691,17 @@ def create_production_manifest(
         raise ReleaseError("release_state_invalid")
     sites_version_id = _identifier(state, "SITES_VERSION_ID")
     sites_deployment_id = _identifier(state, "SITES_DEPLOYMENT_ID")
+    job, owner_flow_job_digest, deployed_at = _owner_job_binding(state)
     owner_flow = _decision_receipt(
         Path(owner_flow_receipt),
-        [
-            ("schema", "lil-tweak-owner-flow-receipt-v2"),
-            ("decision", "PASS"),
-            ("runtime_manifest_sha256", runtime_digest),
-            ("source_commit", source_commit),
-            ("source_tree", source_tree),
-            ("sites_version_id", sites_version_id),
-            ("sites_version_number", str(version_number)),
-            ("sites_deployment_id", sites_deployment_id),
-            ("sites_archive_sha256", archive_hash),
-            ("production_url", production_url),
-        ],
+        owner_flow_expected(runtime, runtime_digest, {"version_id": sites_version_id, "version_number": version_number,
+            "deployment_id": sites_deployment_id, "archive_sha256": archive_hash, "production_url": production_url}, owner_flow_job_digest, deployed_at),
         "owner_flow_receipt_rejected",
     )
+    owner_times = dict(line.split("=", 1) for line in _read_secure(Path(owner_flow_receipt), maximum=MAX_RECEIPT_BYTES, required_mode=0o600).decode("ascii").splitlines())
+    a = _activation_helper()
+    if not a.timestamp(deployed_at) <= a.timestamp(job["checkedAt"]) <= a.timestamp(owner_times["issued_at"]):
+        raise ReleaseError("owner_flow_receipt_rejected")
     payload = {
         "schema": PRODUCTION_SCHEMA,
         "runtime": {
@@ -1693,6 +1746,7 @@ def create_production_manifest(
             "prior_version_number": prior_version,
         },
         "owner_flow_receipt": owner_flow,
+        "owner_flow_job_sha256": owner_flow_job_digest,
     }
     return write_new_manifest(Path(output), payload)
 
@@ -1814,11 +1868,15 @@ def _parser() -> argparse.ArgumentParser:
         runtime.add_argument(f"--{argument}", type=Path, required=True)
     for argument in ("core-image", "runner-image", "postgres-image", "python-base-image", "runner-base-image"):
         runtime.add_argument(f"--{argument}", required=True)
+    runtime.add_argument("--activation-verification-receipt", type=Path)
     production = subcommands.add_parser("production-manifest")
     production.add_argument("--runtime-manifest", type=Path, required=True)
     production.add_argument("--release-state", type=Path, required=True)
     production.add_argument("--owner-flow-receipt", type=Path, required=True)
     production.add_argument("--output", type=Path, required=True)
+    owner_flow = subcommands.add_parser("owner-flow-receipt")
+    for name in ("runtime-manifest", "release-state", "owner-flow-job", "output"):
+        owner_flow.add_argument("--" + name, type=Path, required=True)
     verify_runtime = subcommands.add_parser("verify-runtime-install")
     verify_runtime.add_argument("--runtime-manifest", type=Path, required=True)
     verify_runtime.add_argument("--runtime-manifest-sha256", required=True)
@@ -1858,6 +1916,7 @@ def main(argv: list[str] | None = None) -> int:
                 runner_base_image=arguments.runner_base_image,
                 base_image_receipt=arguments.base_image_receipt,
                 image_scan_hashes=arguments.image_scan_hashes,
+                activation_verification_receipt=arguments.activation_verification_receipt,
                 output=arguments.output,
             )
         elif arguments.command == "production-manifest":
@@ -1867,6 +1926,8 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.owner_flow_receipt,
                 arguments.output,
             )
+        elif arguments.command == "owner-flow-receipt":
+            digest = create_owner_flow_receipt(arguments.runtime_manifest, arguments.release_state, arguments.owner_flow_job, arguments.output)
         else:
             verify_runtime_install(
                 runtime_manifest=arguments.runtime_manifest,
