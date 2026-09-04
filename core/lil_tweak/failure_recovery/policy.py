@@ -63,6 +63,8 @@ class RecoveryPolicy:
 
         if signal.partial_mutation and not (
             classified.automatic_recovery_prohibited
+            or classified.requires_reauthorization
+            or classified.preferred_action in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}
             or classified.code
             in {
                 FailureCode.ROLLBACK_FAILED,
