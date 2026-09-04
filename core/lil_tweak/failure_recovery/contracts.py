@@ -14,6 +14,7 @@ HANDOFF_SCHEMA_VERSION = "failure-recovery-handoff-v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REVISION = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
+_REASON = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 
 
 class FailureClass(StrEnum):
@@ -127,21 +128,36 @@ def _require_digest(value: str | None, code: str) -> None:
         raise ValueError(code)
 
 
+def _require_bool(value: object, code: str) -> None:
+    if type(value) is not bool:
+        raise ValueError(code)
+
+
+def _freeze_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {
+                str(key): _freeze_value(item)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            }
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        frozen = tuple(_freeze_value(item) for item in value)
+        return tuple(sorted(frozen, key=repr))
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
 def _freeze(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
     if not value:
         return MappingProxyType({})
-    result: dict[str, Any] = {}
-    for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
-        name = str(key)
-        if isinstance(item, Mapping):
-            result[name] = _freeze(item)
-        elif isinstance(item, (list, tuple, set, frozenset)):
-            result[name] = tuple(item)
-        elif isinstance(item, (str, int, float, bool)) or item is None:
-            result[name] = item
-        else:
-            result[name] = str(item)
-    return MappingProxyType(result)
+    frozen = _freeze_value(value)
+    if not isinstance(frozen, Mapping):
+        raise TypeError("details_must_be_mapping")
+    return frozen
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +213,10 @@ class RecoveryContext:
         ):
             if value is not None:
                 _require_id(value, code)
+        _require_bool(self.approval_present, "approval_present_must_be_boolean")
+        _require_bool(
+            self.new_authority_required, "new_authority_required_must_be_boolean"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +240,17 @@ class FailureSignal:
             normalized: FailureCode | str = FailureCode(raw)
         except ValueError:
             normalized = raw
+        if not isinstance(self.exception_type, str) or len(self.exception_type) > 256:
+            raise ValueError("exception_type_invalid")
+        if not isinstance(self.message, str) or len(self.message) > 4_000:
+            raise ValueError("failure_message_invalid")
+        for value in (
+            self.transient,
+            self.partial_mutation,
+            self.integrity_failure,
+            self.security_sensitive,
+        ):
+            _require_bool(value, "failure_flag_must_be_boolean")
         object.__setattr__(self, "code", normalized)
         object.__setattr__(self, "failed_checks", tuple(sorted(set(self.failed_checks))))
         object.__setattr__(
@@ -280,6 +311,15 @@ class ResourceRecoveryDecision:
 
     def __post_init__(self) -> None:
         _require_id(self.resource_id, "resource_id_invalid")
+        for value in (
+            self.qualified,
+            self.healthy,
+            self.authorized,
+            self.cost_approved,
+            self.fresh_lease,
+            self.source_bound,
+        ):
+            _require_bool(value, "resource_gate_must_be_boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +332,19 @@ class ClassifiedFailure:
     automatic_recovery_prohibited: bool = False
     requires_reauthorization: bool = False
     requires_fresh_lease: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.reason_codes or any(
+            not isinstance(reason, str) or not _REASON.fullmatch(reason)
+            for reason in self.reason_codes
+        ):
+            raise ValueError("reason_codes_invalid")
+        for value in (
+            self.automatic_recovery_prohibited,
+            self.requires_reauthorization,
+            self.requires_fresh_lease,
+        ):
+            _require_bool(value, "classification_flag_must_be_boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +373,56 @@ class RecoveryDecision:
     reason_codes: tuple[str, ...]
     decision_digest: str
 
+    def __post_init__(self) -> None:
+        if self.schema_version != SCHEMA_VERSION:
+            raise ValueError("recovery_schema_version_invalid")
+        for value, code in (
+            (self.owner_id, "owner_id_invalid"),
+            (self.task_id, "task_id_invalid"),
+            (self.dag_run_id, "dag_run_id_invalid"),
+            (self.node_id, "node_id_invalid"),
+        ):
+            _require_id(value, code)
+        if self.source_revision is not None and not _REVISION.fullmatch(
+            self.source_revision
+        ):
+            raise ValueError("source_revision_invalid")
+        if not isinstance(self.attempt, int) or isinstance(self.attempt, bool) or self.attempt < 1:
+            raise ValueError("attempt_must_be_positive")
+        _require_digest(self.plan_digest, "plan_digest_invalid")
+        _require_digest(self.candidate_digest, "candidate_digest_invalid")
+        _require_digest(self.contract_digest, "contract_digest_invalid")
+        _require_digest(self.fingerprint, "failure_fingerprint_invalid")
+        _require_digest(self.decision_digest, "decision_digest_invalid")
+        for value, code in (
+            (self.execution_id, "execution_id_invalid"),
+            (self.lease_id, "lease_id_invalid"),
+            (self.resource_id, "resource_id_invalid"),
+        ):
+            if value is not None:
+                _require_id(value, code)
+        if not isinstance(self.failure_class, FailureClass):
+            raise ValueError("failure_class_invalid")
+        if not isinstance(self.failure_code, FailureCode):
+            raise ValueError("failure_code_invalid")
+        if not isinstance(self.disposition, RecoveryDisposition):
+            raise ValueError("recovery_disposition_invalid")
+        if not isinstance(self.action, RecoveryAction):
+            raise ValueError("recovery_action_invalid")
+        for value in (
+            self.allowed,
+            self.requires_reauthorization,
+            self.requires_fresh_lease,
+        ):
+            _require_bool(value, "recovery_decision_flag_must_be_boolean")
+        if self.allowed and self.action in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}:
+            raise ValueError("blocking_recovery_cannot_be_allowed")
+        if not self.reason_codes or any(
+            not isinstance(reason, str) or not _REASON.fullmatch(reason)
+            for reason in self.reason_codes
+        ):
+            raise ValueError("reason_codes_invalid")
+
 
 @dataclass(frozen=True, slots=True)
 class RecoveryOutcome:
@@ -332,6 +435,13 @@ class RecoveryOutcome:
     independently_verified: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, RecoveryOutcomeStatus):
+            raise ValueError("recovery_outcome_status_invalid")
+        _require_bool(self.progress, "recovery_progress_must_be_boolean")
+        _require_bool(
+            self.independently_verified,
+            "independent_verification_flag_must_be_boolean",
+        )
         object.__setattr__(
             self,
             "remaining_failed_checks",
@@ -341,6 +451,8 @@ class RecoveryOutcome:
         _require_digest(self.resulting_candidate_digest, "resulting_candidate_digest_invalid")
         if self.resulting_resource_id is not None:
             _require_id(self.resulting_resource_id, "resulting_resource_id_invalid")
+        if self.status is RecoveryOutcomeStatus.SUCCEEDED and not self.progress:
+            raise ValueError("successful_outcome_requires_progress")
         if self.status is RecoveryOutcomeStatus.SUCCEEDED and not self.independently_verified:
             raise ValueError("verified_outcome_required")
 
@@ -359,3 +471,28 @@ class RecoveryHistoryEntry:
     resulting_plan_digest: str | None = None
     resulting_candidate_digest: str | None = None
     resulting_resource_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_id(self.owner_id, "owner_id_invalid")
+        _require_id(self.task_id, "task_id_invalid")
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 1:
+            raise ValueError("history_sequence_invalid")
+        _require_digest(self.fingerprint, "failure_fingerprint_invalid")
+        _require_digest(self.decision_digest, "decision_digest_invalid")
+        if not isinstance(self.action, RecoveryAction):
+            raise ValueError("recovery_action_invalid")
+        if self.outcome_status is not None and not isinstance(
+            self.outcome_status, RecoveryOutcomeStatus
+        ):
+            raise ValueError("recovery_outcome_status_invalid")
+        if self.progress is not None:
+            _require_bool(self.progress, "recovery_progress_must_be_boolean")
+        object.__setattr__(
+            self,
+            "remaining_failed_checks",
+            tuple(sorted(set(self.remaining_failed_checks))),
+        )
+        _require_digest(self.resulting_plan_digest, "resulting_plan_digest_invalid")
+        _require_digest(self.resulting_candidate_digest, "resulting_candidate_digest_invalid")
+        if self.resulting_resource_id is not None:
+            _require_id(self.resulting_resource_id, "resulting_resource_id_invalid")
