@@ -219,11 +219,11 @@ class TestWorldApi:
                     if body:
                         raise ApiProblem(400, "invalid_request")
                     limit = _list_limit(query)
-                    worlds = self.world_store.list_worlds(owner_id, limit=limit)
+                    worlds = self.world_store.list_worlds_with_attempt_counts(owner_id, limit=limit)
                     payload = {
                         "worlds": [
-                            _summary_json(world, len(self.world_store.list_attempts(world.id, owner_id)))
-                            for world in worlds
+                            _summary_json(world, attempt_count)
+                            for world, attempt_count in worlds
                         ]
                     }
                     await self._respond(send, 200, payload)
