@@ -59,6 +59,7 @@ jobs:
           python3 -m unittest \
             core.tests.test_failure_recovery_contracts \
             core.tests.test_failure_recovery_controller \
+            core.tests.test_failure_recovery_final_review \
             core.tests.test_failure_recovery_history \
             core.tests.test_failure_recovery_orchestrator \
             core.tests.test_failure_recovery_resource_binding \
