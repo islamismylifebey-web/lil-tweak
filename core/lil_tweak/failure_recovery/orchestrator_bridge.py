@@ -102,34 +102,45 @@ class RecoveryAwareEngineeringOrchestrator:
             )
         except Exception as error:
             latest = self.store.get_job(job_id, owner_id) or initial
-            self._record(self.recovery_controller.signal_from_exception(error), latest)
+            self._record_error(error, latest)
             raise
 
         if result.state is JobState.TIMED_OUT:
-            signal = (
-                self.recovery_controller.signal_from_exception(observing_agent.error)
-                if observing_agent.error is not None
-                else FailureSignal(
-                    code=FailureCode.TIMEOUT,
-                    exception_type="ObservedCommandTimeout",
-                    failed_checks=("command_timeout",),
-                    transient=True,
+            if observing_agent.error is not None:
+                self._record_error(observing_agent.error, result)
+            else:
+                self._record_signal(
+                    FailureSignal(
+                        code=FailureCode.TIMEOUT,
+                        exception_type="ObservedCommandTimeout",
+                        failed_checks=("command_timeout",),
+                        transient=True,
+                    ),
+                    result,
                 )
-            )
-            self._record(signal, result)
         elif result.state is JobState.FAILED:
-            signal = (
-                self.recovery_controller.signal_from_exception(observing_agent.error)
-                if observing_agent.error is not None
-                else FailureSignal(
-                    code=FailureCode.UNKNOWN_FAILURE,
-                    exception_type="OrchestratorTerminalFailure",
+            if observing_agent.error is not None:
+                self._record_error(observing_agent.error, result)
+            else:
+                self._record_signal(
+                    FailureSignal(
+                        code=FailureCode.UNKNOWN_FAILURE,
+                        exception_type="OrchestratorTerminalFailure",
+                    ),
+                    result,
                 )
-            )
-            self._record(signal, result)
         return result
 
-    def _record(self, signal: FailureSignal, job: Job) -> None:
+    def _record_error(self, error: BaseException, job: Job) -> None:
+        try:
+            signal = self.recovery_controller.signal_from_exception(error)
+        except Exception:
+            self.last_recovery_decision = None
+            self.recovery_unavailable = True
+            return
+        self._record_signal(signal, job)
+
+    def _record_signal(self, signal: FailureSignal, job: Job) -> None:
         try:
             self.last_recovery_decision = self.recovery_controller.decide(
                 signal, self._context(job)
