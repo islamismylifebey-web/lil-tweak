@@ -186,6 +186,30 @@ class TestWorldApiTests(unittest.TestCase):
         )
         self.assertEqual((status, result["error"]["code"]), (409, "idempotency_conflict"))
 
+    def test_list_uses_one_authoritative_store_operation_for_worlds_and_counts(self):
+        body = self.create_body()
+        self.request(
+            "POST", "/v1/test-worlds", body,
+            self.signed_headers("POST", "/v1/test-worlds", body),
+        )
+
+        calls = 0
+        original = self.world_store.list_worlds_with_attempt_counts
+
+        def counted(owner_id, *, limit=20):
+            nonlocal calls
+            calls += 1
+            return original(owner_id, limit=limit)
+
+        self.world_store.list_worlds_with_attempt_counts = counted
+        self.world_store.list_attempts = lambda *_args, **_kwargs: self.fail("list endpoint loaded attempt payloads")
+        target = "/v1/test-worlds?limit=5"
+        status, listed = self.request("GET", target, headers=self.signed_headers("GET", target, idem=None))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(calls, 1)
+        self.assertEqual(listed["worlds"][0]["attemptCount"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
