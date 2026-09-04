@@ -4,6 +4,8 @@ Lil Tweak has two distinct ingress boundaries. The owner-facing Sites Worker acc
 
 Do not publish either route until every negative test in this runbook passes.
 
+The only permitted Tunnel guest is DigitalOcean Droplet `597343619` with short hostname `galor-tweak-runner-01`. Before the combined release or any direct Tunnel/rollback mutation, `scripts/lil-tweak-digitalocean-target.py` requires both the hostname and the exact ID returned by `http://169.254.169.254/metadata/v1/id`. Redirected, missing, malformed, oversized, timed-out, or mismatched metadata fails closed before a rollback lease, temporary credential, service identity, directory, unit, or connector change. `--check` is offline and does not contact metadata. The legacy word embedded in the immutable provider hostname grants no relationship, credential, transport, process, network, repository, or authority.
+
 ## Production bindings
 
 Configure these Worker bindings. Values marked secret belong in the platform secret store, not a checked-in environment file, D1, R2, a client bundle, or Terraform output.

@@ -17,6 +17,12 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
     def fixture(self, root: Path) -> tuple[Path, Path, Path]:
         wrapper = root / "install-lil-tweak-release.sh"
         shutil.copy2(WRAPPER, wrapper)
+        wrapper.write_text(
+            wrapper.read_text().replace(
+                '[[ ${EUID} -eq 0 ]] || die \'run the release transaction as root on the target droplet\'',
+                '[[ 0 -eq 0 ]]',
+            )
+        )
         wrapper.chmod(0o755)
         log = root / "restore.log"
         events = root / "events.log"
@@ -31,6 +37,8 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
                 from pathlib import Path
 
                 command = sys.argv[1]
+                if command == "--check":
+                    raise SystemExit(0)
                 with Path(os.environ["EVENT_LOG"]).open("a", encoding="utf-8") as stream:
                     stream.write(command + "\\n")
                 if command == "verify-fresh-install":
@@ -47,10 +55,32 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
         )
         helper.chmod(0o755)
 
+        target = root / "lil-tweak-digitalocean-target.py"
+        target.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/python3
+                import os
+                import sys
+                from pathlib import Path
+
+                if sys.argv[1:] == ["--check"]:
+                    raise SystemExit(0)
+                with Path(os.environ["EVENT_LOG"]).open("a", encoding="utf-8") as stream:
+                    stream.write("target\\n")
+                raise SystemExit(int(os.environ.get("TARGET_STATUS", "0")))
+                """
+            )
+        )
+        target.chmod(0o755)
+
         installer = textwrap.dedent(
             """\
             #!/usr/bin/bash -p
             set -euo pipefail
+            if [[ "${1:-}" == "--check" ]]; then
+              exit 0
+            fi
             name="$(basename -- "$0")"
             event_name=core
             [[ "${name}" == "install-cloudflare-tunnel.sh" ]] && event_name=tunnel
@@ -91,6 +121,7 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
         signal_core: bool = False,
         fresh_status: int = 0,
         complete_status: int = 0,
+        target_status: int = 0,
     ) -> subprocess.CompletedProcess[str]:
         environment = dict(os.environ)
         environment.update(
@@ -102,6 +133,7 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
                 "EVENT_LOG": str(events),
                 "FRESH_STATUS": str(fresh_status),
                 "COMPLETE_STATUS": str(complete_status),
+                "TARGET_STATUS": str(target_status),
                 "LIL_TWEAK_ROLLBACK_LEASE_FD": "9",
                 "LIL_TWEAK_ROLLBACK_RECEIPT": (
                     "/var/lib/lil-tweak-release-rollback/20260815T120000Z-"
@@ -143,7 +175,7 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(
                 events.read_text().splitlines(),
-                ["lease-exec", "verify-fresh-install"],
+                ["target", "lease-exec", "verify-fresh-install"],
             )
             self.assertFalse(log.exists())
 
@@ -156,6 +188,7 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
             self.assertEqual(
                 events.read_text().splitlines(),
                 [
+                    "target",
                     "lease-exec",
                     "verify-fresh-install",
                     "core",
@@ -174,6 +207,7 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
             self.assertEqual(
                 events.read_text().splitlines(),
                 [
+                    "target",
                     "lease-exec",
                     "verify-fresh-install",
                     "core",
@@ -183,6 +217,53 @@ class TransactionRollbackOwnerTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(log.read_text().splitlines(), ["restore"])
+
+    def test_under_lease_target_failure_runs_no_lease_child_or_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            wrapper, log, events = self.fixture(Path(temporary))
+            result = self.run_case(wrapper, log, events, target_status=47)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(events.read_text().splitlines(), ["target"])
+            self.assertFalse(log.exists())
+            self.assertEqual(
+                result.stderr,
+                "install-lil-tweak-release: DigitalOcean target verification failed\n",
+            )
+
+    def test_normal_target_failure_runs_no_rollback_lease_or_child(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            wrapper, log, events = self.fixture(Path(temporary))
+            environment = dict(os.environ)
+            environment.update(
+                {
+                    "RESTORE_LOG": str(log),
+                    "EVENT_LOG": str(events),
+                    "TARGET_STATUS": "48",
+                    "LIL_TWEAK_ROLLBACK_RECEIPT": (
+                        "/var/lib/lil-tweak-release-rollback/20260815T120000Z-"
+                        "0123456789ab"
+                    ),
+                    "ROLLBACK_MANIFEST_SHA256": "a" * 64,
+                }
+            )
+            result = subprocess.run(
+                [str(wrapper), "--install"],
+                cwd=wrapper.parent,
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(events.read_text().splitlines(), ["target"])
+            self.assertFalse(log.exists())
+            self.assertEqual(
+                result.stderr,
+                "install-lil-tweak-release: DigitalOcean target verification failed\n",
+            )
 
 
 if __name__ == "__main__":

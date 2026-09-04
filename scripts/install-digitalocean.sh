@@ -12,7 +12,6 @@ umask 077
 
 SERVICE_USER="lil-tweak"
 SERVICE_HOME="/var/lib/lil-tweak"
-EXPECTED_HOST="galor-tweak-runner-01"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 QUADLET_SOURCE="${PROJECT_DIR}/deploy/quadlet"
@@ -24,6 +23,7 @@ RELEASE_HELPER="${PROJECT_DIR}/scripts/lil-tweak-release.py"
 SECRET_SNAPSHOT_HELPER="${PROJECT_DIR}/scripts/lil-tweak-secret-snapshot.py"
 HOST_IDENTITY_HELPER="${PROJECT_DIR}/scripts/lil-tweak-host-identity.py"
 SERVICE_FILES_HELPER="${PROJECT_DIR}/scripts/lil-tweak-service-files.py"
+TARGET_HELPER="${PROJECT_DIR}/scripts/lil-tweak-digitalocean-target.py"
 runtime_auth_file=""
 registry_auth_snapshot=""
 secret_snapshot_dir=""
@@ -129,7 +129,8 @@ offline_check() {
     "${RELEASE_HELPER}" \
     "${SECRET_SNAPSHOT_HELPER}" \
     "${HOST_IDENTITY_HELPER}" \
-    "${SERVICE_FILES_HELPER}"
+    "${SERVICE_FILES_HELPER}" \
+    "${TARGET_HELPER}"
   do
     [[ -f "${required}" ]] || die "missing deployment input: ${required}"
   done
@@ -158,6 +159,10 @@ offline_check() {
     || die 'service files helper must be an executable regular file'
   "${PYTHON}" -I -B "${SERVICE_FILES_HELPER}" --check >/dev/null \
     || die 'service files helper check failed'
+  [[ ! -L "${TARGET_HELPER}" && -x "${TARGET_HELPER}" ]] \
+    || die 'DigitalOcean target helper must be an executable regular file'
+  "${PYTHON}" -I -B "${TARGET_HELPER}" --check >/dev/null \
+    || die 'DigitalOcean target helper check failed'
   printf 'install-digitalocean check: ok\n'
 }
 
@@ -177,10 +182,8 @@ fi
 
 [[ ${EUID} -eq 0 ]] || die 'run the installer as root on the target droplet'
 offline_check >/dev/null
-
-actual_host="$(hostname --short)"
-[[ "${actual_host}" == "${LIL_TWEAK_EXPECTED_HOST:-${EXPECTED_HOST}}" ]] \
-  || die "refusing to install on unexpected host: ${actual_host}"
+"${PYTHON}" -I -B "${TARGET_HELPER}" >/dev/null 2>&1 \
+  || die 'DigitalOcean target verification failed'
 
 core_image="${LIL_TWEAK_CORE_IMAGE:-}"
 postgres_image="${LIL_TWEAK_POSTGRES_IMAGE:-}"

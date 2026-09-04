@@ -249,6 +249,118 @@ class ReleaseRollbackTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.rollback = load_rollback_module()
 
+    def setUp(self) -> None:
+        self._clean_target_patch = patch.object(
+            self.rollback, "_verify_exact_target", return_value=None
+        )
+        self._clean_target_patch.start()
+        self.addCleanup(self._clean_target_patch.stop)
+
+    def test_every_mutating_api_verifies_target_before_lock_or_parent_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt = (
+                root
+                / "var/lib/lil-tweak-release-rollback"
+                / "20260815T000000Z-aaaaaaaaaaaa"
+            )
+            source = root / "source"
+            source.write_bytes(b"source")
+            references = {
+                "core": "registry.example/lil-tweak/core@sha256:" + "1" * 64,
+                "postgres": "registry.example/postgres@sha256:" + "2" * 64,
+                "runner": "registry.example/lil-tweak/runner@sha256:" + "3" * 64,
+            }
+
+            def reject_target() -> None:
+                raise self.rollback.RollbackError("target_verification_failed")
+
+            operations = (
+                lambda: self.rollback.capture_receipt(
+                    output=receipt,
+                    source_commit="a" * 40,
+                    root=root,
+                    executor=FakeExecutor(),
+                ),
+                lambda: self.rollback.lease_exec(
+                    receipt, "a" * 64, ["/bin/true"]
+                ),
+                lambda: self.rollback.authorize_file(
+                    receipt,
+                    "a" * 64,
+                    "/etc/lil-tweak-cloudflared/config.yml",
+                    source,
+                    0o640,
+                    os.geteuid(),
+                    os.getegid(),
+                ),
+                lambda: self.rollback.authorize_object(
+                    receipt,
+                    "a" * 64,
+                    "network",
+                    "lil-tweak-private",
+                    "lil-tweak-private",
+                    executor=FakeExecutor(),
+                ),
+                lambda: self.rollback.finalize_object(
+                    receipt,
+                    "a" * 64,
+                    "network",
+                    "lil-tweak-private",
+                    "lil-tweak-private",
+                    executor=FakeExecutor(),
+                ),
+                lambda: self.rollback.authorize_images(
+                    receipt,
+                    "a" * 64,
+                    references,
+                    executor=FakeExecutor(),
+                ),
+                lambda: self.rollback.mark_completed(receipt, "a" * 64),
+                lambda: self.rollback.verify_fresh_install(
+                    receipt,
+                    "a" * 64,
+                    root=root,
+                    executor=FakeExecutor(),
+                ),
+                lambda: self.rollback.acknowledge_quarantine(receipt, "a" * 64),
+                lambda: self.rollback.restore_receipt(
+                    receipt,
+                    "a" * 64,
+                    root=root,
+                    executor=FakeExecutor(),
+                ),
+            )
+            with patch.object(
+                self.rollback, "_verify_exact_target", side_effect=reject_target
+            ):
+                for operation in operations:
+                    with self.subTest(operation=operation):
+                        with self.assertRaisesRegex(
+                            self.rollback.RollbackError,
+                            "^target_verification_failed$",
+                        ):
+                            operation()
+                    self.assertFalse(receipt.parent.exists())
+                    self.assertFalse((receipt.parent / ".transaction.lock").exists())
+
+    def test_target_helper_failure_is_reduced_to_one_content_free_code(self) -> None:
+        self._clean_target_patch.stop()
+        try:
+            with patch.object(
+                self.rollback._TARGET_HELPER_MODULE,
+                "verify_target",
+                side_effect=RuntimeError("hostile-received-metadata"),
+            ):
+                with self.assertRaisesRegex(
+                    self.rollback.RollbackError, "^target_verification_failed$"
+                ) as raised:
+                    self.rollback._verify_exact_target()
+        finally:
+            self._clean_target_patch.start()
+        self.assertNotIn("hostile", str(raised.exception))
+
+
     def test_capture_is_canonical_bounded_and_keeps_secret_bytes_only_in_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = RollbackFixture(Path(temporary), self.rollback)
@@ -2446,6 +2558,7 @@ signal.alarm(1)
 spec = importlib.util.spec_from_file_location("rollback_capture_child", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+module._verify_exact_target = lambda: None
 
 class MarkerExecutor:
     def capture_state(self):
@@ -2719,6 +2832,7 @@ import sys
 spec = importlib.util.spec_from_file_location("rollback_signal_child", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+module._verify_exact_target = lambda: None
 result = module.lease_exec(
     pathlib.Path(sys.argv[2]),
     sys.argv[3],

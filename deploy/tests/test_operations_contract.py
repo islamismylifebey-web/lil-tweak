@@ -24,6 +24,42 @@ def text(relative: str) -> str:
 
 
 class TunnelContractTests(unittest.TestCase):
+    def test_every_mutation_gate_requires_the_exact_guest_identity(self) -> None:
+        helper = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"
+        checked = subprocess.run(
+            [str(helper), "--check"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertEqual(checked.stdout, "DigitalOcean target check: ok\n")
+
+        for relative in (
+            "scripts/install-digitalocean.sh",
+            "scripts/install-cloudflare-tunnel.sh",
+            "scripts/install-lil-tweak-release.sh",
+            "scripts/lil-tweak-rollback.py",
+        ):
+            source = text(relative)
+            self.assertIn("lil-tweak-digitalocean-target.py", source)
+            self.assertNotIn("LIL_TWEAK_EXPECTED_HOST", source)
+
+        for relative in (
+            "README.md",
+            "docs/operations/digitalocean.md",
+            "docs/operations/cloudflare-private-ingress.md",
+        ):
+            document = text(relative)
+            for phrase in (
+                "DigitalOcean Droplet `597343619`",
+                "`galor-tweak-runner-01`",
+                "http://169.254.169.254/metadata/v1/id",
+                "scripts/lil-tweak-digitalocean-target.py",
+            ):
+                self.assertIn(phrase, document)
+
     def test_tunnel_access_and_managed_ingress_artifacts_are_concrete(self) -> None:
         required = (
             "deploy/cloudflare/access-application.json",
@@ -100,14 +136,9 @@ class TunnelContractTests(unittest.TestCase):
 
         installer = text("scripts/install-cloudflare-tunnel.sh")
         self.assertIn('TUNNEL_USER="lil-tweak-tunnel"', installer)
-        self.assertIn('EXPECTED_HOST="galor-tweak-runner-01"', installer)
         self.assertIn(
-            'EXPECTED_HOST="galor-tweak-runner-01"',
-            text("scripts/install-digitalocean.sh"),
-        )
-        self.assertIn(
-            'EXPECTED_HOST = "galor-tweak-runner-01"',
-            text("scripts/lil-tweak-rollback.py"),
+            'TARGET_HELPER="${PROJECT_DIR}/scripts/lil-tweak-digitalocean-target.py"',
+            installer,
         )
         self.assertIn("--user-group", installer)
         self.assertIn("deploy/cloudflared/verify_binary.py", installer)

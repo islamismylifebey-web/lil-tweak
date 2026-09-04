@@ -15,6 +15,7 @@ SELF="${SCRIPT_DIR}/install-lil-tweak-release.sh"
 CORE_INSTALLER="${SCRIPT_DIR}/install-digitalocean.sh"
 TUNNEL_INSTALLER="${SCRIPT_DIR}/install-cloudflare-tunnel.sh"
 ROLLBACK_HELPER="${SCRIPT_DIR}/lil-tweak-rollback.py"
+TARGET_HELPER="${SCRIPT_DIR}/lil-tweak-digitalocean-target.py"
 rollback_receipt="${LIL_TWEAK_ROLLBACK_RECEIPT:-}"
 rollback_manifest_sha256="${ROLLBACK_MANIFEST_SHA256:-}"
 transaction_started=0
@@ -27,12 +28,14 @@ die() {
 
 offline_check() {
   local required
-  for required in "${SELF}" "${CORE_INSTALLER}" "${TUNNEL_INSTALLER}" "${ROLLBACK_HELPER}"; do
+  for required in "${SELF}" "${CORE_INSTALLER}" "${TUNNEL_INSTALLER}" "${ROLLBACK_HELPER}" "${TARGET_HELPER}"; do
     [[ -f "${required}" && ! -L "${required}" && -x "${required}" ]] \
       || die 'release transaction input is missing or unsafe'
   done
   "${PYTHON}" -I -B "${ROLLBACK_HELPER}" --check >/dev/null \
     || die 'rollback helper check failed'
+  "${PYTHON}" -I -B "${TARGET_HELPER}" --check >/dev/null \
+    || die 'DigitalOcean target helper check failed'
   "${CORE_INSTALLER}" --check >/dev/null
   "${TUNNEL_INSTALLER}" --check >/dev/null
   printf 'install-lil-tweak-release check: ok\n'
@@ -63,6 +66,18 @@ if [[ "${1:-}" == "--under-lease" ]]; then
   [[ $# -eq 1 ]] || die 'invalid internal release invocation'
   [[ "${LIL_TWEAK_ROLLBACK_LEASE_FD:-}" =~ ^(0|[1-9][0-9]*)$ ]] \
     || die 'verified rollback lease is required'
+elif [[ $# -eq 0 || "${1:-}" == "--install" ]]; then
+  :
+else
+  die 'usage: install-lil-tweak-release.sh [--check|--install]'
+fi
+
+[[ ${EUID} -eq 0 ]] || die 'run the release transaction as root on the target droplet'
+offline_check >/dev/null
+"${PYTHON}" -I -B "${TARGET_HELPER}" >/dev/null 2>&1 \
+  || die 'DigitalOcean target verification failed'
+
+if [[ "${1:-}" == "--under-lease" ]]; then
   "${PYTHON}" -I -B "${ROLLBACK_HELPER}" lease-exec \
     --receipt "${rollback_receipt}" \
     --expected-manifest-sha256 "${rollback_manifest_sha256}" \
@@ -88,10 +103,6 @@ if [[ "${1:-}" == "--under-lease" ]]; then
   exit 0
 fi
 
-[[ $# -eq 0 || "${1:-}" == "--install" ]] \
-  || die 'usage: install-lil-tweak-release.sh [--check|--install]'
-[[ ${EUID} -eq 0 ]] || die 'run the release transaction as root on the target droplet'
-offline_check >/dev/null
 [[ "${rollback_receipt}" =~ ^/var/lib/lil-tweak-release-rollback/[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$ ]] \
   || die 'LIL_TWEAK_ROLLBACK_RECEIPT has an invalid production path'
 [[ "${rollback_manifest_sha256}" =~ ^[0-9a-f]{64}$ ]] \

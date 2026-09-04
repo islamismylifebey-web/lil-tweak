@@ -196,6 +196,20 @@ class ReleaseFixture:
 
 
 class ReleaseToolingTests(unittest.TestCase):
+    def test_release_target_gate_has_a_host_safe_offline_check(self) -> None:
+        target = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"
+        result = subprocess.run(
+            [sys.executable, str(target), "--check"],
+            cwd=ROOT,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "DigitalOcean target check: ok\n")
+        self.assertEqual(result.stderr, "")
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.release = load_release_module()

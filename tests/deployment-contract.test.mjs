@@ -22,6 +22,7 @@ const requiredFiles = [
   "scripts/install-lil-tweak-release.sh",
   "scripts/lil-tweak-secret-snapshot.py",
   "scripts/lil-tweak-host-identity.py",
+  "scripts/lil-tweak-digitalocean-target.py",
   "deploy/cloudflared/validate_credentials.py",
   "deploy/cloudflared/verify_binary.py",
   "scripts/verify-deployment.sh",
@@ -183,6 +184,7 @@ test("scripts support offline checks without contacting the droplet", () => {
   for (const script of [
     "scripts/lil-tweak-secret-snapshot.py",
     "scripts/lil-tweak-host-identity.py",
+    "scripts/lil-tweak-digitalocean-target.py",
   ]) {
     const helperCheck = spawnSync("python3", [script, "--check"], { encoding: "utf8" });
     assert.equal(helperCheck.status, 0, helperCheck.stderr || helperCheck.stdout);
@@ -201,6 +203,31 @@ test("scripts support offline checks without contacting the droplet", () => {
   assert.match(ready, /\[\s*"v2",\s*key_id,\s*"GET",\s*"\/readyz"/);
   assert.match(ready, /request_id,\s*"",\s*owner/);
   assert.doesNotMatch(ready, /\["v1",\s*"GET"/);
+});
+
+test("all release mutation paths bind the exact DigitalOcean guest", () => {
+  for (const path of [
+    "scripts/install-digitalocean.sh",
+    "scripts/install-cloudflare-tunnel.sh",
+    "scripts/install-lil-tweak-release.sh",
+    "scripts/lil-tweak-rollback.py",
+  ]) {
+    const source = read(path);
+    assert.match(source, /lil-tweak-digitalocean-target\.py/);
+    assert.doesNotMatch(source, /LIL_TWEAK_EXPECTED_HOST/);
+  }
+
+  for (const path of [
+    "README.md",
+    "docs/operations/digitalocean.md",
+    "docs/operations/cloudflare-private-ingress.md",
+  ]) {
+    const document = read(path);
+    assert.match(document, /DigitalOcean Droplet `597343619`/);
+    assert.match(document, /`galor-tweak-runner-01`/);
+    assert.match(document, /http:\/\/169\.254\.169\.254\/metadata\/v1\/id/);
+    assert.match(document, /scripts\/lil-tweak-digitalocean-target\.py/);
+  }
 });
 
 test("runbook makes Cloudflare the only ingress and documents lifecycle drills", () => {
@@ -238,7 +265,14 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
       assert.ok(normalized.includes(phrase), `missing dedicated-host declaration: ${phrase}`);
     }
   }
-  assert.doesNotMatch(runbook, /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/);
+  const withoutMetadataEndpoint = runbook.replaceAll(
+    "http://169.254.169.254/metadata/v1/id",
+    "",
+  );
+  assert.doesNotMatch(
+    withoutMetadataEndpoint,
+    /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/,
+  );
 });
 
 test("four-GiB standalone deployment stays blocked pending live evidence", () => {

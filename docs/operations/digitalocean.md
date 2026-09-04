@@ -15,12 +15,16 @@ galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host. GALOR Hu
 
 ## Host and image preparation
 
-Confirm the target before doing anything:
+The immutable guest is DigitalOcean Droplet `597343619` with short hostname `galor-tweak-runner-01`. Confirm both identity components before doing anything:
 
 ```bash
-hostname --short
-test "$(hostname --short)" = galor-tweak-runner-01
+python3 scripts/lil-tweak-digitalocean-target.py --check
+sudo python3 scripts/lil-tweak-digitalocean-target.py
 ```
+
+The live command reads only the Linux short hostname and `http://169.254.169.254/metadata/v1/id`. It accepts only exact decimal ID `597343619`, rejects redirects, uses a two-second timeout, and reads at most 33 bytes to enforce a 32-byte ceiling. No environment variable or command-line option can replace the expected provider, Droplet ID, hostname, metadata URL, role, timeout, or response limit. A mismatch or metadata failure emits only a generic error. The `--check` command validates the helper and fixed parser fixtures without contacting guest metadata, so it is safe on a development host.
+
+Every mutating core installer, Tunnel installer, combined wrapper path (including its internal lease-held invocation), and rollback API runs this verifier after root/offline validation and before credentials, receipt parents or locks, temporary files, users, directories, systemd, or Podman changes. The legacy word embedded in the immutable provider hostname grants no relationship, credential, transport, process, network, repository, or authority.
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.
 
@@ -64,7 +68,7 @@ After a successful install, securely remove the staging copy according to the ho
 
 ## Install and migration
 
-The following first performs an offline contract check. `--check` does not contact the droplet network, start services, or consume credentials.
+The following first performs an offline contract check. `--check` validates the exact-target helper without contacting guest metadata or any other droplet network endpoint, starting services, or consuming credentials.
 
 ```bash
 scripts/install-lil-tweak-release.sh --check
@@ -124,7 +128,7 @@ The source and runtime manifests must be the root-owned, single-link, mode-`0444
 
 The fresh-host installer:
 
-1. refuses the wrong hostname, mutable images, missing configuration, symlinks, weak database passwords, and placeholder values;
+1. refuses any hostname or metadata Droplet-ID mismatch, mutable images, missing configuration, symlinks, weak database passwords, and placeholder values;
 2. after verifying the rollback receipt and before mutating the host, validates and freezes the four fixed secret inputs in a new root-owned mode-`0700` directory containing mode-`0600` snapshots; all later reads use only those snapshots;
 3. creates or validates the dedicated account and enables lingering;
 4. stages private-registry authentication only in the service runtime, pulls and verifies all three immutable images, and removes the temporary authentication before any application unit can start;
