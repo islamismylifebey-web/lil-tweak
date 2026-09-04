@@ -12,6 +12,7 @@ from .test_world import (
     AttemptMode,
     TestWorldAttempt,
     TestWorldConflict,
+    TestWorldLease,
     TestWorldNotFound,
     TestWorldStore,
 )
@@ -84,7 +85,7 @@ def _elapsed_ms(start: float, end: float) -> int:
 
 
 class TestWorldAttemptRunner:
-    """Claims one durable attempt, executes Tueiq, then persists judge truth."""
+    """Executes one claimed durable attempt and persists deterministic judge truth."""
 
     def __init__(
         self,
@@ -115,23 +116,40 @@ class TestWorldAttemptRunner:
         self.clock = clock
         self.monotonic = monotonic
 
-    def run_attempt(self, attempt_id: str, owner_id: str) -> TestWorldAttempt:
+    def run_attempt(
+        self,
+        attempt_id: str,
+        owner_id: str,
+        *,
+        lease: TestWorldLease | None = None,
+    ) -> TestWorldAttempt:
         attempt = self.store.get_attempt(attempt_id, owner_id)
         if attempt is None:
             raise TestWorldNotFound("attempt not found")
-        lease = self.store.claim_attempt(
-            attempt_id,
-            self.worker_id,
-            lease_seconds=self.lease_seconds,
-            now=self.clock(),
-        )
+
         if lease is None:
-            current = self.store.get_attempt(attempt_id, owner_id)
-            if current is None:
-                raise TestWorldNotFound("attempt not found")
-            if current.status.value in {"passed", "failed", "error"}:
-                return current
-            raise TestWorldConflict("attempt is already claimed")
+            lease = self.store.claim_attempt(
+                attempt_id,
+                self.worker_id,
+                lease_seconds=self.lease_seconds,
+                now=self.clock(),
+            )
+            if lease is None:
+                current = self.store.get_attempt(attempt_id, owner_id)
+                if current is None:
+                    raise TestWorldNotFound("attempt not found")
+                if current.status.value in {"passed", "failed", "error"}:
+                    return current
+                raise TestWorldConflict("attempt is already claimed")
+        elif (
+            lease.attempt_id != attempt.id
+            or lease.world_id != attempt.world_id
+            or lease.owner_id != owner_id
+            or lease.worker_id != self.worker_id
+            or lease.generation <= 0
+            or attempt.status.value != "running"
+        ):
+            raise TestWorldConflict("invalid preclaimed attempt lease")
 
         world = self.store.get_world(attempt.world_id, owner_id)
         if world is None:
@@ -139,6 +157,7 @@ class TestWorldAttemptRunner:
             raise TestWorldNotFound("world not found")
 
         workspace: Any | None = None
+        cleaned = False
         attempt_started = self.monotonic()
         try:
             workspace = self.prepare_workspace(world, attempt)
@@ -166,7 +185,13 @@ class TestWorldAttemptRunner:
                 feedback.append(result)
                 all_passed = all_passed and result["passed"]
             judge_finished = self.monotonic()
-            attempt_finished = judge_finished
+
+            # A sandbox lifecycle/cleanup failure invalidates the execution
+            # environment. Teardown must therefore succeed before PASS/FAIL is
+            # committed as trustworthy judge evidence.
+            self.cleanup_workspace(workspace)
+            cleaned = True
+            attempt_finished = self.monotonic()
 
             return self.store.complete_attempt(
                 lease,
@@ -199,7 +224,7 @@ class TestWorldAttemptRunner:
                 now=self.clock(),
             )
         finally:
-            if workspace is not None:
+            if workspace is not None and not cleaned:
                 try:
                     self.cleanup_workspace(workspace)
                 except Exception:
