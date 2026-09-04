@@ -33,6 +33,10 @@ _WORLD_COLUMNS = (
     "id,owner_id,name,objective,repository_url,source_commit,checks,max_attempts,status,"
     "world_fingerprint,judge_version,extract(epoch from created_at),extract(epoch from updated_at)"
 )
+_QUALIFIED_WORLD_COLUMNS = (
+    "w.id,w.owner_id,w.name,w.objective,w.repository_url,w.source_commit,w.checks,w.max_attempts,w.status,"
+    "w.world_fingerprint,w.judge_version,extract(epoch from w.created_at),extract(epoch from w.updated_at)"
+)
 _ATTEMPT_COLUMNS = (
     "id,world_id,owner_id,attempt_number,status,attempt_mode,world_fingerprint,judge_version,outcome,"
     "previous_attempt_id,feedback,cumulative_patch,plan,summary,tests,model_calls,input_tokens,"
@@ -209,6 +213,18 @@ class PostgresTestWorldStore:
                 (owner_id, limit),
             )
             return [_world_from_row(row) for row in cursor.fetchall()]
+
+    def list_worlds_with_attempt_counts(self, owner_id: str, *, limit: int = 20) -> list[tuple[TestWorld, int]]:
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
+            raise ValueError("invalid world limit")
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT {_QUALIFIED_WORLD_COLUMNS},count(a.id) FROM lil_tweak_test_worlds w "
+                "LEFT JOIN lil_tweak_test_world_attempts a ON a.world_id=w.id AND a.owner_id=w.owner_id "
+                "WHERE w.owner_id=%s GROUP BY w.id ORDER BY w.updated_at DESC,w.created_at DESC,w.id DESC LIMIT %s",
+                (owner_id, limit),
+            )
+            return [(_world_from_row(row[:13]), int(row[13])) for row in cursor.fetchall()]
 
     def get_world(self, world_id: str, owner_id: str) -> TestWorld | None:
         with self._connect() as connection, connection.cursor() as cursor:
@@ -501,6 +517,8 @@ class PostgresTestWorldStore:
         current_time = time.time() if now is None else now
         bounded_feedback = _validate_feedback(feedback)
         duration_ms = _validate_duration(duration_ms, "duration")
+        if not isinstance(summary, str) or len(summary.encode("utf-8")) > 64 * 1024:
+            raise ValueError("invalid attempt text")
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
                 "SELECT attempt_number FROM lil_tweak_test_world_attempts WHERE id=%s AND world_id=%s "
