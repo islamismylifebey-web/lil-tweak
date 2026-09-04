@@ -54,6 +54,16 @@ class FailureRecoverySecurityTests(unittest.TestCase):
         self.assertEqual(decision.action, RecoveryAction.BLOCK)
         self.assertFalse(decision.allowed)
 
+    def test_missing_approval_blocks_an_otherwise_permitted_repair(self):
+        decision = self.controller.decide(
+            FailureSignal(code=FailureCode.TEST_FAILURE),
+            context(approval_present=False),
+        )
+        self.assertEqual(decision.action, RecoveryAction.ESCALATE)
+        self.assertFalse(decision.allowed)
+        self.assertTrue(decision.requires_reauthorization)
+        self.assertIn("missing_required_approval", decision.reason_codes)
+
     def test_expired_lease_blocks(self):
         decision = self.controller.decide(
             FailureSignal(code=FailureCode.LEASE_EXPIRED, transient=True), context()
@@ -122,6 +132,31 @@ class FailureRecoverySecurityTests(unittest.TestCase):
         )
         self.assertEqual(second.action, RecoveryAction.BLOCK)
         self.assertIn("fingerprint_retry_budget_exhausted", second.reason_codes)
+
+    def test_per_node_retry_budget_survives_a_changed_fingerprint(self):
+        controller = FailureRecoveryController(
+            history=InMemoryRecoveryHistoryStore(),
+            budgets=RecoveryBudgets(max_node_retries=1, max_fingerprint_retries=2),
+        )
+        first_context = context()
+        first = controller.decide(
+            FailureSignal(code=FailureCode.TIMEOUT, transient=True), first_context
+        )
+        controller.record_outcome(
+            first,
+            first_context,
+            RecoveryOutcome(
+                status=RecoveryOutcomeStatus.FAILED,
+                progress=True,
+                resulting_candidate_digest="d" * 64,
+            ),
+        )
+        second = controller.decide(
+            FailureSignal(code=FailureCode.TIMEOUT, transient=True),
+            context(attempt=2, candidate_digest="d" * 64),
+        )
+        self.assertEqual(second.action, RecoveryAction.BLOCK)
+        self.assertIn("node_retry_budget_exhausted", second.reason_codes)
 
     def test_rollback_failure_never_retries(self):
         decision = self.controller.decide(
