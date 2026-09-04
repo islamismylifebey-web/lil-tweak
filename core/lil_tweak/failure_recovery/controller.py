@@ -165,6 +165,11 @@ class FailureRecoveryController:
                 and outcome.resulting_resource_id != decision.target_resource_id
             ):
                 raise ValueError("successful_reroute_target_evidence_required")
+        elif (
+            outcome.resulting_resource_id is not None
+            and outcome.resulting_resource_id != decision.resource_id
+        ):
+            raise ValueError("recovery_outcome_resource_not_authorized")
         normalized = self._normalize_progress(decision, issued, outcome)
         return self.history.append_outcome(decision, normalized)
 
@@ -224,7 +229,11 @@ class FailureRecoveryController:
             return outcome
         initial_checks = set(issued.remaining_failed_checks)
         remaining_checks = set(outcome.remaining_failed_checks)
-        checks_reduced = bool(initial_checks) and remaining_checks < initial_checks
+        checks_reduced = (
+            bool(initial_checks)
+            and bool(remaining_checks)
+            and remaining_checks < initial_checks
+        )
         plan_changed = (
             outcome.resulting_plan_digest is not None
             and outcome.resulting_plan_digest != decision.plan_digest
@@ -234,12 +243,9 @@ class FailureRecoveryController:
             and outcome.resulting_candidate_digest != decision.candidate_digest
         )
         resource_changed = (
-            outcome.resulting_resource_id is not None
-            and outcome.resulting_resource_id != decision.resource_id
-            and (
-                decision.target_resource_id is None
-                or outcome.resulting_resource_id == decision.target_resource_id
-            )
+            decision.action is RecoveryAction.REROUTE_RESOURCE
+            and decision.target_resource_id is not None
+            and outcome.resulting_resource_id == decision.target_resource_id
         )
         objective_progress = (
             checks_reduced or plan_changed or candidate_changed or resource_changed
