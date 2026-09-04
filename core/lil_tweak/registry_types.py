@@ -235,6 +235,7 @@ class Asset:
     asset_type: AssetType
     canonical_locator: str
     active: bool = True
+    prohibited: bool = False
 
     def __post_init__(self) -> None:
         self.validate()
@@ -249,6 +250,7 @@ class Asset:
             max_length=_LOCATOR_MAX_LENGTH,
         )
         _require_bool(self.active, "active")
+        _require_bool(self.prohibited, "prohibited")
         return self
 
 
@@ -302,6 +304,22 @@ class ContractVersion:
 
 
 @dataclass(frozen=True, slots=True)
+class ContractVersionRef:
+    contract_id: str
+    version: int
+    digest: str
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> Self:
+        _require_id(self.contract_id, "contract_id")
+        _require_positive_int(self.version, "version")
+        _require_digest(self.digest, "digest")
+        return self
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionRequest:
     owner_id: str
     requester_id: str
@@ -340,6 +358,7 @@ class Decision:
     decision_id: str
     owner_id: str
     request: DecisionRequest
+    contract_versions: tuple[ContractVersionRef, ...]
     contract_digests: tuple[str, ...]
     recommended_mode: ExecutionMode
     reason_codes: tuple[ReasonCode, ...]
@@ -361,12 +380,45 @@ class Decision:
         self.request.validate()
         if self.request.owner_id != self.owner_id:
             raise RegistryValidationError("decision owner_id must match request owner_id")
+        if not isinstance(self.contract_versions, tuple):
+            raise RegistryValidationError("contract_versions must be a tuple")
+        for index, reference in enumerate(self.contract_versions):
+            if not isinstance(reference, ContractVersionRef):
+                raise RegistryValidationError(
+                    f"contract_versions[{index}] must be ContractVersionRef"
+                )
+            reference.validate()
+        identities = tuple(
+            (reference.contract_id, reference.version)
+            for reference in self.contract_versions
+        )
+        if len(set(identities)) != len(identities):
+            raise RegistryValidationError("contract_versions must not contain duplicates")
+        deterministic_order = tuple(
+            sorted(
+                self.contract_versions,
+                key=lambda reference: (
+                    reference.contract_id,
+                    reference.version,
+                    reference.digest,
+                ),
+            )
+        )
+        if self.contract_versions != deterministic_order:
+            raise RegistryValidationError("contract_versions must use deterministic order")
         if not isinstance(self.contract_digests, tuple):
             raise RegistryValidationError("contract_digests must be a tuple")
         for index, digest in enumerate(self.contract_digests):
             _require_digest(digest, f"contract_digests[{index}]")
         if len(set(self.contract_digests)) != len(self.contract_digests):
             raise RegistryValidationError("contract_digests must not contain duplicates")
+        reference_digests = tuple(
+            reference.digest for reference in self.contract_versions
+        )
+        if self.contract_digests != reference_digests:
+            raise RegistryValidationError(
+                "contract_versions and contract_digests must identify the same ordered digests"
+            )
         _require_enum(self.recommended_mode, ExecutionMode, "recommended_mode")
         if not isinstance(self.reason_codes, tuple):
             raise RegistryValidationError("reason_codes must be a tuple")

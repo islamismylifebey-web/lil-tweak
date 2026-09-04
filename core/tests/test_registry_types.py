@@ -11,6 +11,7 @@ from core.lil_tweak.registry_types import (
     AssetType,
     AuditEvent,
     ContractVersion,
+    ContractVersionRef,
     Decision,
     DecisionRequest,
     Environment,
@@ -30,6 +31,7 @@ LATER = UTC_NOW + timedelta(hours=1)
 DIGEST = "a" * 64
 REVISION = "b" * 40
 OWNER = "owner-12345678"
+REF = ContractVersionRef("contract:a", 1, DIGEST)
 
 
 class RegistryTypesTests(unittest.TestCase):
@@ -215,11 +217,13 @@ class RegistryTypesTests(unittest.TestCase):
                 effective_at=UTC_NOW,
                 expires_at=LATER,
             ),
+            REF,
             request,
             Decision(
                 decision_id="decision:a",
                 owner_id=OWNER,
                 request=request,
+                contract_versions=(REF,),
                 contract_digests=(DIGEST,),
                 recommended_mode=ExecutionMode.DRAFT_CODE,
                 reason_codes=(),
@@ -291,8 +295,9 @@ class RegistryTypesTests(unittest.TestCase):
             with self.subTest(record=type(record).__name__):
                 self.assertTrue(dataclasses.is_dataclass(record))
                 self.assertFalse(hasattr(record, "__dict__"))
+                field_name = "contract_id" if isinstance(record, ContractVersionRef) else "owner_id"
                 with self.assertRaises(dataclasses.FrozenInstanceError):
-                    record.owner_id = "owner:changed"  # type: ignore[misc]
+                    setattr(record, field_name, "changed")
 
     def test_decision_owner_must_match_request_owner(self):
         request = DecisionRequest(
@@ -310,7 +315,100 @@ class RegistryTypesTests(unittest.TestCase):
                 decision_id="decision:a",
                 owner_id="owner-other",
                 request=request,
+                contract_versions=(REF,),
                 contract_digests=(DIGEST,),
+                recommended_mode=ExecutionMode.DRAFT_CODE,
+                reason_codes=(),
+                required_approval_ids=(),
+                required_evidence_types=(),
+                decision_digest=DIGEST,
+                created_at=UTC_NOW,
+            )
+
+    def test_asset_prohibited_defaults_false(self):
+        asset = Asset(OWNER, "asset:a", AssetType.REPOSITORY, "github:owner/repo")
+        self.assertIs(asset.prohibited, False)
+
+    def test_asset_prohibited_requires_strict_boolean(self):
+        with self.assertRaises(RegistryValidationError):
+            Asset(
+                OWNER,
+                "asset:a",
+                AssetType.REPOSITORY,
+                "github:owner/repo",
+                prohibited=1,  # type: ignore[arg-type]
+            )
+
+    def test_contract_version_ref_validates_id_positive_version_and_digest(self):
+        self.assertEqual(ContractVersionRef("contract:a", 1, DIGEST), REF)
+        for kwargs in (
+            {"contract_id": "", "version": 1, "digest": DIGEST},
+            {"contract_id": "contract:a", "version": 0, "digest": DIGEST},
+            {"contract_id": "contract:a", "version": 1, "digest": "A" * 64},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(RegistryValidationError):
+                    ContractVersionRef(**kwargs)
+
+    def test_duplicate_matched_contract_references_are_rejected(self):
+        request = DecisionRequest(
+            owner_id=OWNER,
+            requester_id="principal:requester",
+            agent_id="principal:lil-tweak",
+            asset_id="asset:lil-tweak",
+            action_class=ActionClass.CODE_GENERATION,
+            operation_intent=OperationIntent.PROPOSE,
+            environment=Environment.REPOSITORY,
+            source_revision=REVISION,
+        )
+        with self.assertRaises(RegistryValidationError):
+            Decision(
+                decision_id="decision:a",
+                owner_id=OWNER,
+                request=request,
+                contract_versions=(REF, REF),
+                contract_digests=(DIGEST, "c" * 64),
+                recommended_mode=ExecutionMode.DRAFT_CODE,
+                reason_codes=(),
+                required_approval_ids=(),
+                required_evidence_types=(),
+                decision_digest=DIGEST,
+                created_at=UTC_NOW,
+            )
+
+    def test_contract_versions_and_digests_must_be_consistent_and_ordered(self):
+        request = DecisionRequest(
+            owner_id=OWNER,
+            requester_id="principal:requester",
+            agent_id="principal:lil-tweak",
+            asset_id="asset:lil-tweak",
+            action_class=ActionClass.CODE_GENERATION,
+            operation_intent=OperationIntent.PROPOSE,
+            environment=Environment.REPOSITORY,
+            source_revision=REVISION,
+        )
+        second = ContractVersionRef("contract:b", 1, "c" * 64)
+        with self.assertRaises(RegistryValidationError):
+            Decision(
+                decision_id="decision:a",
+                owner_id=OWNER,
+                request=request,
+                contract_versions=(REF,),
+                contract_digests=("c" * 64,),
+                recommended_mode=ExecutionMode.DRAFT_CODE,
+                reason_codes=(),
+                required_approval_ids=(),
+                required_evidence_types=(),
+                decision_digest=DIGEST,
+                created_at=UTC_NOW,
+            )
+        with self.assertRaises(RegistryValidationError):
+            Decision(
+                decision_id="decision:a",
+                owner_id=OWNER,
+                request=request,
+                contract_versions=(second, REF),
+                contract_digests=(second.digest, REF.digest),
                 recommended_mode=ExecutionMode.DRAFT_CODE,
                 reason_codes=(),
                 required_approval_ids=(),

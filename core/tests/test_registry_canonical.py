@@ -12,6 +12,7 @@ from core.lil_tweak.registry_canonical import (
 )
 from core.lil_tweak.registry_types import (
     ActionClass,
+    ContractVersionRef,
     DecisionRequest,
     Environment,
     OperationIntent,
@@ -93,6 +94,16 @@ class RegistryCanonicalTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(CanonicalizationError):
                     decision_binding(REQUEST, (invalid,))
+
+    def test_contract_version_ref_canonical_output_is_deterministic(self):
+        reference = ContractVersionRef("contract:a", 2, "c" * 64)
+        expected = (
+            b'{"contract_id":"contract:a","digest":"'
+            + ("c" * 64).encode("ascii")
+            + b'","version":2}'
+        )
+        self.assertEqual(canonical_json(reference), expected)
+        self.assertEqual(canonical_json(reference), canonical_json(reference))
 
 
 if __name__ == "__main__":
