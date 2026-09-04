@@ -1,4 +1,4 @@
-name: Probe Dedicated GALOR Tweak Runner
+name: Retire Stale Runner Probe
 
 on:
   push:
@@ -13,53 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  exact-host-probe:
-    name: Exact dedicated runner identity probe
-    runs-on: [self-hosted, Linux, X64, role-tweak-runner]
-    timeout-minutes: 5
+  retire-probe:
+    name: Retire stale runner probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - name: Verify immutable host and bounded runtime state
+      - name: Confirm no self-hosted runner claim
         shell: bash
         run: |
           set -Eeuo pipefail
-          umask 077
-          evidence="$RUNNER_TEMP/galor-tweak-runner-01-probe.json"
-          runner_name="${RUNNER_NAME:-}"
-          host_name="$(hostname)"
-          droplet_id="$(curl --fail --silent --show-error --max-time 2 http://169.254.169.254/metadata/v1/id)"
-          supervisor_active=false
-          supervisor_socket=false
-          if systemctl is-active --quiet galor-tweak-supervisor.service 2>/dev/null; then supervisor_active=true; fi
-          if test -S /run/galor-tweak-supervisor/runtime-evidence.sock; then supervisor_socket=true; fi
-          node --input-type=module - "$evidence" "$runner_name" "$host_name" "$droplet_id" "$supervisor_active" "$supervisor_socket" <<'NODE'
-          import { writeFileSync } from "node:fs";
-          const [path, runnerName, hostName, dropletId, supervisorActive, supervisorSocket] = process.argv.slice(2);
-          writeFileSync(path, `${JSON.stringify({
-            schemaVersion: "galor-dedicated-runner-probe-v1",
-            repository: process.env.GITHUB_REPOSITORY,
-            workflowRunId: process.env.GITHUB_RUN_ID,
-            workflowRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
-            runnerName,
-            runnerOS: process.env.RUNNER_OS,
-            runnerArch: process.env.RUNNER_ARCH,
-            hostName,
-            dropletId,
-            requiredRoleLabelSelected: true,
-            supervisorActive: supervisorActive === "true",
-            supervisorSocket: supervisorSocket === "true",
-          })}\n`, { mode: 0o600 });
-          NODE
-          test "$runner_name" = "galor-tweak-runner-01"
-          test "$host_name" = "galor-tweak-runner-01"
-          test "$droplet_id" = "597343619"
-          sha256sum "$evidence" | tee "$RUNNER_TEMP/galor-tweak-runner-01-probe.sha256"
-          cat "$evidence"
-      - name: Upload bounded probe evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: galor-tweak-runner-01-live-probe-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/galor-tweak-runner-01-probe.json
-            ${{ runner.temp }}/galor-tweak-runner-01-probe.sha256
-          if-no-files-found: error
-          retention-days: 7
+          echo "Stale supervisor probe retired; no self-hosted runner requested."
