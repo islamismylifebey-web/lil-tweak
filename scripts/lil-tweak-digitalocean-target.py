@@ -110,7 +110,7 @@ def read_metadata(opener: Any, url: str) -> bytes:
 def read_live_metadata(
     *,
     opener_factory: Callable[[], Any] = lambda: urllib.request.build_opener(
-        RejectRedirects()
+        urllib.request.ProxyHandler({}), RejectRedirects()
     ),
 ) -> bytes:
     return read_metadata(opener_factory(), METADATA_URL)

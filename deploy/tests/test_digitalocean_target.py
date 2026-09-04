@@ -5,10 +5,13 @@ from dataclasses import FrozenInstanceError
 import http.server
 import importlib.util
 import io
+import os
 from pathlib import Path
+import socket
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 import urllib.request
 
 
@@ -60,6 +63,21 @@ class MetadataHandler(http.server.BaseHTTPRequestHandler):
         return
 
 
+class HostileProxyHandler(http.server.BaseHTTPRequestHandler):
+    requests: list[str] = []
+
+    def do_GET(self) -> None:
+        type(self).requests.append(self.path)
+        body = b"597343619\n"
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, _format: str, *_arguments: object) -> None:
+        return
+
+
 class RecordingResponse:
     def __init__(self, payload: bytes) -> None:
         self.payload = payload
@@ -97,12 +115,20 @@ class DigitalOceanTargetTests(unittest.TestCase):
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MetadataHandler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
+        cls.proxy = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), HostileProxyHandler
+        )
+        cls.proxy_thread = threading.Thread(target=cls.proxy.serve_forever, daemon=True)
+        cls.proxy_thread.start()
 
     @classmethod
     def tearDownClass(cls) -> None:
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join(timeout=2)
+        cls.proxy.shutdown()
+        cls.proxy.server_close()
+        cls.proxy_thread.join(timeout=2)
 
     def test_accepts_only_exact_hostname_and_metadata_id(self) -> None:
         identity = self.target.verify_target(
@@ -170,6 +196,42 @@ class DigitalOceanTargetTests(unittest.TestCase):
         self.assertEqual(
             opener.calls,
             [("http://169.254.169.254/metadata/v1/id", 2)],
+        )
+
+    def test_live_metadata_bypasses_every_hostile_proxy_environment(self) -> None:
+        proxy_url = f"http://127.0.0.1:{self.proxy.server_port}"
+        proxy_environment = {
+            "HTTP_PROXY": proxy_url,
+            "http_proxy": proxy_url,
+            "HTTPS_PROXY": proxy_url,
+            "https_proxy": proxy_url,
+            "ALL_PROXY": proxy_url,
+            "all_proxy": proxy_url,
+        }
+        original_create_connection = socket.create_connection
+
+        def block_direct_metadata(address, *args, **kwargs):
+            if address[0] == "169.254.169.254":
+                raise OSError("direct metadata unavailable in test")
+            return original_create_connection(address, *args, **kwargs)
+
+        HostileProxyHandler.requests.clear()
+        accepted_proxy_identity = False
+        with patch.dict(os.environ, proxy_environment, clear=True), patch(
+            "socket.create_connection", side_effect=block_direct_metadata
+        ):
+            try:
+                self.target.verify_target(
+                    hostname_getter=lambda: "galor-tweak-runner-01"
+                )
+            except self.target.TargetVerificationError:
+                pass
+            else:
+                accepted_proxy_identity = True
+
+        self.assertEqual(
+            (accepted_proxy_identity, HostileProxyHandler.requests),
+            (False, []),
         )
 
     def test_check_is_offline_and_live_failure_is_one_generic_message(self) -> None:
