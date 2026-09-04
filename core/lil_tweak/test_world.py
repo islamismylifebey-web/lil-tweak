@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Protocol
 
@@ -20,6 +20,7 @@ _ATTEMPT_ID = re.compile(r"^attempt:[0-9a-f]{32}$")
 _COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _MAX_PATCH_BYTES = 2 * 1024 * 1024
 _MAX_FEEDBACK_BYTES = 256 * 1024
+_MAX_DURATION_MS = 24 * 60 * 60 * 1000
 
 
 class TestWorldError(RuntimeError):
@@ -92,6 +93,8 @@ class TestWorld:
     checks: tuple[TestCheck, ...]
     max_attempts: int
     status: WorldStatus
+    fingerprint: str
+    judge_version: str
     created_at: float
     updated_at: float
 
@@ -103,6 +106,8 @@ class TestWorldAttempt:
     owner_id: str
     number: int
     status: AttemptStatus
+    world_fingerprint: str
+    judge_version: str
     outcome: str | None = None
     previous_attempt_id: str | None = None
     feedback: tuple[Mapping[str, Any], ...] = ()
@@ -114,6 +119,8 @@ class TestWorldAttempt:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    duration_ms: int = 0
+    judge_duration_ms: int = 0
     created_at: float = 0.0
     started_at: float | None = None
     finished_at: float | None = None
@@ -142,6 +149,16 @@ class TestWorldStore(Protocol):
     def renew_attempt(self, lease: TestWorldLease, *, lease_seconds: int, now: float | None = None) -> TestWorldLease: ...
     def release_attempt(self, lease: TestWorldLease) -> None: ...
     def complete_attempt(self, lease: TestWorldLease, **fields: Any) -> TestWorldAttempt: ...
+    def fail_attempt(self, lease: TestWorldLease, **fields: Any) -> TestWorldAttempt: ...
+
+
+def _judge_version(checks: tuple[TestCheck, ...]) -> str:
+    payload = [
+        {"name": item.name, "command": list(item.command), "timeout_seconds": item.timeout_seconds}
+        for item in checks
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(b"lil-tweak-test-world-judge-v1\0" + encoded).hexdigest()
 
 
 def _world_fingerprint(
@@ -224,6 +241,21 @@ def _validate_feedback(feedback: Sequence[Mapping[str, Any]]) -> tuple[Mapping[s
     return value
 
 
+def _validate_duration(value: int, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= _MAX_DURATION_MS:
+        raise ValueError(f"invalid {field}")
+    return value
+
+
+def _has_complete_pass_proof(world: TestWorld, feedback: tuple[Mapping[str, Any], ...]) -> bool:
+    if len(feedback) != len(world.checks):
+        return False
+    for check, item in zip(world.checks, feedback, strict=True):
+        if item.get("check") != check.name or item.get("passed") is not True:
+            return False
+    return True
+
+
 class MemoryTestWorldStore:
     """Thread-safe executable Test World contract for tests and local use."""
 
@@ -261,6 +293,7 @@ class MemoryTestWorldStore:
             max_attempts,
         )
         fingerprint = _world_fingerprint(name, objective, repository_url, commit, check_tuple, max_attempts)
+        judge_version = _judge_version(check_tuple)
         identity = (owner_id, idempotency_key)
         with self._lock:
             existing = self._world_idempotency.get(identity)
@@ -280,6 +313,8 @@ class MemoryTestWorldStore:
                 checks=check_tuple,
                 max_attempts=max_attempts,
                 status=WorldStatus.READY,
+                fingerprint=fingerprint,
+                judge_version=judge_version,
                 created_at=now,
                 updated_at=now,
             )
@@ -346,6 +381,8 @@ class MemoryTestWorldStore:
                 owner_id=owner_id,
                 number=len(attempt_ids) + 1,
                 status=AttemptStatus.QUEUED,
+                world_fingerprint=world.fingerprint,
+                judge_version=world.judge_version,
                 previous_attempt_id=previous_attempt_id,
                 created_at=now,
             )
@@ -468,12 +505,18 @@ class MemoryTestWorldStore:
         input_tokens: int = 0,
         output_tokens: int = 0,
         total_tokens: int = 0,
+        duration_ms: int = 0,
+        judge_duration_ms: int = 0,
         now: float | None = None,
     ) -> TestWorldAttempt:
         current_time = self._clock() if now is None else now
         if not isinstance(passed, bool) or not isinstance(cumulative_patch, str) or len(cumulative_patch.encode("utf-8")) > _MAX_PATCH_BYTES:
             raise ValueError("invalid attempt result")
         bounded_feedback = _validate_feedback(feedback)
+        duration_ms = _validate_duration(duration_ms, "duration")
+        judge_duration_ms = _validate_duration(judge_duration_ms, "judge duration")
+        if judge_duration_ms > duration_ms and duration_ms != 0:
+            raise ValueError("judge duration exceeds attempt duration")
         for value in (plan, summary, tests):
             if not isinstance(value, str) or len(value.encode("utf-8")) > 64 * 1024:
                 raise ValueError("invalid attempt text")
@@ -493,6 +536,11 @@ class MemoryTestWorldStore:
                 or attempt.status is not AttemptStatus.RUNNING
             ):
                 raise TestWorldConflict("stale attempt lease")
+            world = self._worlds[attempt.world_id]
+            if attempt.world_fingerprint != world.fingerprint or attempt.judge_version != world.judge_version:
+                raise TestWorldConflict("attempt challenge version mismatch")
+            if passed and not _has_complete_pass_proof(world, bounded_feedback):
+                raise TestWorldConflict("pass requires complete judge proof")
             status = AttemptStatus.PASSED if passed else AttemptStatus.FAILED
             completed = replace(
                 attempt,
@@ -507,11 +555,12 @@ class MemoryTestWorldStore:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
+                duration_ms=duration_ms,
+                judge_duration_ms=judge_duration_ms,
                 finished_at=current_time,
             )
             self._attempts[attempt.id] = completed
             self._claims.pop(attempt.id, None)
-            world = self._worlds[attempt.world_id]
             if passed:
                 world_status = WorldStatus.PASSED
             elif attempt.number >= world.max_attempts:
@@ -528,10 +577,12 @@ class MemoryTestWorldStore:
         feedback: Sequence[Mapping[str, Any]],
         summary: str = "",
         blocked: bool = False,
+        duration_ms: int = 0,
         now: float | None = None,
     ) -> TestWorldAttempt:
         current_time = self._clock() if now is None else now
         bounded_feedback = _validate_feedback(feedback)
+        duration_ms = _validate_duration(duration_ms, "duration")
         with self._lock:
             current_lease = self._claims.get(lease.attempt_id)
             attempt = self._attempts.get(lease.attempt_id)
@@ -543,6 +594,7 @@ class MemoryTestWorldStore:
                 outcome="error",
                 feedback=bounded_feedback,
                 summary=summary,
+                duration_ms=duration_ms,
                 finished_at=current_time,
             )
             self._attempts[attempt.id] = failed
