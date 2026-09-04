@@ -19,6 +19,7 @@ INVENTORY = (
     (".config/lil-tweak/core.env", 0o600),
     (".local/share/lil-tweak/migrations/001_initial.sql", 0o400),
     (".local/share/lil-tweak/migrations/002_fencing.sql", 0o400),
+    (".local/share/lil-tweak/migrations/003_test_world.sql", 0o400),
     (".local/share/lil-tweak/migrations/postgres-bootstrap.sql", 0o400),
     (".local/share/lil-tweak/migrations/postgres-grants.sql", 0o400),
     (".config/containers/systemd/lil-tweak-core.container", 0o644),

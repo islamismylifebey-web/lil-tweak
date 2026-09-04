@@ -309,7 +309,7 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             with psycopg.connect(config.database_url) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "SELECT EXISTS (SELECT 1 FROM lil_tweak_schema_version WHERE version=2)"
+                        "SELECT EXISTS (SELECT 1 FROM lil_tweak_schema_version WHERE version=3)"
                     )
                     database = bool(cursor.fetchone()[0])
         except Exception:

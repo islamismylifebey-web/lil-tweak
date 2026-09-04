@@ -89,6 +89,7 @@ MANAGED_PATHS: tuple[tuple[str, str, bool], ...] = (
     ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations", "directory", False),
     ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations/001_initial.sql", "regular", False),
     ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations/002_fencing.sql", "regular", False),
+    ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations/003_test_world.sql", "regular", False),
     ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations/postgres-bootstrap.sql", "regular", False),
     ("/var/lib/lil-tweak/.local/share/lil-tweak/migrations/postgres-grants.sql", "regular", False),
     ("/usr/local/libexec/lil-tweak", "directory", False),

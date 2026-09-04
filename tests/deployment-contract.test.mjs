@@ -129,7 +129,9 @@ test("installer is fresh-host bound and rejects mutable images", () => {
   assert.match(installer, /schema_exists=/);
   assert.match(installer, /\$\{schema_version\}" == "1"/);
   assert.match(installer, /\$\{schema_version\}" == "2"/);
+  assert.match(installer, /\$\{schema_version\}" == "3"/);
   assert.match(installer, /apply_migration "\$\{MIGRATION_002_SOURCE\}"/);
+  assert.match(installer, /apply_migration "\$\{MIGRATION_003_SOURCE\}"/);
   assert.doesNotMatch(installer, /CASE WHEN to_regclass/);
   assert.doesNotMatch(installer, /systemctl --user enable --now lil-tweak-(?:core|postgres)\.service/);
   assert.doesNotMatch(installer, /\beval\b/);

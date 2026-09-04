@@ -136,7 +136,7 @@ The fresh-host installer:
 10. grants the application role data access without schema-creation rights; and
 11. starts one trusted-core worker only after the migration succeeds.
 
-The installer accepts only schema versions zero, one, or two and advances one known migration at a time. A failed `002_fencing.sql` transaction leaves version one available for a safe installer retry. The deployment verifier requires version two, the generation-fencing column, and the one-proposal approval constraint before cutover. For migration 003 or above, add another separately reviewed forward migration and teach the installer the next exact step. Never edit an applied migration and never let application startup apply schema changes.
+The installer accepts only schema versions zero, one, two, or three and advances one known migration at a time. A failed `002_fencing.sql` transaction leaves version one available for a safe installer retry; a failed `003_test_world.sql` transaction leaves version two available for the same safe retry. The deployment verifier requires schema version three, the generation-fencing column, the one-proposal approval constraint, and both durable Test World tables before cutover. Never edit an applied migration and never let application startup apply schema changes.
 
 ## Cloudflare-only ingress
 
