@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test World focused core contracts
-        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest core.tests.test_test_world core.tests.test_test_world_schema core.tests.test_test_world_api core.tests.test_test_world_runner core.tests.test_test_world_invariants core.tests.test_test_world_modes core.tests.test_test_world_runtime
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest core.tests.test_test_world core.tests.test_test_world_schema core.tests.test_test_world_api core.tests.test_test_world_runner core.tests.test_test_world_invariants core.tests.test_test_world_modes core.tests.test_test_world_runtime core.tests.test_test_world_scheduler
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
