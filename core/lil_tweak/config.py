@@ -14,7 +14,7 @@ from .limits import TRUSTED_WORK_ROOT_INODES
 
 
 _SIGNING_KEY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-CANONICAL_OWNER_SCOPE = "ab43c7488fb38a90c7bb9c4bcc0e23e5"
+CANONICAL_OWNER_SCOPE = "a0885bc0b2c079e996629061a723c74d"
 
 
 @dataclass(frozen=True, slots=True)

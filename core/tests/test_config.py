@@ -8,7 +8,7 @@ def valid_environment():
     return {
         "LIL_TWEAK_DATABASE_URL": "postgresql://localhost/lil_tweak",
         "LIL_TWEAK_SIGNING_KEYS_JSON": json.dumps({"primary": "s" * 32}),
-        "LIL_TWEAK_CANONICAL_OWNER_ID": "ab43c7488fb38a90c7bb9c4bcc0e23e5",
+        "LIL_TWEAK_CANONICAL_OWNER_ID": "a0885bc0b2c079e996629061a723c74d",
         "OPENAI_API_KEY": "test-only",
         "LIL_TWEAK_OPENAI_MODEL": "gpt-5.6-terra",
         "LIL_TWEAK_RUNNER_IMAGE": "runner@sha256:" + "a" * 64,
@@ -39,7 +39,18 @@ class ConfigTests(unittest.TestCase):
                     Config.from_env(environment)
 
     def test_canonical_owner_is_the_exact_control_plane_scope_shape(self):
-        for owner in ("owner", "A" * 32, "a" * 31, "g" * 32, "0" * 32):
+        config = Config.from_env(valid_environment())
+        self.assertEqual(
+            config.canonical_owner_id, "a0885bc0b2c079e996629061a723c74d"
+        )
+        for owner in (
+            "owner",
+            "A" * 32,
+            "a" * 31,
+            "g" * 32,
+            "0" * 32,
+            "ab43c7488fb38a90c7bb9c4bcc0e23e5",
+        ):
             with self.subTest(owner=owner):
                 environment = valid_environment()
                 environment["LIL_TWEAK_CANONICAL_OWNER_ID"] = owner

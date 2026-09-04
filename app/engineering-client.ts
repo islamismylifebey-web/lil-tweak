@@ -52,11 +52,11 @@ export function jobCanCancel(state: JobState): boolean {
   return !["completed", "rejected", "cancelled", "failed", "timed_out"].includes(state);
 }
 
-export type EngineeringBridgeState =
+export type EngineeringConnectionState =
   | "pending_configuration"
   | "configured_pending_probe"
-  | "health_reachable"
-  | "health_unreachable";
+  | "ready"
+  | "unreachable";
 
 export interface EngineeringConnectionStatus {
   generatedAt: string;
@@ -66,12 +66,10 @@ export interface EngineeringConnectionStatus {
     r2: "configured" | "missing";
   };
   bridge: {
-    state: EngineeringBridgeState;
     origin: "none" | "core_origin" | "sites_private_tunnel";
     transport: "configured" | "missing";
     signing: "configured" | "missing";
     access: "configured" | "missing" | "not_required";
-    health: "not_checked" | "ok" | "failed";
     missing: string[];
   };
   github: {
@@ -85,9 +83,181 @@ export interface EngineeringConnectionStatus {
     route: "direct_core_to_podman";
     intermediary: "none";
     imagePolicy: "digest_pinned";
-    connection: "not_reported";
+    connection: EngineeringConnectionState;
     qualification: "not_reported";
     label: "Lil Tweak direct Podman runner";
+  };
+}
+
+const CONNECTION_MISSING_NAMES = [
+  "LIL_TWEAK_ENVIRONMENT",
+  "CORE_ORIGIN or CUSTOMER_HTTP_LIL_TWEAK_CORE",
+  "CORE_SIGNING_SECRET",
+  "CORE_SIGNING_KEY_ID",
+  "CORE_ACCESS_CLIENT_ID",
+  "CORE_ACCESS_CLIENT_SECRET",
+] as const;
+const TRANSPORT_MISSING_NAMES = new Set<string>([
+  "LIL_TWEAK_ENVIRONMENT",
+  "CORE_ORIGIN or CUSTOMER_HTTP_LIL_TWEAK_CORE",
+  "CORE_ACCESS_CLIENT_ID",
+  "CORE_ACCESS_CLIENT_SECRET",
+]);
+const SIGNING_MISSING_NAMES = new Set<string>([
+  "CORE_SIGNING_SECRET",
+  "CORE_SIGNING_KEY_ID",
+]);
+
+function statusRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function exactStatusKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  if (!statusRecord(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length === expected.length && expected.every((key) => keys.includes(key));
+}
+
+function statusInvalid(): never {
+  throw new Error("Connection status response is invalid.");
+}
+
+export function parseEngineeringConnectionStatus(value: unknown): EngineeringConnectionStatus {
+  if (!exactStatusKeys(value, ["generatedAt", "controlPlane", "bridge", "runner"])) {
+    statusInvalid();
+  }
+  const generatedAt = value.generatedAt;
+  if (
+    typeof generatedAt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt) ||
+    Number.isNaN(Date.parse(generatedAt)) ||
+    new Date(generatedAt).toISOString() !== generatedAt
+  ) {
+    statusInvalid();
+  }
+
+  const controlPlane = value.controlPlane;
+  if (!exactStatusKeys(controlPlane, ["storage", "d1", "r2"])) statusInvalid();
+  const storage = controlPlane.storage;
+  const d1 = controlPlane.d1;
+  const r2 = controlPlane.r2;
+  if (
+    (storage !== "configured" && storage !== "missing") ||
+    (d1 !== "configured" && d1 !== "missing") ||
+    (r2 !== "configured" && r2 !== "missing") ||
+    (storage === "configured") !== (d1 === "configured" && r2 === "configured")
+  ) {
+    statusInvalid();
+  }
+
+  const bridge = value.bridge;
+  if (!exactStatusKeys(bridge, ["origin", "transport", "signing", "access", "missing"])) {
+    statusInvalid();
+  }
+  const origin = bridge.origin;
+  const transport = bridge.transport;
+  const signing = bridge.signing;
+  const access = bridge.access;
+  const missing = bridge.missing;
+  if (
+    (origin !== "none" && origin !== "core_origin" && origin !== "sites_private_tunnel") ||
+    (transport !== "configured" && transport !== "missing") ||
+    (signing !== "configured" && signing !== "missing") ||
+    (access !== "configured" && access !== "missing" && access !== "not_required") ||
+    !Array.isArray(missing) ||
+    missing.some((name) => typeof name !== "string")
+  ) {
+    statusInvalid();
+  }
+  const missingIndexes = missing.map((name) => CONNECTION_MISSING_NAMES.indexOf(name));
+  if (
+    missingIndexes.some((index) => index < 0) ||
+    missingIndexes.some((index, position) => position > 0 && index <= missingIndexes[position - 1])
+  ) {
+    statusInvalid();
+  }
+
+  const runner = value.runner;
+  if (!exactStatusKeys(runner, [
+    "owner",
+    "provider",
+    "dropletId",
+    "host",
+    "role",
+    "route",
+    "intermediary",
+    "imagePolicy",
+    "connection",
+    "qualification",
+  ])) {
+    statusInvalid();
+  }
+  if (
+    runner.owner !== "tueiq" ||
+    runner.provider !== "digitalocean" ||
+    runner.dropletId !== "597343619" ||
+    runner.host !== "galor-tweak-runner-01" ||
+    runner.role !== "role-tweak-runner" ||
+    runner.route !== "direct_core_to_local_podman" ||
+    runner.intermediary !== "none" ||
+    runner.imagePolicy !== "digest_pinned" ||
+    (runner.connection !== "pending_configuration" &&
+      runner.connection !== "configured_pending_probe" &&
+      runner.connection !== "ready" &&
+      runner.connection !== "unreachable") ||
+    runner.qualification !== "not_reported"
+  ) {
+    statusInvalid();
+  }
+
+  const hasTransportMissing = missing.some((name) => TRANSPORT_MISSING_NAMES.has(name));
+  const hasSigningMissing = missing.some((name) => SIGNING_MISSING_NAMES.has(name));
+  const hasAccessMissing = missing.includes("CORE_ACCESS_CLIENT_ID") ||
+    missing.includes("CORE_ACCESS_CLIENT_SECRET");
+  if (
+    (origin === "none" && (
+      transport !== "missing" ||
+      !missing.includes("CORE_ORIGIN or CUSTOMER_HTTP_LIL_TWEAK_CORE")
+    )) ||
+    (origin !== "none" && transport === "configured" && access === "missing") ||
+    (origin === "sites_private_tunnel" && access !== "not_required") ||
+    (access === "configured" && hasAccessMissing) ||
+    (access === "missing" && !hasAccessMissing) ||
+    (transport === "configured" && hasTransportMissing) ||
+    (transport === "missing" && !hasTransportMissing) ||
+    (signing === "configured" && hasSigningMissing) ||
+    (signing === "missing" && !hasSigningMissing)
+  ) {
+    statusInvalid();
+  }
+  if (runner.connection === "pending_configuration") {
+    if ((transport === "configured" && signing === "configured") || missing.length === 0) {
+      statusInvalid();
+    }
+  } else if (
+    transport !== "configured" ||
+    signing !== "configured" ||
+    missing.length !== 0
+  ) {
+    statusInvalid();
+  }
+
+  return {
+    generatedAt,
+    controlPlane: { storage, d1, r2 },
+    bridge: { origin, transport, signing, access, missing: [...missing] },
+    runner: {
+      owner: "tueiq",
+      provider: "digitalocean",
+      dropletId: "597343619",
+      host: "galor-tweak-runner-01",
+      role: "role-tweak-runner",
+      route: "direct_core_to_local_podman",
+      intermediary: "none",
+      imagePolicy: "digest_pinned",
+      connection: runner.connection,
+      qualification: "not_reported",
+    },
   };
 }
 
@@ -236,7 +406,7 @@ export async function getEngineeringConnectionStatus(
     {},
     fetcher,
   );
-  return result.status;
+  return parseEngineeringConnectionStatus(result.status);
 }
 
 export async function createEngineeringJob(input: {

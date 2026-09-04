@@ -437,8 +437,12 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
     activeJob?.approvalProposal &&
     approvalProposalIsExpired(activeJob.approvalProposal, approvalClock),
   );
-  const runnerState = connectionStatus?.bridge.state ?? "pending_configuration";
-  const runnerLabel = connectionStatus?.runner.label ?? "Secure code gateway";
+  const runnerState = connectionStatus?.runner.connection ?? "pending_configuration";
+  const runnerLabel = !connectionStatus
+    ? "Checking Tueiq Core"
+    : runnerState === "ready"
+      ? "Tueiq Core ready"
+      : "Direct Tueiq Core runner";
 
   function recoverStaleProject(caught: unknown, retryMessage: string) {
     if (
@@ -1136,7 +1140,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
             <div id="chat-files-detail" className="chat-control-detail" hidden={chatMenuDetail !== "files"}>
               <p>{preparation.stagedItems} selected · {formatFileSize(preparation.selectedBytes)} · uploaded only when you submit.</p>
             </div>
-            <button type="button" className="chat-control-row" onClick={() => activateView("engineering")}><span>Code</span><small>Secure gateway</small></button>
+            <button type="button" className="chat-control-row" onClick={() => activateView("engineering")}><span>Code</span><small>Tueiq Core runner</small></button>
             <button
               type="button"
               className="chat-control-row"
@@ -1153,7 +1157,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
           </div>
         </div>
         <UdjatSignal usage={preparation} />
-        <span className="connection-state" data-runner-state="secure-gateway" data-live-runner-state={runnerState}>{engineerMode === "chat" ? "OpenAI direct chat" : runnerLabel}</span>
+        <span className="connection-state" data-runner-route="direct-core-to-local-podman" data-live-runner-state={runnerState}>{engineerMode === "chat" ? null : runnerLabel}</span>
       </header>
 
       {(error || message) && (
@@ -1180,6 +1184,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     </ol>
                   ) : (
                     <div className="engineering-empty">
+                      <img className="tweak-stage-avatar" src="/lil-tueeq-avatar.png" alt="" aria-hidden="true" />
                       <h1>What can I help you create?</h1>
                       <p>Chat directly with Lil&apos;Tweak.AI. Tools and engineering actions stay off until you choose a work mode.</p>
                     </div>
@@ -1212,7 +1217,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     <ol className="job-timeline" aria-label="Engineering job timeline">
                       {activeJob.events.length ? activeJob.events.map((item) => (
                         <li key={item.id}><span>{item.type.replaceAll("_", " ")}</span><p>{item.summary}</p></li>
-                      )) : <li><span>accepted</span><p>The secure gateway accepted this job.</p></li>}
+                      )) : <li><span>accepted</span><p>Tueiq Core accepted this job.</p></li>}
                     </ol>
                     {activeJob.evidence.length > 0 && (
                       <div className="job-evidence" aria-label="Engineering evidence">
@@ -1559,7 +1564,7 @@ function CapabilityGapPanel() {
       <div className="capability-gap-head">
         <div>
           <strong>What would make the biggest difference?</strong>
-          <p>Lil&apos;Tweak already has chat, a runner bridge, sandbox jobs, evidence, approvals, and GitHub-linked provenance. These are the upgrades that would change how strong it feels.</p>
+          <p>Lil&apos;Tweak already has chat, direct runner jobs, evidence, and approvals. These are the upgrades that would change how strong it feels.</p>
         </div>
         <span>Priority stack</span>
       </div>
@@ -1584,10 +1589,10 @@ function bridgeOriginLabel(status: EngineeringConnectionStatus) {
 
 function bridgeNote(status: EngineeringConnectionStatus | null, error: string) {
   if (error) return `Status endpoint unavailable: ${error}`;
-  if (!status) return "Checking the Lil Tweak runtime bridge settings.";
-  if (status.bridge.state === "health_reachable") return "Core health is reachable. Job execution still uses signed owner-scoped dispatch.";
-  if (status.bridge.state === "health_unreachable") return "Bridge settings are present, but the core health check did not pass.";
-  if (status.bridge.state === "configured_pending_probe") return "Bridge settings are present and waiting on a runtime probe.";
+  if (!status) return "Checking the direct Tueiq Core runner settings.";
+  if (status.runner.connection === "ready") return "Tueiq Core ready through a signed owner-scoped readiness proof.";
+  if (status.runner.connection === "unreachable") return "Core settings are present, but the signed readiness proof did not pass.";
+  if (status.runner.connection === "configured_pending_probe") return "Core settings are present and waiting on a signed readiness probe.";
   return `Waiting for ${status.bridge.missing.join(", ") || "runtime bridge configuration"}.`;
 }
 
@@ -1598,34 +1603,34 @@ function ConnectionStatusPanel({
   status: EngineeringConnectionStatus | null;
   error: string;
 }) {
-  const state = status?.bridge.state ?? "pending_configuration";
-  const label = status?.runner.label ?? "Checking bridge";
+  const state = status?.runner.connection ?? "pending_configuration";
+  const label = !status
+    ? "Checking Tueiq Core"
+    : state === "ready"
+      ? "Tueiq Core ready"
+      : "Direct Tueiq Core runner";
   return (
     <article className="connection-panel" aria-live="polite">
       <div className="connection-panel-head">
         <div>
-          <strong>Lil Tweak runner connection</strong>
+          <strong>Tueiq Core runner</strong>
           <p>{bridgeNote(status, error)}</p>
         </div>
-        <span className="connection-pill" data-bridge-state={state}>{label}</span>
+        <span className="connection-pill" data-connection-state={state}>{label}</span>
       </div>
       {status ? (
         <div className="status-list connection-list">
           <div>
-            <span>Lil Tweak repository</span>
-            <strong>{status.github.lilTweak.repository} · {status.github.lilTweak.branch}</strong>
+            <span>Runner owner</span>
+            <strong>{status.runner.owner} · no intermediary</strong>
           </div>
           <div>
-            <span>Runner owner</span>
-            <strong>Lil Tweak · no intermediary</strong>
+            <span>Runner identity</span>
+            <strong>{status.runner.provider} · {status.runner.dropletId} · {status.runner.host}</strong>
           </div>
           <div>
             <span>Runner path</span>
-            <strong>Signed Core → digest-pinned Podman sandbox</strong>
-          </div>
-          <div>
-            <span>Runner evidence</span>
-            <strong>Connection not reported · qualification not reported</strong>
+            <strong>Tueiq Core → local digest-pinned Podman sandbox</strong>
           </div>
           <div>
             <span>Core bridge</span>
