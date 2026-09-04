@@ -39,6 +39,7 @@ class RecoveryPolicy:
         history: list[RecoveryHistoryEntry],
         budgets: RecoveryBudgets,
         *,
+        fingerprint: str,
         resource_decision: ResourceRecoveryDecision | None = None,
     ) -> PolicyDecision:
         base = PolicyDecision(
@@ -86,12 +87,24 @@ class RecoveryPolicy:
         if base.action in {RecoveryAction.BLOCK, RecoveryAction.ESCALATE}:
             return base
 
-        prior_decisions = [entry for entry in history if entry.outcome_status is None]
-        prior_outcomes = [entry for entry in history if entry.outcome_status is not None]
-        prior_same_action = [entry for entry in prior_decisions if entry.action is base.action]
+        fingerprint_history = [
+            entry for entry in history if entry.fingerprint == fingerprint
+        ]
+        mission_history = [
+            entry for entry in history if entry.task_id == context.task_id
+        ]
+        fingerprint_decisions = [
+            entry for entry in fingerprint_history if entry.outcome_status is None
+        ]
+        fingerprint_outcomes = [
+            entry for entry in fingerprint_history if entry.outcome_status is not None
+        ]
+        mission_decisions = [
+            entry for entry in mission_history if entry.outcome_status is None
+        ]
 
-        if prior_outcomes:
-            latest = prior_outcomes[-1]
+        if fingerprint_outcomes:
+            latest = fingerprint_outcomes[-1]
             if (
                 latest.action is base.action
                 and latest.outcome_status is RecoveryOutcomeStatus.FAILED
@@ -99,10 +112,18 @@ class RecoveryPolicy:
             ):
                 return self._blocked("recovery_strategy_no_progress")
 
-        if len(prior_decisions) >= budgets.max_fingerprint_retries:
+        if len(fingerprint_decisions) >= budgets.max_fingerprint_retries:
             return self._blocked("fingerprint_retry_budget_exhausted")
 
         action_limit = budgets.limit_for(base.action)
+        if base.action is RecoveryAction.RETRY_STEP:
+            prior_same_action = [
+                entry for entry in fingerprint_decisions if entry.action is base.action
+            ]
+        else:
+            prior_same_action = [
+                entry for entry in mission_decisions if entry.action is base.action
+            ]
         if action_limit <= 0 or len(prior_same_action) >= action_limit:
             return self._blocked(self._budget_reason(base.action))
 
