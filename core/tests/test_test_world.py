@@ -119,7 +119,10 @@ class DurableTestWorldStoreTests(unittest.TestCase):
         passed = self.store.complete_attempt(
             second_lease,
             passed=True,
-            feedback=({"check": "unit tests", "passed": True},),
+            feedback=(
+                {"check": "unit tests", "passed": True},
+                {"check": "typecheck", "passed": True},
+            ),
             cumulative_patch="second patch",
             now=130.0,
         )
