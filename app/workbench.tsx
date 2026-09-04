@@ -437,7 +437,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
     activeJob?.approvalProposal &&
     approvalProposalIsExpired(activeJob.approvalProposal, approvalClock),
   );
-  const runnerState = connectionStatus?.runner.state ?? "secure-gateway";
+  const runnerState = connectionStatus?.bridge.state ?? "pending_configuration";
   const runnerLabel = connectionStatus?.runner.label ?? "Secure code gateway";
 
   function recoverStaleProject(caught: unknown, retryMessage: string) {
