@@ -9,6 +9,7 @@ import io
 import importlib.util
 import json
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -562,6 +563,113 @@ class QualificationTests(unittest.TestCase):
         self.assertFalse((self.root / "result/local-qualification.json").exists())
         self.assertEqual([j.state for j in f.store._jobs.values()], [JobState.COMPLETED, JobState.CANCELLED, JobState.REJECTED])
         self.assertEqual(f.store._approvals, {})
+
+    def test_ambiguous_submission_is_resolved_idempotently_and_cleaned(self):
+        f = self.fixture()
+        f.fault = ("/v1/jobs", "short-body")
+        f.fault_when = lambda: f.requests[-1][0:2] == ("POST", "/v1/jobs") and sum(
+            method == "POST" and target == "/v1/jobs" for method, target, _, _ in f.requests) == 2
+        with self.assertRaises(self.q.QualificationError): self.run_fixture(f)
+        self.assertFalse((self.root / "result/local-qualification.json").exists())
+        self.assertEqual([j.state for j in f.store._jobs.values()], [JobState.COMPLETED, JobState.REJECTED])
+        posts = [item for item in f.requests if item[0:2] == ("POST", "/v1/jobs")]
+        self.assertEqual(len(posts), 3)
+        self.assertEqual(posts[1][2], posts[2][2])
+        self.assertEqual(posts[1][3]["Idempotency-Key"], posts[2][3]["Idempotency-Key"])
+        self.assertNotEqual(posts[1][3]["X-Lil-Tweak-Nonce"], posts[2][3]["X-Lil-Tweak-Nonce"])
+
+    def test_observed_core_git_identity_mismatch_is_rejected_for_both_jobs(self):
+        f = self.fixture()
+        for mode in ("architect", "refactor"):
+            identifier = f.client.json("POST", "/v1/jobs", self.q.submission(mode), status=202)["id"]
+            original = f.store.get_job(identifier, OWNER)
+            for source in (self.q.GitSourceSpec(URL, "0" + COMMIT[1:]), self.q.GitSourceSpec(URL + "/other", COMMIT), None):
+                f.store._jobs[identifier] = replace(original, git_source=source)
+                observed = f.client.json("GET", f"/v1/jobs/{identifier}")
+                with self.subTest(mode=mode, source=source), self.assertRaises(self.q.QualificationError):
+                    self.q.verify_job_evidence(f.client, observed, mode=mode, started=f.clock.now(), now=f.clock.now())
+
+    def test_runner_image_is_bound_to_installed_file_and_effective_core(self):
+        installed = sealed(self.root / "installed.env", b'LIL_TWEAK_SIGNING_KEYS_JSON={"primary":"fixture-key"}\nLIL_TWEAK_CANONICAL_OWNER_ID=' + OWNER.encode()
+                           + b'\nLIL_TWEAK_RUNNER_IMAGE=runner@sha256:' + b'3' * 64 + b'\n')
+        copied = sealed(self.root / "copied.env", installed.read_bytes().replace(b"3" * 64, b"4" * 64))
+        service = SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())
+        calls = []
+
+        def podman(*args):
+            calls.append(args)
+            return (("runner@sha256:" + "3" * 64) if args[0] == "exec" else ("image@sha256:" + "1" * 64)).encode() + b"\n"
+
+        with patch.object(self.q, "CORE_ENV_PATH", installed, create=True), patch.object(self.q.InstalledBoundaries, "podman", side_effect=podman):
+            with self.assertRaises(self.q.QualificationError):
+                self.q.InstalledBoundaries(ROOT, service, self.q.load_core_environment(copied, service), time.time()).images()
+            self.assertEqual(calls, [], "stale supplied configuration must fail before runtime probing")
+            host = self.q.InstalledBoundaries(ROOT, service, self.q.load_core_environment(installed, service), time.time())
+            self.assertEqual(host.images()["runner"], "sha256:" + "3" * 64)
+            self.assertTrue(any(args[0] == "exec" for args in calls))
+            with patch.object(host, "podman", return_value=("runner@sha256:" + "4" * 64 + "\n").encode()):
+                with self.assertRaises(self.q.QualificationError): host.images()
+
+    def test_descendant_holding_pipes_is_killed_after_leader_exits(self):
+        child_pid_path = self.root / "descendant.pid"
+        code = "import os,subprocess,sys; from pathlib import Path; child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); Path(sys.argv[1]).write_text(str(child.pid)); os._exit(0)"
+        child_pid = None
+        try:
+            with patch.object(self.q.os, "killpg", wraps=os.killpg) as kill_group:
+                with self.assertRaises(self.q.QualificationError):
+                    self.q.bounded_command([sys.executable, "-c", code, str(child_pid_path)], timeout=0.4)
+                self.assertTrue(kill_group.called, "owned group must be terminated even after its leader exits")
+            child_pid = int(child_pid_path.read_text())
+            for _ in range(50):
+                status = Path(f"/proc/{child_pid}/stat")
+                if not status.exists() or status.read_text().split()[2] == "Z":
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail("descendant remains running after bounded command exits")
+        finally:
+            if child_pid_path.exists():
+                child_pid = int(child_pid_path.read_text())
+                try: os.kill(child_pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+
+    def test_absolute_http_deadline_interrupts_slow_headers(self):
+        finished = threading.Event()
+
+        class SlowHeaders(BaseHTTPRequestHandler):
+            def log_message(self, *args): pass
+
+            def do_GET(self):
+                try:
+                    for fragment in (b"HTTP/1.1 200 OK\r\n",) + (b"X-Drip: yes\r\n",) * 40:
+                        self.wfile.write(fragment); self.wfile.flush(); time.sleep(0.01)
+                    payload = canonical({"status": "ready", "checks": READY})
+                    self.wfile.write(b"Content-Type: application/json\r\nContent-Length: " + str(len(payload)).encode() + b"\r\n\r\n" + payload)
+                except (BrokenPipeError, ConnectionResetError): pass
+                finally: finished.set()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), SlowHeaders)
+        thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+        base = build_opener(ProxyHandler({}), self.q.RejectRedirects())
+
+        class Transport:
+            def open(self, request, timeout):
+                response = base.open(Request(request.full_url.replace(":8017/", f":{server.server_port}/", 1), headers=dict(request.header_items())), timeout=timeout)
+                response.geturl = lambda: request.full_url
+                return response
+
+        client = self.q.CoreClient({"LIL_TWEAK_SIGNING_KEYS_JSON": '{"primary":"fixture-key"}', "LIL_TWEAK_CANONICAL_OWNER_ID": OWNER}, opener=Transport())
+        client.remaining_budget = lambda: 0.07
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        started = time.monotonic()
+        try:
+            with self.assertRaises(self.q.QualificationError): client.json("GET", "/readyz")
+            self.assertLess(time.monotonic() - started, 0.25)
+            self.assertTrue(finished.wait(1))
+            self.assertEqual(signal.getsignal(signal.SIGALRM), previous_handler)
+            self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+        finally:
+            server.shutdown(); server.server_close(); thread.join()
 
     def test_existing_output_and_insecure_parent_rejected_before_jobs(self):
         f = self.fixture()

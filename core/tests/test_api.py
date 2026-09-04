@@ -519,6 +519,12 @@ class ApiTests(unittest.TestCase):
         stored = self.store.get_job(created["id"], OWNER)
         self.assertEqual(stored.git_source.commit, "a" * 40)
         self.assertEqual(stored.git_source.repository_url, good["repositoryUrl"])
+        expected_source = {"repositoryUrl": good["repositoryUrl"], "commit": "a" * 40}
+        self.assertEqual(created.get("gitSource"), expected_source)
+        path = f"/v1/jobs/{created['id']}"
+        status, observed = self.request("GET", path, headers=self.signed_headers("GET", path))
+        self.assertEqual(status, 200)
+        self.assertEqual(observed.get("gitSource"), expected_source)
 
         bad = json.dumps(
             {

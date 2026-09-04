@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,7 @@ PATCH_BYTES = 66
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 OWNER_SCOPE = "a0885bc0b2c079e996629061a723c74d"
 ORIGIN = "http://127.0.0.1:8017"
+CORE_ENV_PATH = Path("/var/lib/lil-tweak/.config/lil-tweak/core.env")
 NEGATIVE_KEYS = (
     "stale_lease", "wrong_runner_identity", "wrong_source_revision", "expired_authorization",
     "forbidden_action", "path_escape", "production_deployment_request", "replay", "mismatched_evidence_digest",
@@ -349,12 +351,38 @@ def bounded_body(response, length, *, deadline):
     return bytes(data)
 
 
+@contextmanager
+def absolute_http_deadline(deadline):
+    """Interrupt connect/status/headers/body in this Linux main-thread CLI.
+
+    A socket's idle timeout does not bound drip-fed headers. SIGALRM interrupts
+    those blocking stdlib reads; TimeoutError also lets urllib close its socket
+    while unwinding. Refuse an existing timer rather than weakening its owner.
+    """
+    require(signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0))
+    timeout = deadline - time.monotonic()
+    require(0 < timeout <= 5)
+    previous = signal.getsignal(signal.SIGALRM)
+
+    def expired(_signum, _frame):
+        raise TimeoutError("local qualification failed")
+
+    signal.signal(signal.SIGALRM, expired)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, timeout)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 class CoreClient:
     def __init__(self, environment, *, opener=None, clock=time.time):
         self.key_id, self.secret = validate_environment(environment)
         self.clock = clock
         self.opener = opener if opener is not None else build_opener(ProxyHandler({}), RejectRedirects())
         self.last_binding = None
+        self.remaining_budget = lambda: 5.0
 
     def request(self, method, path, payload=None, *, nonce=None, request_id=None, timestamp=None, evidence=False):
         require(method in {"GET", "POST"})
@@ -375,36 +403,42 @@ class CoreClient:
             headers.update({"Content-Type": "application/json", "Idempotency-Key": idem})
         self.last_binding = {"requestId": request_id, "nonce": nonce, "timestamp": timestamp, "bodySha256": body_sha}
         request = Request(ORIGIN + path, data=raw if method == "POST" else None, headers=headers, method=method)
-        response_deadline = time.monotonic() + 5
+        timeout = min(5.0, self.remaining_budget())
+        require(timeout > 0)
+        response_deadline = time.monotonic() + timeout
         try:
-            try:
-                response = self.opener.open(request, timeout=5)
-            except HTTPError as error:
-                response = error
-            with response:
-                status = response.getcode()
-                require(status < 300 or status >= 400)
-                if not isinstance(response, HTTPError):
-                    require(response.geturl() == ORIGIN + path)
-                limit = MAX_EVIDENCE_BYTES if evidence and status == 200 else MAX_JSON_BYTES
-                for name in ("Content-Length", "Content-Type"):
-                    require(len(response.headers.get_all(name, [])) == 1)
-                length = response.headers["Content-Length"]
-                require(re.fullmatch(r"0|[1-9][0-9]{0,8}", length) is not None and int(length) <= limit)
-                media = response.headers["Content-Type"].split(";", 1)[0].strip().lower()
-                if not evidence or status != 200:
-                    require(media == "application/json")
-                data = bounded_body(response, int(length), deadline=response_deadline)
-                require(len(data) == int(length) and len(data) <= limit)
-                response_headers = dict(response.headers.items())
-                if evidence and status == 200:
-                    require(len(response.headers.get_all("X-Content-Sha256", [])) == 1)
-                    return status, data, {k.lower(): v for k, v in response_headers.items()}
-                return status, parse_json(data), {k.lower(): v for k, v in response_headers.items()}
+            with absolute_http_deadline(response_deadline):
+                try:
+                    response = self.opener.open(request, timeout=timeout)
+                except HTTPError as error:
+                    response = error
+                with response:
+                    return self._read_response(response, path, evidence, response_deadline)
         except QualificationError:
             raise
         except Exception:
             raise QualificationError("local qualification failed") from None
+
+    def _read_response(self, response, path, evidence, response_deadline):
+        status = response.getcode()
+        require(status < 300 or status >= 400)
+        if not isinstance(response, HTTPError):
+            require(response.geturl() == ORIGIN + path)
+        limit = MAX_EVIDENCE_BYTES if evidence and status == 200 else MAX_JSON_BYTES
+        for name in ("Content-Length", "Content-Type"):
+            require(len(response.headers.get_all(name, [])) == 1)
+        length = response.headers["Content-Length"]
+        require(re.fullmatch(r"0|[1-9][0-9]{0,8}", length) is not None and int(length) <= limit)
+        media = response.headers["Content-Type"].split(";", 1)[0].strip().lower()
+        if not evidence or status != 200:
+            require(media == "application/json")
+        data = bounded_body(response, int(length), deadline=response_deadline)
+        require(len(data) == int(length) and len(data) <= limit)
+        response_headers = dict(response.headers.items())
+        if evidence and status == 200:
+            require(len(response.headers.get_all("X-Content-Sha256", [])) == 1)
+            return status, data, {k.lower(): v for k, v in response_headers.items()}
+        return status, parse_json(data), {k.lower(): v for k, v in response_headers.items()}
 
     def json(self, method, path, payload=None, *, status=200, **kwargs):
         actual, value, _ = self.request(method, path, payload, **kwargs)
@@ -458,9 +492,13 @@ def bounded_command(argv, *, cwd=None, env=None, input_bytes=None, timeout=60, m
             require(process.wait(timeout=max(0.01, timeout - (time.monotonic() - started))) == 0)
             return bytes(output)
         finally:
-            if process.poll() is None:
+            # The leader may already have exited while descendants still hold
+            # either pipe. Always terminate the owned session's process group.
+            try:
                 os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
+            except ProcessLookupError:
+                pass
+            process.wait()
             process.stdout.close()
             process.stderr.close()
 
@@ -469,6 +507,12 @@ class InstalledBoundaries:
     def __init__(self, source_root, service, environment, started):
         require(Path(source_root).absolute() == ROOT and not Path(source_root).is_symlink())
         self.service, self.environment, self.started = service, environment, started
+        self.installed_environment()
+
+    def installed_environment(self):
+        installed = load_core_environment(CORE_ENV_PATH, self.service)
+        exact(installed, self.environment)
+        return installed
 
     def source_head(self):
         require(bounded_command(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=ROOT) == b"")
@@ -490,9 +534,19 @@ class InstalledBoundaries:
                                 f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{self.service.pw_uid}/bus", "podman", *argv], timeout=30)
 
     def images(self):
+        installed = self.installed_environment()
         values = {name: self.podman("inspect", container, "--format", "{{.ImageName}}").decode().strip()
                   for name, container in (("core", "lil-tweak-core"), ("postgres", "lil-tweak-postgres"))}
-        values["runner"] = self.environment.get("LIL_TWEAK_RUNNER_IMAGE", "")
+        # Read only the runner image from the effective Core process's initial
+        # environment, never print or retain its other environment entries.
+        program = ("from pathlib import Path; "
+                   "raw=Path('/proc/1/environ').open('rb').read(65537); assert len(raw)<=65536; "
+                   "pins=[item.split(b'=',1)[1] for item in raw.split(b'\\0') if item.startswith(b'LIL_TWEAK_RUNNER_IMAGE=')]; "
+                   "assert len(pins)==1; print(pins[0].decode('utf-8'))")
+        effective = self.podman("exec", "lil-tweak-core", "python", "-I", "-c", program).decode("utf-8")
+        require(effective.endswith("\n") and effective.count("\n") == 1)
+        values["runner"] = effective[:-1]
+        exact(values["runner"], installed.get("LIL_TWEAK_RUNNER_IMAGE"))
         for value in values.values():
             require(re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", value) is not None)
         return {name: value.rsplit("@", 1)[1] for name, value in values.items()}
@@ -627,6 +681,7 @@ def verify_test_log(raw, commands, operations, expected_check):
 def verify_job_evidence(client, job, *, mode, started, now):
     job_id(job.get("id"))
     exact(job.get("mode"), mode)
+    exact(job.get("gitSource"), submission(mode)["gitSource"])
     exact(job.get("state"), "completed" if mode == "architect" else "awaiting_approval")
     integer(job.get("revision"), 1)
     exact(job.get("coreRevision"), job["revision"])
@@ -721,7 +776,7 @@ def verify_job_evidence(client, job, *, mode, started, now):
         exact({k: entry[k] for k in ("result", "exit_code", "timed_out", "truncated", "rejection_code")},
               {"result": "promoted", "exit_code": 0, "timed_out": False, "truncated": False, "rejection_code": None})
     retained_job = {"id": job["id"], "mode": mode, "state": job["state"], "revision": job["revision"],
-                    "sourceRevision": SOURCE_COMMIT, "sourceDigest": BASELINE_TREE_SHA256, "proposalDigest": expected_digest,
+                    "sourceRevision": job["gitSource"]["commit"], "sourceDigest": BASELINE_TREE_SHA256, "proposalDigest": expected_digest,
                     "approvalProposal": copy.deepcopy(job["approvalProposal"]), "approvalConsumed": False,
                     "evidence": retained, "baselineTreeSha256": BASELINE_TREE_SHA256, "finalTreeSha256": run["proposal_source_digest"],
                     "fileSha256": SOURCE_SHA256 if mode == "architect" else PATCHED_SHA256,
@@ -733,6 +788,7 @@ class Qualification:
     def __init__(self, client, boundaries, *, clock=time.time, monotonic=time.monotonic, sleep=time.sleep):
         self.client, self.boundaries, self.clock, self.monotonic, self.sleep = client, boundaries, clock, monotonic, sleep
         self.jobs, self.bindings = [], {}
+        self.pending_submissions = {}
 
     def check_deadline(self):
         require(self.monotonic() < self.deadline)
@@ -750,13 +806,37 @@ class Qualification:
 
     def create(self, mode, commit=SOURCE_COMMIT):
         self.check_deadline()
-        result = self.client.json("POST", "/v1/jobs", submission(mode, commit), status=202)
+        request_id = str(uuid.uuid4())
+        # Retain identity before any bytes can reach Core. A malformed/lost
+        # response is ambiguous and must be resolved during finally cleanup.
+        self.pending_submissions[request_id] = submission(mode, commit)
+        result = self.client.json("POST", "/v1/jobs", self.pending_submissions[request_id], status=202, request_id=request_id)
+        return self.remember_submission(request_id, result)
+
+    def remember_submission(self, request_id, result):
         identifier = result.get("id")
         job_id(identifier)
         require(identifier not in self.jobs)
         self.jobs.append(identifier)
         self.bindings[identifier] = dict(self.client.last_binding)
+        payload = self.pending_submissions.pop(request_id)
+        exact(result.get("gitSource"), payload["gitSource"])
+        exact(result.get("mode"), payload["mode"])
         return identifier
+
+    def resolve_submissions(self, deadline):
+        for request_id in list(self.pending_submissions):
+            for _ in range(2):
+                if self.monotonic() >= deadline:
+                    break
+                try:
+                    # Same idempotency identity and body, freshly signed nonce.
+                    result = self.client.json("POST", "/v1/jobs", self.pending_submissions[request_id], status=202, request_id=request_id)
+                    self.remember_submission(request_id, result)
+                    break
+                except Exception:
+                    if request_id not in self.pending_submissions:
+                        break  # ID is known: cleanup still owns this job.
 
     @staticmethod
     def decision(job, decision, *, proposal=None):
@@ -770,7 +850,7 @@ class Qualification:
         exact(result.get("state"), "rejected")
         exact(result.get("approvalConsumed"), False)
         exact(result.get("revision"), job["revision"] + 1)
-        for key in ("id", "sourceDigest", "proposalDigest", "approvalProposal", "evidence_manifest", "evidence"):
+        for key in ("id", "gitSource", "sourceDigest", "proposalDigest", "approvalProposal", "evidence_manifest", "evidence"):
             exact(result.get(key), job.get(key))
         return result
 
@@ -791,6 +871,7 @@ class Qualification:
     def run(self, provider_path, evidence_dir):
         self.started = self.clock()
         self.deadline = self.monotonic() + 1200
+        self.client.remaining_budget = lambda: self.deadline - self.monotonic()
         document = read_provider(provider_path, now=self.started)
         output = EvidenceDirectory(evidence_dir)
         try:
@@ -845,7 +926,7 @@ class Qualification:
                 require(self.clock() < production_epoch(b["approvalProposal"]["expiresAt"]))
                 rejected = self.reject(b)
                 job_b.update(state="rejected", revision=rejected["revision"], submission=self.bindings[b["id"]], exported=False,
-                             checkedAt=iso(self.clock()), lineage={"jobA": a["id"], "jobB": b["id"], "sourceRevision": SOURCE_COMMIT, "sourceDigest": BASELINE_TREE_SHA256})
+                             checkedAt=iso(self.clock()), lineage={"jobA": a["id"], "jobB": b["id"], "sourceRevision": job_a["sourceRevision"], "sourceDigest": BASELINE_TREE_SHA256})
                 exact(self.boundaries.runtime_snapshot()["containers"], [])
                 after_ready = self.client.json("GET", "/readyz"); ready(after_ready)
                 readiness["after"] = {"checkedAt": iso(self.clock()), "checks": after_ready["checks"]}
@@ -874,8 +955,17 @@ class Qualification:
                 output.close()
 
     def cleanup(self):
-        failure = False
         cleanup_deadline = self.monotonic() + 30
+        previous_budget = self.client.remaining_budget
+        self.client.remaining_budget = lambda: cleanup_deadline - self.monotonic()
+        try:
+            self._cleanup_jobs(cleanup_deadline)
+        finally:
+            self.client.remaining_budget = previous_budget
+
+    def _cleanup_jobs(self, cleanup_deadline):
+        self.resolve_submissions(cleanup_deadline)
+        failure = bool(self.pending_submissions)
         for identifier in self.jobs:
             try:
                 value = self.client.json("GET", f"/v1/jobs/{identifier}")

@@ -141,6 +141,10 @@ def _job_json(job: Job) -> dict[str, Any]:
         "proposal_digest": job.proposal_digest,
         "proposalDigest": job.proposal_digest,
         "sourceDigest": job.source_digest,
+        "gitSource": {
+            "repositoryUrl": job.git_source.repository_url,
+            "commit": job.git_source.commit,
+        } if job.git_source is not None else None,
         "approvalProposal": copy.deepcopy(job.approval_proposal),
         "approvalConsumed": job.approval_consumed,
         "evidence_manifest": dict(job.evidence_manifest or {}),
