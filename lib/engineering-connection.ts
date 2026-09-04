@@ -182,6 +182,7 @@ async function signedReadyProbe(
   } catch {
     return false;
   } finally {
+    controller.abort();
     clearTimeout(timeout);
   }
 }

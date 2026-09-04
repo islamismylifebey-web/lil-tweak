@@ -206,6 +206,50 @@ test("configured readiness failures normalize to unreachable without leaking hea
   }
 });
 
+test("rejected readiness headers clean up open response streams without reading them", async (context) => {
+  const cases = [
+    { name: "redirect", status: 302, contentType: "application/json" },
+    { name: "non-200", status: 503, contentType: "application/json" },
+    { name: "missing content type", status: 200, contentType: null },
+    { name: "wrong content type", status: 200, contentType: "text/plain" },
+  ];
+  for (const fixture of cases) {
+    await context.test(fixture.name, async () => {
+      let pulls = 0;
+      let cancelled = false;
+      let requestSignal;
+      const body = new ReadableStream({
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new TextEncoder().encode(BODY_CANARY));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }, { highWaterMark: 0 });
+      try {
+        const status = await engineeringConnectionStatus(configuredBindings(), OWNER_SCOPE, fixedOptions({
+          probe: true,
+          fetcher: async (_url, init) => {
+            requestSignal = init.signal;
+            return new Response(body, {
+              status: fixture.status,
+              headers: fixture.contentType ? { "content-type": fixture.contentType } : {},
+            });
+          },
+        }));
+
+        assert.equal(status.runner.connection, "unreachable");
+        assert.equal(pulls, 0);
+        assert.equal(cancelled || requestSignal.aborted, true, "rejected response must be cancelled or aborted");
+        assert.doesNotMatch(JSON.stringify(status), new RegExp(BODY_CANARY));
+      } finally {
+        await body.cancel();
+      }
+    });
+  }
+});
+
 test("oversized streamed readiness stops at 16 KiB plus one byte and cancels", async () => {
   const chunks = [new Uint8Array(8192), new Uint8Array(8192), new Uint8Array(1), new Uint8Array(8192)];
   let pulls = 0;
@@ -314,29 +358,42 @@ test("connection state has one truth and follows the configuration/probe matrix"
 });
 
 test("partial optional Access configuration stays a self-consistent pending status", async () => {
-  for (const bindings of [
-    configuredBindings({
-      LIL_TWEAK_ENVIRONMENT: "test",
-      CORE_ACCESS_CLIENT_SECRET: undefined,
-    }),
-    configuredBindings({
+  for (const overrides of [
+    { LIL_TWEAK_ENVIRONMENT: "test" },
+    {
       CORE_ORIGIN: undefined,
       CUSTOMER_HTTP_LIL_TWEAK_CORE: "https://private-core.example",
-      CORE_ACCESS_CLIENT_SECRET: undefined,
-    }),
+    },
   ]) {
-    const status = await engineeringConnectionStatus(
-      bindings,
-      OWNER_SCOPE,
-      fixedOptions(),
-    );
-    assert.equal(status.runner.connection, "pending_configuration");
-    assert.equal(status.bridge.transport, "missing");
-    assert.deepEqual(status.bridge.missing, ["CORE_ACCESS_CLIENT_SECRET"]);
-    assert.deepEqual(
-      engineeringClient.parseEngineeringConnectionStatus(status),
-      status,
-    );
+    for (const missingName of ["CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET"]) {
+      const status = await engineeringConnectionStatus(
+        configuredBindings({ ...overrides, [missingName]: undefined }),
+        OWNER_SCOPE,
+        fixedOptions(),
+      );
+      assert.equal(status.runner.connection, "pending_configuration");
+      assert.equal(status.bridge.transport, "missing");
+      assert.equal(status.bridge.access, "not_required");
+      assert.deepEqual(status.bridge.missing, [missingName]);
+      assert.deepEqual(await statusThroughBrowser(status), status);
+    }
+  }
+});
+
+test("browser status rejects both missing Access credentials when Access is not required", async (context) => {
+  for (const origin of ["core_origin", "sites_private_tunnel"]) {
+    await context.test(origin, async () => {
+      const value = expectedReadyStatus();
+      value.runner.connection = "pending_configuration";
+      value.bridge = {
+        origin,
+        transport: "missing",
+        signing: "configured",
+        access: "not_required",
+        missing: ["CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET"],
+      };
+      await assert.rejects(() => statusThroughBrowser(value), /Connection status response is invalid/);
+    });
   }
 });
 

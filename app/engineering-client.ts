@@ -223,6 +223,8 @@ export function parseEngineeringConnectionStatus(value: unknown): EngineeringCon
     (origin === "sites_private_tunnel" && access !== "not_required") ||
     (access === "configured" && hasAccessMissing) ||
     (access === "missing" && !hasAccessMissing) ||
+    (access === "not_required" && missing.includes("CORE_ACCESS_CLIENT_ID") &&
+      missing.includes("CORE_ACCESS_CLIENT_SECRET")) ||
     (transport === "configured" && hasTransportMissing) ||
     (transport === "missing" && !hasTransportMissing) ||
     (signing === "configured" && hasSigningMissing) ||
