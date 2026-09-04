@@ -471,12 +471,17 @@ class RecoveryHistoryEntry:
     resulting_plan_digest: str | None = None
     resulting_candidate_digest: str | None = None
     resulting_resource_id: str | None = None
+    node_id: str = "unknown"
+    attempt: int = 1
 
     def __post_init__(self) -> None:
         _require_id(self.owner_id, "owner_id_invalid")
         _require_id(self.task_id, "task_id_invalid")
+        _require_id(self.node_id, "node_id_invalid")
         if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 1:
             raise ValueError("history_sequence_invalid")
+        if not isinstance(self.attempt, int) or isinstance(self.attempt, bool) or self.attempt < 1:
+            raise ValueError("attempt_must_be_positive")
         _require_digest(self.fingerprint, "failure_fingerprint_invalid")
         _require_digest(self.decision_digest, "decision_digest_invalid")
         if not isinstance(self.action, RecoveryAction):
