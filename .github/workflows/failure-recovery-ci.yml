@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -51,14 +53,16 @@ jobs:
             core.tests.test_failure_recovery_history \
             core.tests.test_failure_recovery_orchestrator \
             core.tests.test_failure_recovery_security
-      - name: Validate diff
-        run: git diff --check "${{ github.event.pull_request.base.sha || 'HEAD^' }}"..HEAD
+      - name: Validate complete branch diff
+        run: git diff --check origin/main...HEAD
 
   canonical:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
