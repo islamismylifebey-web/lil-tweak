@@ -35,6 +35,11 @@ from lil_tweak.orchestrator import (
 from lil_tweak.runtime_lock import RuntimeExecutionBusy, runtime_execution_lock
 from lil_tweak.sandbox import PodmanSandbox, SandboxLimits
 from lil_tweak.store import PostgresJobStore
+from lil_tweak.test_world_api import TestWorldApi
+from lil_tweak.test_world_postgres import PostgresTestWorldStore
+from lil_tweak.test_world_runner import TestWorldAttemptRunner
+from lil_tweak.test_world_runtime import TestWorldRuntime
+from lil_tweak.test_world_scheduler import TestWorldScheduler
 
 
 def _mount_field(value: str) -> str:
@@ -80,6 +85,60 @@ def is_bounded_work_root(
         )
     except (OSError, ValueError, IndexError):
         return False
+
+
+def _build_test_world_app(
+    *,
+    config: Any,
+    job_store: Any,
+    responses: Any,
+    reviewed_instructions: str,
+    work_root: Path,
+    connect: Any,
+    fallback: Any,
+) -> Any:
+    """Compose Test World beside the existing trusted-core application."""
+
+    world_store = PostgresTestWorldStore(connect)
+    execution_lock = runtime_execution_lock
+    world_worker_id = f"test-world-{uuid.uuid4()}"
+    world_lease_seconds = min(60, max(15, config.job_timeout_seconds // 4))
+    runtime = TestWorldRuntime(
+        work_root=work_root,
+        runner_image=config.runner_image,
+        git_allowed_hosts=config.git_allowed_hosts,
+        responses_client=responses,
+        model=config.openai_model,
+        instructions=reviewed_instructions,
+        job_timeout_seconds=config.job_timeout_seconds,
+    )
+    runner = TestWorldAttemptRunner(
+        store=world_store,
+        worker_id=world_worker_id,
+        lease_seconds=world_lease_seconds,
+        prepare_workspace=runtime.prepare_workspace,
+        apply_previous_patch=runtime.apply_previous_patch,
+        run_agent=runtime.run_agent,
+        capture_cumulative_patch=runtime.capture_cumulative_patch,
+        run_check=runtime.run_check,
+        cleanup_workspace=runtime.cleanup_workspace,
+    )
+    scheduler = TestWorldScheduler(
+        world_store,
+        runner,
+        worker_id=world_worker_id,
+        lease_seconds=world_lease_seconds,
+        execution_guard=lambda: execution_lock(work_root),
+    )
+    scheduler.start()
+    return TestWorldApi(
+        fallback=fallback,
+        nonce_store=job_store,
+        world_store=world_store,
+        signing_keys=config.signing_keys,
+        canonical_owner_id=config.canonical_owner_id,
+        on_attempt_queued=scheduler.notify,
+    )
 
 
 def build_app(environ: dict[str, str] | None = None) -> Any:
@@ -348,13 +407,22 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             "admission": job_runner.has_capacity,
         }
 
-    return create_app(
+    base_app = create_app(
         store=store,
         signing_keys=config.signing_keys,
         canonical_owner_id=config.canonical_owner_id,
         readiness=readiness,
         evidence_store=evidence_store,
         on_job_queued=scheduler.notify,
+    )
+    return _build_test_world_app(
+        config=config,
+        job_store=store,
+        responses=responses,
+        reviewed_instructions=reviewed_instructions,
+        work_root=work_root,
+        connect=lambda: psycopg.connect(config.database_url),
+        fallback=base_app,
     )
 
 
