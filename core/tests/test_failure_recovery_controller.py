@@ -175,7 +175,11 @@ class FailureRecoveryControllerTests(unittest.TestCase):
             self.controller.record_outcome(
                 decision,
                 context(task_id="other-task"),
-                RecoveryOutcome(status=RecoveryOutcomeStatus.SUCCEEDED, progress=True),
+                RecoveryOutcome(
+                    status=RecoveryOutcomeStatus.SUCCEEDED,
+                    progress=True,
+                    independently_verified=True,
+                ),
             )
 
     def test_history_is_owner_isolated_and_monotonic(self):
