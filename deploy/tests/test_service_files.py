@@ -21,6 +21,7 @@ INVENTORY = {
     ".config/lil-tweak/core.env": (0o600, b"CORE=value\n"),
     ".local/share/lil-tweak/migrations/001_initial.sql": (0o400, b"select 1;\n"),
     ".local/share/lil-tweak/migrations/002_fencing.sql": (0o400, b"select 2;\n"),
+    ".local/share/lil-tweak/migrations/003_test_world.sql": (0o400, b"select test world;\n"),
     ".local/share/lil-tweak/migrations/postgres-bootstrap.sql": (0o400, b"select 3;\n"),
     ".local/share/lil-tweak/migrations/postgres-grants.sql": (0o400, b"select 4;\n"),
     ".config/containers/systemd/lil-tweak-core.container": (0o644, b"[Container]\n"),

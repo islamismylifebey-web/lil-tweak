@@ -18,6 +18,7 @@ PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 QUADLET_SOURCE="${PROJECT_DIR}/deploy/quadlet"
 MIGRATION_001_SOURCE="${PROJECT_DIR}/core/migrations/001_initial.sql"
 MIGRATION_002_SOURCE="${PROJECT_DIR}/core/migrations/002_fencing.sql"
+MIGRATION_003_SOURCE="${PROJECT_DIR}/core/migrations/003_test_world.sql"
 ROLLBACK_HELPER="${PROJECT_DIR}/scripts/lil-tweak-rollback.py"
 RELEASE_HELPER="${PROJECT_DIR}/scripts/lil-tweak-release.py"
 SECRET_SNAPSHOT_HELPER="${PROJECT_DIR}/scripts/lil-tweak-secret-snapshot.py"
@@ -123,6 +124,7 @@ offline_check() {
     "${QUADLET_SOURCE}/lil-tweak-postgres-data.volume" \
     "${MIGRATION_001_SOURCE}" \
     "${MIGRATION_002_SOURCE}" \
+    "${MIGRATION_003_SOURCE}" \
     "${ROLLBACK_HELPER}" \
     "${RELEASE_HELPER}" \
     "${SECRET_SNAPSHOT_HELPER}" \
@@ -368,6 +370,8 @@ install -D -m 0400 "${MIGRATION_001_SOURCE}" \
   "${staging_dir}/.local/share/lil-tweak/migrations/001_initial.sql"
 install -D -m 0400 "${MIGRATION_002_SOURCE}" \
   "${staging_dir}/.local/share/lil-tweak/migrations/002_fencing.sql"
+install -D -m 0400 "${MIGRATION_003_SOURCE}" \
+  "${staging_dir}/.local/share/lil-tweak/migrations/003_test_world.sql"
 install -D -m 0400 "${PROJECT_DIR}/deploy/postgres-bootstrap.sql" \
   "${staging_dir}/.local/share/lil-tweak/migrations/postgres-bootstrap.sql"
 install -D -m 0400 "${PROJECT_DIR}/deploy/postgres-grants.sql" \
@@ -408,6 +412,9 @@ authorize_release_file "${SERVICE_HOME}/.local/share/lil-tweak/migrations/001_in
   0400 "${service_uid}" "${service_gid}"
 authorize_release_file "${SERVICE_HOME}/.local/share/lil-tweak/migrations/002_fencing.sql" \
   "${staging_dir}/.local/share/lil-tweak/migrations/002_fencing.sql" \
+  0400 "${service_uid}" "${service_gid}"
+authorize_release_file "${SERVICE_HOME}/.local/share/lil-tweak/migrations/003_test_world.sql" \
+  "${staging_dir}/.local/share/lil-tweak/migrations/003_test_world.sql" \
   0400 "${service_uid}" "${service_gid}"
 authorize_release_file "${SERVICE_HOME}/.local/share/lil-tweak/migrations/postgres-bootstrap.sql" \
   "${staging_dir}/.local/share/lil-tweak/migrations/postgres-bootstrap.sql" \
@@ -561,7 +568,7 @@ apply_migration() {
 }
 
 if [[ "${schema_version}" != "0" && "${schema_version}" != "1" \
-    && "${schema_version}" != "2" ]]; then
+    && "${schema_version}" != "2" && "${schema_version}" != "3" ]]; then
   die "database schema ${schema_version} is newer than this release"
 fi
 if [[ "${schema_version}" == "0" ]]; then
@@ -572,7 +579,11 @@ if [[ "${schema_version}" == "1" ]]; then
   apply_migration "${MIGRATION_002_SOURCE}"
   schema_version="2"
 fi
-[[ "${schema_version}" == "2" ]] || die 'database did not reach schema version 2'
+if [[ "${schema_version}" == "2" ]]; then
+  apply_migration "${MIGRATION_003_SOURCE}"
+  schema_version="3"
+fi
+[[ "${schema_version}" == "3" ]] || die 'database did not reach schema version 3'
 
 {
   printf "\\set app_role 'lil_tweak_app'\n"

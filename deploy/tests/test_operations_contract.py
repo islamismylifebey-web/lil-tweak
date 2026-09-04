@@ -546,7 +546,9 @@ class RuntimeAndBackupTests(unittest.TestCase):
         for check in ("owner_id", "source_digest", "sha256", "object_key"):
             self.assertIn(check, sql)
         for schema_check in (
-            "array[1, 2]",
+            "array[1, 2, 3]",
+            "lil_tweak_test_worlds",
+            "lil_tweak_test_world_attempts",
             "lease_generation",
             "lil_tweak_approvals_one_proposal",
         ):

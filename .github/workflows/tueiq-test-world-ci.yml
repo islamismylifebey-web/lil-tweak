@@ -1,0 +1,38 @@
+name: Tueiq Test World CI
+
+on:
+  push:
+    branches:
+      - feature/tueiq-durable-test-world
+  pull_request:
+    paths:
+      - "core/**"
+      - "app/**"
+      - "lib/**"
+      - "tests/**"
+      - "deploy/**"
+      - "scripts/**"
+      - "package*.json"
+      - ".github/workflows/tueiq-test-world-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test World focused core contracts
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest core.tests.test_test_world core.tests.test_test_world_schema core.tests.test_test_world_api core.tests.test_test_world_runner core.tests.test_test_world_invariants core.tests.test_test_world_modes core.tests.test_test_world_runtime core.tests.test_test_world_scheduler core.tests.test_test_world_main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Full repository verification
+        run: npm run verify

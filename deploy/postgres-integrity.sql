@@ -6,7 +6,7 @@ SET LOCAL statement_timeout = '30s';
 WITH schema_contract AS (
     SELECT
         (SELECT array_agg(version ORDER BY version)
-         FROM lil_tweak_schema_version) = ARRAY[1, 2] AS versions_ok,
+         FROM lil_tweak_schema_version) = ARRAY[1, 2, 3] AS versions_ok,
         EXISTS (
             SELECT 1
             FROM information_schema.columns
@@ -24,15 +24,17 @@ WITH schema_contract AS (
               AND contype = 'u'
               AND pg_get_constraintdef(oid) =
                   'UNIQUE (job_id, revision, proposal_digest)'
-        ) AS approval_invariant_ok
+        ) AS approval_invariant_ok,
+        to_regclass('public.lil_tweak_test_worlds') IS NOT NULL
+            AND to_regclass('public.lil_tweak_test_world_attempts') IS NOT NULL AS test_world_tables_ok
 )
-SELECT NOT (versions_ok AND lease_generation_ok AND approval_invariant_ok)
+SELECT NOT (versions_ok AND lease_generation_ok AND approval_invariant_ok AND test_world_tables_ok)
     AS schema_integrity_failed
 FROM schema_contract
 \gset
 
 \if :schema_integrity_failed
-    \echo 'schema version 2 integrity check failed'
+    \echo 'schema version 3 integrity check failed'
     ROLLBACK;
     \quit 1
 \endif
