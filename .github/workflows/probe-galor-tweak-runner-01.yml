@@ -15,7 +15,7 @@ concurrency:
 jobs:
   exact-host-probe:
     name: Exact dedicated runner identity probe
-    runs-on: [self-hosted, Linux, X64, galor-tweak-runner-01, role-tweak-runner]
+    runs-on: [self-hosted, Linux, X64, role-tweak-runner]
     timeout-minutes: 5
     steps:
       - name: Verify immutable host and bounded runtime state
