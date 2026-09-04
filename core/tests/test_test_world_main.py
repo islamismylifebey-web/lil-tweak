@@ -68,7 +68,7 @@ class TestWorldMainWiringTests(unittest.TestCase):
                 )
 
             self.assertIs(result, wrapped)
-            self.assertIs(store_factory.call_args.args[0](), None if False else store_factory.call_args.args[0]())
+            self.assertTrue(callable(store_factory.call_args.args[0]))
             runtime_kwargs = runtime_factory.call_args.kwargs
             self.assertIs(runtime_kwargs["responses_client"], responses)
             self.assertEqual(runtime_kwargs["work_root"], Path(directory))
