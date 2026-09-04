@@ -1180,6 +1180,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     </ol>
                   ) : (
                     <div className="engineering-empty">
+                      <img className="tweak-stage-avatar" src="/lil-tueeq-avatar.png" alt="" aria-hidden="true" />
                       <h1>What can I help you create?</h1>
                       <p>Chat directly with Lil&apos;Tweak.AI. Tools and engineering actions stay off until you choose a work mode.</p>
                     </div>

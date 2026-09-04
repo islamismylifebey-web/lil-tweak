@@ -12,13 +12,15 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#146cff",
     icons: [
       {
-        src: "/icons/lil-tueeq-galor-icon.jpg",
-        type: "image/jpeg",
+        src: "/icons/lil-tweak-192.png",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/lil-tueeq-galor-icon.jpg",
-        type: "image/jpeg",
+        src: "/icons/lil-tweak-512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "any",
       },
       {

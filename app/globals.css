@@ -724,8 +724,8 @@ button:disabled {
 }
 
 .composer-shell:focus-within {
-  background: var(--snow);
-  border-color: var(--line-strong);
+  background: var(--snow-soft);
+  border-color: transparent;
 }
 
 .task-composer textarea {
@@ -749,6 +749,11 @@ button:disabled {
 
 .task-composer textarea:focus {
   background: transparent;
+  outline: none;
+}
+
+.task-composer textarea:focus-visible {
+  outline: none;
 }
 
 .composer-toolbar {
@@ -946,6 +951,14 @@ button:disabled {
   max-width: 32rem;
   margin: auto;
   text-align: center;
+}
+
+.tweak-stage-avatar {
+  width: clamp(15rem, 44vw, 23rem);
+  max-height: 38dvh;
+  margin-bottom: -1.25rem;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 26px rgba(20, 108, 255, 0.2));
 }
 
 .engineering-empty.compact {
@@ -1969,47 +1982,82 @@ button:disabled {
 .public-shell {
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: 1.25rem;
+  color: #f7fbff;
+  background:
+    radial-gradient(circle at 50% 26%, rgba(20, 108, 255, 0.2), transparent 34%),
+    linear-gradient(165deg, #0a2850 0%, #061a34 50%, #031225 100%);
 }
 
 .public-entry {
   position: relative;
   display: grid;
+  width: min(38rem, 100%);
   justify-items: center;
-  gap: 0.9rem;
+  gap: 1rem;
+  padding: clamp(2rem, 7vw, 3.4rem) clamp(1.35rem, 6vw, 3rem);
+  background: rgba(11, 38, 74, 0.78);
+  border: 1px solid rgba(143, 184, 230, 0.25);
+  border-radius: 2rem;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
   text-align: center;
 }
 
-.public-entry .lil-tueeq-signal {
-  width: 112px;
-  height: 70px;
-  margin-bottom: 0.35rem;
+.public-entry-avatar {
+  width: clamp(9.5rem, 34vw, 13rem);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 3px solid #1875ff;
+  border-radius: 2rem;
+  box-shadow: 0 0 0 5px rgba(5, 16, 34, 0.72), 0 0 34px rgba(20, 108, 255, 0.42);
 }
 
-.public-entry::before {
-  content: "";
-  width: min(12rem, 52vw);
-  height: 5rem;
-  background: url("/brand/lil-tueeq-bug-workshop.png") center 54% / cover no-repeat;
-  border-radius: 6px;
+.owner-access {
+  color: #b8cae0;
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
 }
 
 .public-entry h1 {
   margin: 0;
-  color: var(--gold);
-  font-size: clamp(1.8rem, 5vw, 2.6rem);
-  font-weight: 570;
-  letter-spacing: -0.055em;
+  color: #ffffff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.15rem, 7vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
 }
 
 .public-entry p {
-  margin: 0 0 0.35rem;
-  color: var(--muted);
-  font-size: 0.76rem;
+  max-width: 28rem;
+  margin: 0 0 0.5rem;
+  color: #aebfd4;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .public-entry .access-denied {
-  color: var(--danger);
+  color: #ff9aae;
+}
+
+.public-entry .primary-action {
+  display: grid;
+  width: 100%;
+  min-height: 4.75rem;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #2175ff, #0d59dc);
+  border-radius: 1.1rem;
+  font-size: 1.05rem;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: 0 14px 32px rgba(10, 90, 225, 0.3);
+}
+
+.public-entry small {
+  color: #8196af;
+  font-size: 0.78rem;
 }
 
 @media (max-width: 720px) {
@@ -2073,6 +2121,12 @@ button:disabled {
 
   .task-output {
     padding: 0.8rem;
+  }
+
+  .tweak-stage-avatar {
+    width: min(19rem, 76vw);
+    max-height: 34dvh;
+    margin-bottom: -0.75rem;
   }
 
   .chat-starters {

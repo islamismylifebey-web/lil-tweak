@@ -51,7 +51,8 @@ test("official branding and two-header authentication stay release-bound", async
 
   assert.match(layout, /Lil'Tweak\.AI/);
   assert.match(layout, /manifest:\s*["']\/manifest\.webmanifest["']/);
-  assert.match(layout, /lil-tueeq-galor-icon\.jpg/);
+  assert.match(layout, /lil-tweak-192\.png/);
+  assert.match(layout, /lil-tweak-512\.png/);
   assert.match(auth, /if \(!userId \|\| !email\) return null/);
   assert.doesNotMatch(auth, /userId:\s*userId\s*\|\|\s*email/);
   assert.match(page, /<LilTweakWorkbench\s+signedIn=\{Boolean\(user\)\}/);
@@ -68,10 +69,9 @@ test("server-renders a public shell without private workbench controls", async (
   assert.match(html, /<title>Lil(?:'|&#x27;|&apos;)Tweak\.AI<\/title>/i);
   assert.match(html, /data-surface="lil-tweak-entry"/);
   assert.match(html, /Lil(?:'|&#x27;|&apos;)Tweak\.AI/);
-  assert.match(html, />Private</);
-  assert.match(html, />Sign in</);
-  assert.match(html, /aria-label="Lil Tweak at rest"/);
-  assert.match(html, /data-tier="0"/);
+  assert.match(html, /Owner access/i);
+  assert.match(html, /Open Lil(?:'|&#x27;|&apos;)Tweak\.AI/i);
+  assert.match(html, /lil-tueeq-galor-icon\.jpg/);
   assert.doesNotMatch(html, /aria-label="Chat controls"|Access controls|Data usage/);
   assert.doesNotMatch(html, /Use camera for document photos, pictures, or video clips/);
   assert.doesNotMatch(html, /New Project|Import verified JSON|Save Project/);
@@ -187,9 +187,9 @@ test("shows a safe denial shell to a signed-in but unapproved identity", async (
     });
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /Not authorized/i);
+    assert.match(html, /not authorized/i);
     assert.match(html, /Switch account/i);
-    assert.match(html, /aria-label="Lil Tweak at rest"/);
+    assert.match(html, /public-entry-avatar/);
     assert.doesNotMatch(html, /aria-label="Chat controls"|Access controls|Data usage/);
     assert.doesNotMatch(html, /Use camera for document photos, pictures, or video clips/);
     assert.doesNotMatch(html, /New Project|Import verified JSON|Save Project/);
@@ -315,7 +315,7 @@ test("locks the document to a snow-white viewport and contains scrolling", async
   assert.match(workbench, /event\.key !== "Escape"/);
   assert.match(workbench, /measureLocalPreparation/);
   assert.doesNotMatch(workbench, /estimateComplexity|LivingSpark/);
-  assert.match(publicShell, /UdjatSignal/);
+  assert.match(publicShell, /public-entry-avatar/);
   assert.doesNotMatch(workbench, /Command Center|truth-strip|brand-mark|orbit-card|FOUNDER-AUTHORIZED/);
   assert.doesNotMatch(publicShell, /boundary-orbit|public-truth|brand-mark|SECURE PUBLIC ENTRY/);
 });
@@ -335,7 +335,8 @@ test("removes the disposable starter and declares durable bindings", async () =>
   });
   assert.match(layout, /title: "Lil'Tweak\.AI"/);
   assert.match(layout, /manifest:\s*"\/manifest\.webmanifest"/);
-  assert.match(layout, /lil-tueeq-galor-icon\.jpg/);
+  assert.match(layout, /lil-tweak-192\.png/);
+  assert.match(layout, /lil-tweak-512\.png/);
   assert.match(layout, /robots:\s*\{ index: false/);
   assert.match(page, /LilTweakWorkbench/);
   assert.match(page, /PublicShell/);
