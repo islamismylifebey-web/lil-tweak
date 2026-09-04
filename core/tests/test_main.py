@@ -32,7 +32,6 @@ def make_config(directory):
         signing_keys={"primary": b"s" * 32},
         canonical_owner_id="0123456789abcdef0123456789abcdef",
         git_allowed_hosts=(),
-        galor_readonly_url=None,
         max_admitted_jobs=1,
         job_timeout_seconds=1200,
     )

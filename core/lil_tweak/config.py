@@ -32,7 +32,6 @@ class Config:
     aws_access_key_id: str
     aws_secret_access_key: str
     git_allowed_hosts: tuple[str, ...] = ()
-    galor_readonly_url: str | None = None
     max_admitted_jobs: int = 1
     job_timeout_seconds: int = 20 * 60
 
@@ -68,18 +67,8 @@ class Config:
         evidence_endpoint = required("LIL_TWEAK_EVIDENCE_ENDPOINT")
         if urlsplit(evidence_endpoint).scheme != "https":
             raise ValueError("evidence endpoint must use HTTPS")
-        galor = values.get("LIL_TWEAK_GALOR_READONLY_URL", "").strip() or None
-        if galor:
-            galor_url = urlsplit(galor)
-            if (
-                galor_url.scheme != "https"
-                or not galor_url.hostname
-                or galor_url.username is not None
-                or galor_url.password is not None
-                or galor_url.query
-                or galor_url.fragment
-            ):
-                raise ValueError("invalid GALOR read-only URL")
+        if "LIL_TWEAK_GALOR_READONLY_URL" in values:
+            raise ValueError("LIL_TWEAK_GALOR_READONLY_URL is retired")
         git_allowed_hosts = tuple(
             item.strip().lower()
             for item in values.get("LIL_TWEAK_GIT_ALLOWED_HOSTS", "").split(",")
@@ -126,7 +115,6 @@ class Config:
             aws_access_key_id=required("LIL_TWEAK_R2_ACCESS_KEY_ID"),
             aws_secret_access_key=required("LIL_TWEAK_R2_SECRET_ACCESS_KEY"),
             git_allowed_hosts=git_allowed_hosts,
-            galor_readonly_url=galor,
             max_admitted_jobs=max_admitted_jobs,
             job_timeout_seconds=job_timeout_seconds,
         )

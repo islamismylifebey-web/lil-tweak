@@ -64,7 +64,6 @@ _CODE_EVENTS = frozenset(
     {
         "admission_unavailable",
         "source_intake_failed",
-        "galor_unavailable",
         "engineering_failed",
     }
 )

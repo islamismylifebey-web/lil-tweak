@@ -78,25 +78,16 @@ export interface EngineeringConnectionStatus {
     lilTweak: {
       repository: "islamismylifebey-web/lil-tweak";
       branch: "main";
-      head: string;
-      pr6Merge: string;
     };
-    galorHub: {
-      repository: "islamismylifebey-web/galor-hub";
-      branch: "main";
-      head: string;
-      pr28Merge: string;
-    };
-  };
-  galor: {
-    contract: "galor-runner";
-    version: string;
-    executionHost: string;
-    integration: "awaiting_runtime_probe";
   };
   runner: {
-    state: EngineeringBridgeState;
-    label: string;
+    owner: "lil-tweak";
+    route: "direct_core_to_podman";
+    intermediary: "none";
+    imagePolicy: "digest_pinned";
+    connection: "not_reported";
+    qualification: "not_reported";
+    label: "Lil Tweak direct Podman runner";
   };
 }
 

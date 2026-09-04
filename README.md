@@ -2,9 +2,9 @@
 
 Lil Tweak is an owner-only, approval-gated code engineer. Its public control plane runs on Cloudflare; its trusted execution core runs in an isolated rootless Podman service on `galor-private-cloud-01`.
 
-`galor-private-cloud-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and `LIL_TWEAK_GALOR_READONLY_URL` remains unset.
+`galor-private-cloud-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path, and the retired `LIL_TWEAK_GALOR_READONLY_URL` setting is rejected. This code does not claim that any dedicated runner host has passed live connection or qualification gates.
 
-This repository contains the application, execution core, migrations, tests, and deployment assets. It has not been deployed from this workspace. Production still requires a live Podman/Quadlet qualification on the target droplet and real integration checks against PostgreSQL, R2, Cloudflare Tunnel, and the OpenAI API. Four-GiB co-residency remains blocked; a four-GiB dedicated host still requires live headroom qualification. Four-GiB GALOR co-residency is blocked: production requires at least the eight-GiB plan class with monitored headroom, or a dedicated host/move for Lil Tweak or GALOR before qualification.
+This repository contains the application, execution core, migrations, tests, and deployment assets. It has not been deployed from this workspace. Production still requires a live Podman/Quadlet qualification on the target droplet and real integration checks against PostgreSQL, R2, Cloudflare Tunnel, and the OpenAI API. Four-GiB deployment remains blocked until live headroom qualification; use at least the eight-GiB plan class until live evidence supports otherwise.
 
 ## Architecture
 
@@ -22,7 +22,7 @@ Cloudflare Sites must be the only browser ingress. The managed ingress must stri
 
 Lil Tweak may inspect, edit, and test source code inside a disposable sandbox. It cannot commit, push, deploy, publish, send, delete external data, or spend without a fresh owner decision bound to the exact proposal digest and authoritative core revision. The only implemented approval action is a one-time patch export for owner download.
 
-GALOR Hub is optional and read-only. It must remain on a different Unix user, network, volume, PostgreSQL role, credential set, and port. Lil Tweak continues to operate if GALOR retrieval is unavailable.
+Lil Tweak has no intermediary runner control plane. Signed owner-scoped requests go from the Cloudflare control plane to the private Core, which creates the fresh Podman sandbox directly.
 
 ### Safety amendment — 2026-08-14: v1 byte-limit profile
 
@@ -51,9 +51,9 @@ bash scripts/verify-deployment.sh --check
 
 - Cloudflare binds D1 as `DB` and R2 as `FILES` through `.openai/hosting.json`.
 - Configure core origin, signing key ID, and signing secret as Worker secrets/bindings; never expose them to the browser or store them in D1.
-- Configure the core using `deploy/core.env.example`. Keep the OpenAI key, R2 credentials, database URL, signing keys, and optional GALOR credential outside source control and outside every sandbox.
+- Configure the core using `deploy/core.env.example`. Keep the OpenAI key, R2 credentials, database URL, and signing keys outside source control and outside every sandbox.
 - The model is operator-configurable; the example uses `gpt-5.6-terra`.
 
 ## Deployment
 
-Read [the DigitalOcean operations runbook](docs/operations/digitalocean.md), [the private Cloudflare ingress runbook](docs/operations/cloudflare-private-ingress.md), and [the Cloudflare D1 migration gate](docs/operations/cloudflare-d1.md) before installation. They cover host validation, isolated resources, secret staging, both database migrations, Cloudflare-only ingress, readiness verification, backup/restore, key rotation, upgrades, rollback, and GALOR coexistence.
+Read [the DigitalOcean operations runbook](docs/operations/digitalocean.md), [the private Cloudflare ingress runbook](docs/operations/cloudflare-private-ingress.md), and [the Cloudflare D1 migration gate](docs/operations/cloudflare-d1.md) before installation. They cover host validation, isolated resources, secret staging, both database migrations, Cloudflare-only ingress, readiness verification, backup/restore, key rotation, upgrades, rollback, and the standalone runner boundary.
