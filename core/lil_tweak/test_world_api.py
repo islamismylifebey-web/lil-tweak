@@ -33,6 +33,8 @@ def _attempt_json(attempt: TestWorldAttempt) -> dict[str, Any]:
     return {
         "id": attempt.id,
         "worldId": attempt.world_id,
+        "worldFingerprint": attempt.world_fingerprint,
+        "judgeVersion": attempt.judge_version,
         "number": attempt.number,
         "status": attempt.status.value,
         "outcome": attempt.outcome,
@@ -47,6 +49,11 @@ def _attempt_json(attempt: TestWorldAttempt) -> dict[str, Any]:
             "outputTokens": attempt.output_tokens,
             "totalTokens": attempt.total_tokens,
         },
+        "execution": {
+            "durationMs": attempt.duration_ms,
+            "judgeDurationMs": attempt.judge_duration_ms,
+            "checksRun": len(attempt.feedback),
+        },
         "createdAt": attempt.created_at,
         "startedAt": attempt.started_at,
         "finishedAt": attempt.finished_at,
@@ -59,6 +66,8 @@ def _world_json(world: TestWorld, attempts: list[TestWorldAttempt]) -> dict[str,
         "name": world.name,
         "objective": world.objective,
         "status": world.status.value,
+        "fingerprint": world.fingerprint,
+        "judgeVersion": world.judge_version,
         "source": {
             "kind": "git",
             "repositoryUrl": world.repository_url,
@@ -86,6 +95,8 @@ def _summary_json(world: TestWorld, attempt_count: int) -> dict[str, Any]:
         "name": world.name,
         "objective": world.objective,
         "status": world.status.value,
+        "fingerprint": world.fingerprint,
+        "judgeVersion": world.judge_version,
         "source": {
             "kind": "git",
             "repositoryUrl": world.repository_url,
