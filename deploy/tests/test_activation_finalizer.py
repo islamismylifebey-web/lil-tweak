@@ -695,7 +695,8 @@ class ActivationFinalizerTests(unittest.TestCase):
                             with self.subTest(schema=original.get("schema", "status"), path=path, field=field), self.assertRaises(Exception):
                                 validate(replace_at(original, trail, field, "SECRET-CANARY", remove=field in obj))
                             checked += 1
-                self.assertEqual(checked, 785)
+                # Native Site evidence adds six cases; retired ingress removes 22.
+                self.assertEqual(checked, 769)
             finally: f.close()
 
     def test_fresh_verification_binds_exact_source_and_is_bound_by_host_go(self):
