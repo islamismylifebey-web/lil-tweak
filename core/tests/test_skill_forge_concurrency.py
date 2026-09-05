@@ -2,6 +2,7 @@
 """Real SQLite concurrency: stale evaluations and one-time grants are serialized."""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import sys
@@ -14,10 +15,43 @@ from test_skill_forge import cases, draft
 
 
 class ConcurrencyTests(unittest.TestCase):
+    def test_result_write_cannot_overwrite_newer_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "forge.sqlite3")
+            with closing(sqlite3.connect(path)) as other, closing(sqlite3.connect(path)) as db:
+                class InterleavedLibrary(Library):
+                    reads = 0
+                    def _row(self, owner, digest):
+                        result = super()._row(owner, digest)
+                        self.reads += 1
+                        if self.reads == 2:
+                            # Another trusted evaluation claims a newer revision
+                            # after this reader's snapshot but before its write.
+                            with other:
+                                other.execute(
+                                    "UPDATE skill_forge_candidates SET revision=revision+1, "
+                                    "transfer_report=NULL,source_verified=0 WHERE owner=? AND digest=?",
+                                    (owner, digest),
+                                )
+                        return result
+                lib = InterleavedLibrary(db, source_verifier=lambda owner, origin: True)
+                digest = lib.add("owner", draft())
+                async def run(request):
+                    status, output = {"held-out-a": ("ok", "present"),
+                                      "held-out-invalid": ("blocked", "invalid"),
+                                      "held-out-without-tool": ("blocked", "tool_missing")}[request.task]
+                    return Observation(request.digest, request.nonce, request.nonce, status, output)
+                adapter = Adapter("peer", ("read_inventory",),
+                                  "fresh-session/package-only/no-authority", run)
+                with self.assertRaisesRegex(ForgeError, "stale_evaluation"):
+                    asyncio.run(lib.evaluate("owner", digest, cases(), adapter, "transfer"))
+                row = other.execute("SELECT transfer_report,source_verified FROM skill_forge_candidates").fetchone()
+                self.assertEqual(row, (None, 0))
+
     def test_concurrent_evaluations_cannot_share_a_revision(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "forge.sqlite3")
-            with sqlite3.connect(path) as db:
+            with closing(sqlite3.connect(path)) as db:
                 digest = Library(db).add("owner", draft())
             reads, runs = threading.Barrier(2), threading.Barrier(2)
 
@@ -40,7 +74,7 @@ class ConcurrencyTests(unittest.TestCase):
                                       "held-out-invalid": ("blocked", "invalid"),
                                       "held-out-without-tool": ("blocked", "tool_missing")}[request.task]
                     return Observation(request.digest, request.nonce, request.nonce, status, output)
-                with sqlite3.connect(path) as db:
+                with closing(sqlite3.connect(path)) as db:
                     lib = RacingLibrary(db, source_verifier=lambda owner, origin: True)
                     adapter = Adapter(agent, ("read_inventory",),
                                       "fresh-session/package-only/no-authority", run)

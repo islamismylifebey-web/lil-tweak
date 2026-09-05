@@ -224,10 +224,13 @@ class Library:
             row, _ = self._row(owner, digest)
             if row["revoked"] or row["revision"] != revision:
                 raise ForgeError("stale_evaluation")
-            self._db.execute(
+            updated = self._db.execute(
                 f"UPDATE skill_forge_candidates SET {role}_report=?, source_verified=1 "
-                "WHERE owner=? AND digest=?", (report.to_json(), owner, digest),
+                "WHERE owner=? AND digest=? AND revision=? AND revoked=0",
+                (report.to_json(), owner, digest, revision),
             )
+            if updated.rowcount != 1:
+                raise ForgeError("stale_evaluation")
             self._event(owner, digest, "evaluation_recorded", report.to_json())
         return report
 
