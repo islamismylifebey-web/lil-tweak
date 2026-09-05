@@ -207,6 +207,14 @@ class ReleaseToolingTests(unittest.TestCase):
                 release._site_identifier({"SITES_VERSION_ID": invalid}, "SITES_VERSION_ID")
         with self.assertRaises(release.ReleaseError):
             release._identifier({"RESOURCE_ID": native}, "RESOURCE_ID")
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "release-state.env"
+            state.write_text("SITES_VERSION_ID=" + native + "\nSITES_DEPLOYMENT_ID=" + native + "\n")
+            state.chmod(0o600)
+            self.assertEqual(release._parse_state(state)["SITES_VERSION_ID"], native)
+            state.write_text("RESOURCE_ID=" + native + "\n")
+            with self.assertRaises(release.ReleaseError):
+                release._parse_state(state)
 
     def test_release_target_gate_has_a_host_safe_offline_check(self) -> None:
         target = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"

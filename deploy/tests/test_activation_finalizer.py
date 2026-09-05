@@ -177,7 +177,7 @@ class ActivationFixture:
             "approvalProposal": None, "approvalConsumed": False, "gitSource": q.submission("architect")["gitSource"], "createdAt": self.t(-120), "updatedAt": self.t(-120),
             "sources": [], "evidence": [{**d, "jobId": self.jobid} for d in descriptors], "events": [{**e, "summary": ""} for e in events]}
         self.deployment = {"schema": "tueiq-site-deployment-record-v1", "sourceHead": self.head, "sourceTree": self.tree,
-            "versionId": "site-version", "versionNumber": 2, "deploymentId": "site-deployment", "archiveSha256": "c" * 64,
+            "versionId": "site-project~site-version", "versionNumber": 2, "deploymentId": "site-project~site-deployment", "archiveSha256": "c" * 64,
             "environmentRevision": "env-r1", "accessRevision": "access-r2", "accessMode": "custom", "allowedOwnerCount": 1,
             "allowedGroupCount": 0, "allowedVisitorCount": 0, "productionOrigin": "https://tweak.example.invalid", "customDomainCount": 0,
             "anonymousDenied": True, "forgedIdentityDenied": True, "alternateHostRejected": True, "ownerSameOriginSucceeded": True,
@@ -219,7 +219,7 @@ class ActivationFixture:
         self.state = {"RUNTIME_MANIFEST": str(runtime), "RUNTIME_MANIFEST_SHA256": a.sha(runtime.read_bytes()), "SOURCE_COMMIT": self.head, "SOURCE_TREE": self.tree,
             "D1_DATABASE_ID": "d1-database", "D1_SCHEMA_REVISION": "0002", "D1_BINDING_REVISION": "d1-r1", "R2_ACCOUNT_ID": "r2-account", "R2_BUCKET_NAME": "evidence-bucket", "R2_BINDING_REVISION": "r2-r1",
             "LIL_TWEAK_TUNNEL_ID": "tunnel-id", "ACCESS_APPLICATION_ID": "access-app", "ACCESS_POLICY_ID": "access-policy", "ACCESS_POLICY_REVISION": "access-r1",
-            "CORE_ORIGIN": "https://core.example.invalid", "SITES_SOURCE_COMMIT": self.head, "SITES_VERSION_ID": "site-version", "SITES_VERSION_NUMBER": "2", "SITES_DEPLOYMENT_ID": "site-deployment", "SITES_ARCHIVE_HASH": "c" * 64,
+            "CORE_ORIGIN": "https://core.example.invalid", "SITES_SOURCE_COMMIT": self.head, "SITES_VERSION_ID": "site-project~site-version", "SITES_VERSION_NUMBER": "2", "SITES_DEPLOYMENT_ID": "site-project~site-deployment", "SITES_ARCHIVE_HASH": "c" * 64,
             "SITES_ENVIRONMENT_REVISION": "env-r1", "SITES_ACCESS_REVISION": "access-r2", "SITES_ACCESS_MODE": "custom", "SITES_ALLOWED_OWNER_COUNT": "1", "SITES_ALLOWED_GROUP_COUNT": "0", "SITES_ALLOWED_VISITOR_COUNT": "0",
             "SITES_CUSTOM_DOMAIN_COUNT": "0", "SITES_ANONYMOUS_DENIED": "true", "SITES_FORGED_IDENTITY_DENIED": "true", "SITES_ALTERNATE_HOST_REJECTED": "true", "SITES_OWNER_SAME_ORIGIN_SUCCEEDED": "true",
             "PRODUCTION_URL": "https://tweak.example.invalid", "PUBLIC_ORIGIN": "https://tweak.example.invalid", "PRIOR_SITES_VERSION_NUMBER": "1", "SITES_DEPLOYED_AT": self.t(-140), "OWNER_FLOW_JOB": str(job_path)}
@@ -232,10 +232,10 @@ class ActivationFixture:
             release.create_owner_flow_receipt(runtime, root / "state.env", job_path, root / "owner-flow.txt")
         self.change = {"schema": "tueiq-session-change-record-v1", "sessionNonce": "a" * 48, "startedAt": self.t(-180), "mutationStartedAt": self.t(-160), "completedAt": self.t(210),
             "preflightProviderSha256": a.sha((root / "preflight.json").read_bytes()), "sourceHead": self.head, "sourceTree": self.tree,
-            "priorSite": {"versionId": "prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
+            "priorSite": {"versionId": "site-project~prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
             "managedBindings": dict.fromkeys(MANAGED_BINDINGS, "absent"),
             "resources": [{"kind": kind, "name": name, "preflight": "absent", "createdId": ident} for kind, name, ident in RESOURCE_FIXTURES],
-            "additions": ["resource:" + str(i) for i in range(6)] + ["binding:" + k for k in ADDED_BINDINGS] + ["site:site-version"], "rollbackOrder": []}
+            "additions": ["resource:" + str(i) for i in range(6)] + ["binding:" + k for k in ADDED_BINDINGS] + ["site:site-project~site-version"], "rollbackOrder": []}
         self.change["rollbackOrder"] = list(reversed(self.change["additions"]))
         self.change["resources"][4]["createdId"] = self.directory_observation["createdId"]
         preflight = {"observedAt": self.t(-165), "priorSite": copy.deepcopy(self.change["priorSite"]), "bindingOperation": "sites-environment-list",
@@ -463,7 +463,7 @@ class ActivationFinalizerTests(unittest.TestCase):
 
         before = {
             "observedAt": "2026-09-04T16:00:00Z",
-            "priorSite": {"versionId": "prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
+            "priorSite": {"versionId": "site-project~prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
             "bindingOperation": "sites-environment-list",
             "managedBindings": [{"name": name, "present": False} for name in MANAGED_BINDINGS],
             "resources": [{"kind": kind, "name": name, "operation": "filesystem-lstat" if kind == "secret_directory" else "cloudflare-resource-list", "matchingIds": []} for kind, name, _ in RESOURCE_FIXTURES],
@@ -744,7 +744,7 @@ class ActivationFinalizerTests(unittest.TestCase):
                             f.write(f.args.candidate, bad)
                             with self.subTest(path=path, field=field), self.assertRaises(Exception): f.a.verify_candidate(f.args)
                             checks += 1
-                self.assertEqual(checks, 334)
+                self.assertEqual(checks, 332)
                 f.write(f.args.candidate, candidate)
                 f.args.d1_cross_check.write_bytes(b"{}")
                 result = f.cli("verify-candidate")

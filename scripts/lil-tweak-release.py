@@ -35,6 +35,7 @@ IMAGE = re.compile(
 )
 STATE_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 STATE_VALUE = re.compile(r"^[A-Za-z0-9._/:@+-]{1,4096}$")
+SITE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.~-]{0,255}")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)$")
 MAX_MANIFEST_BYTES = 32 * 1024 * 1024
@@ -1458,10 +1459,11 @@ def _parse_state(path: Path) -> dict[str, str]:
         if not line or "=" not in line:
             raise ReleaseError("release_state_invalid")
         key, value = line.split("=", 1)
+        value_pattern = SITE_IDENTIFIER if key in {"SITES_VERSION_ID", "SITES_DEPLOYMENT_ID"} else STATE_VALUE
         if (
             not STATE_KEY.fullmatch(key)
             or key in values
-            or not STATE_VALUE.fullmatch(value)
+            or not value_pattern.fullmatch(value)
             or any(word in key for word in ("PASSWORD", "SECRET", "TOKEN", "CREDENTIAL", "REGISTRY_AUTH"))
         ):
             raise ReleaseError("release_state_invalid")
@@ -1513,7 +1515,7 @@ def _identifier(values: dict[str, str], name: str) -> str:
 def _site_identifier(values: dict[str, str], name: str) -> str:
     """Preserve native Sites composite IDs without widening provider IDs."""
     value = _required_state(values, name)
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.~-]{0,255}", value) is None:
+    if SITE_IDENTIFIER.fullmatch(value) is None:
         raise ReleaseError("release_state_invalid")
     return value
 
