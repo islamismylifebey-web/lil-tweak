@@ -1,30 +1,25 @@
-import { env } from "cloudflare:workers";
-import { readBoundedJson } from "@/lib/bounded-request";
-import { DirectChatError, parseDirectChatInput, requestOpenAIDirectChat } from "@/lib/direct-chat";
 import { json, ownerFor, publicError, requireSameOriginMutation } from "@/lib/engineering-api";
-import { WORKBENCH_MAX_CHAT_JSON_BYTES } from "@/lib/workbench-capacity";
 
-interface DirectChatBindings {
-  OPENAI_API_KEY?: string;
-  LIL_TWEAK_OPENAI_MODEL?: string;
-  OPENAI_MODEL?: string;
-}
-
+/**
+ * Emergency zero-token guard.
+ *
+ * Lil' Tweak must not make any model-provider request while this guard is
+ * active. Keep the route present so the live UI fails closed instead of
+ * retrying against a paid model endpoint.
+ */
 export async function POST(request: Request) {
   try {
     ownerFor(request);
     requireSameOriginMutation(request);
-    const input = parseDirectChatInput(await readBoundedJson(request, WORKBENCH_MAX_CHAT_JSON_BYTES));
-    const bindings = env as unknown as DirectChatBindings;
-    const answer = await requestOpenAIDirectChat(input, {
-      apiKey: bindings.OPENAI_API_KEY,
-      model: bindings.LIL_TWEAK_OPENAI_MODEL || bindings.OPENAI_MODEL,
-    });
-    return json({ answer });
+
+    return json(
+      {
+        error: "Lil' Tweak model calls are temporarily disabled to prevent token usage.",
+        code: "MODEL_CALLS_DISABLED",
+      },
+      503,
+    );
   } catch (error) {
-    if (error instanceof DirectChatError) {
-      return json({ error: error.message, code: error.code }, error.status);
-    }
     return publicError(error);
   }
 }
