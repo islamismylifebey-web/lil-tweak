@@ -28,11 +28,13 @@ Every mutating core installer, Tunnel installer, combined wrapper path (includin
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.
 
-Build the core in CI or on a dedicated build host. Pass a Python base image by digest because `Containerfile.core` intentionally has no mutable default:
+Build the core in CI or on a dedicated build host. Pass the Python-capable base image by digest because `Containerfile.core` intentionally has no mutable default. Debian bases must already provide Python 3.12; Wolfi bases install the pinned Python 3.12 package during the image build:
 
 ```bash
 podman build \
   --build-arg PYTHON_BASE_IMAGE='REGISTRY/PYTHON@sha256:64_HEX_DIGEST' \
+  --build-arg PODMAN_REMOTE_STATIC_URL='HTTPS_DOWNLOAD_URL' \
+  --build-arg PODMAN_REMOTE_STATIC_SHA256='64_HEX_DIGEST' \
   --file deploy/Containerfile.core \
   --tag TEMPORARY_BUILD_TAG .
 ```
