@@ -87,13 +87,20 @@ evidence.
 
 ## Source baseline
 
-The activation branch begins at the current Sites source commit
+The activation branch begins at the initial Sites source commit
 `e76996970e816c4cce7b8334e0495e1e0de48e7d` so the owner-facing Site and its
 mobile/UI work are preserved. It imports the Test World implementation merged
 by GitHub PR #29 at merge commit
 `97acede665df94ea7002b6eb7eceb8dc28ea94f7`, then ports the Hub-detachment work
 from PR #28. The self-mutating workflow
 `.github/workflows/tueiq-main-wiring-patch.yml` must not survive the import.
+
+The prepared release also preserves the subsequently published Failure Recovery
+module from Sites source `a9a448ec9393be334e1b92ad06928b9e8da20571` and the
+chat-model selector from `026bbf0acf25bf84ec062e88d5bcbb0ecebab2d1`. The recovery
+adapter drops only its obsolete retired-intermediary argument to match the
+detached orchestrator; this preservation does not add production execution
+wiring or change the existing default chat model.
 
 Known PR #29 review defects are part of activation scope:
 

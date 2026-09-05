@@ -398,8 +398,10 @@ Both print only a canonical SHA-256, never activation truth. The candidate schem
 is `tueiq-direct-runner-activation-candidate-v1` with exact top-level fields
 `schema,startedAt,completedAt,sourceHead,artifactDigests,identity,topology,images,provider,guest,runtime,rollback,production,site,ownerFlow,localQualification,changeRecord`.
 All nested allowlists are executable in `deploy/tests/test_activation_finalizer.py`.
-The receipt contains no prompts, stdout/stderr, credentials, origins, IPs or
-secret paths; only allowlisted separate primary bodies retain public prose.
+The receipt contains no prompts, stdout/stderr, credentials, private origins,
+IPs, or arbitrary secret paths. The public Site origin is retained only in the
+deployment binding; the fixed staging directory name is retained only in the
+resource record. Only allowlisted separate primary bodies retain public prose.
 
 The following are exact key sets, not extensible metadata bags. Unknown keys at
 any depth fail. Reused identity/topology/image/descriptor objects have the same
