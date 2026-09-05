@@ -258,8 +258,15 @@ def collect_guest(source_root, provider_path, runtime_path, job_id, output):
     boundaries = q.InstalledBoundaries(source_root, service, environment, start)
     exact(boundaries.source_head(), base["sourceHead"]); exact(boundaries.images(), base["images"])
     exact(boundaries.runtime_snapshot()["containers"], [])
-    value = {"schema": "tueiq-guest-activation-cross-check-v1", "observedAt": q.iso(time.time()), "jobId": job_id, **base, "noContainers": True}
+    value = {"schema": "tueiq-guest-activation-cross-check-v1", "observedAt": q.iso(time.time()), "jobId": job_id, **base, "noContainers": True, "secretDirectory": a.observe_secret_directory()}
     a.validate_guest(value, cross=True)
+    return a.publish(output, value)
+
+
+def seal_resource_observations(raw, output):
+    a.require_new_output(output)
+    require(type(raw) is bytes and 0 < len(raw) <= 65536)
+    value = a.validate_resource_observations(q.parse_json(raw))
     return a.publish(output, value)
 
 
@@ -268,6 +275,7 @@ def main(argv=None):
     subs = parser.add_subparsers(dest="command")
     site = subs.add_parser("seal-site"); site.add_argument("--collector-stdin", required=True, action="store_true"); site.add_argument("--site-deployment-record", required=True, type=Path); site.add_argument("--output-dir", required=True, type=Path)
     d1 = subs.add_parser("seal-d1"); d1.add_argument("--response-stdin", required=True, action="store_true"); d1.add_argument("--job-id", required=True); d1.add_argument("--output", required=True, type=Path)
+    resources = subs.add_parser("seal-resource-observations"); resources.add_argument("--observations-stdin", required=True, action="store_true"); resources.add_argument("--output", required=True, type=Path)
     guest = subs.add_parser("seal-guest")
     for name in ("provider-evidence", "runtime-manifest", "verification-receipt", "output"): guest.add_argument("--" + name, required=True, type=Path)
     core = subs.add_parser("collect-core")
@@ -282,6 +290,7 @@ def main(argv=None):
         if args.command in {"seal-site", "seal-d1"}:
             raw = sys.stdin.buffer.read(MAX_CAPTURE + 1); require(len(raw) <= MAX_CAPTURE)
             digest = seal_site(q.parse_json(raw), args.site_deployment_record, args.output_dir) if args.command == "seal-site" else seal_d1(raw, args.job_id, args.output)
+        elif args.command == "seal-resource-observations": digest = seal_resource_observations(sys.stdin.buffer.read(65537), args.output)
         elif args.command == "seal-guest": digest = seal_guest(args.provider_evidence, args.runtime_manifest, args.verification_receipt, args.output)
         elif args.command == "collect-core": digest = collect_core(args.core_env, args.d1_cross_check, args.output)
         elif args.command == "collect-guest": digest = collect_guest(args.source_root, args.provider_evidence, args.runtime_manifest, args.job_id, args.output)

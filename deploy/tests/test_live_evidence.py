@@ -11,6 +11,37 @@ from deploy.tests.test_activation_finalizer import ROOT, ActivationFixture, load
 
 
 class LiveEvidenceTests(unittest.TestCase):
+    def test_resource_sealer_retains_only_strict_sanitized_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                script = ROOT / "scripts/lil-tweak-live-evidence.py"
+                output = f.root / "sealed-resources.json"
+                args = [sys.executable, str(script), "seal-resource-observations", "--observations-stdin", "--output", str(output)]
+                result = subprocess.run(args, input=json.dumps(f.observations).encode(), capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_bytes(), f.a.canonical(f.observations))
+                self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+                output.unlink()
+                for bad in ({**f.observations, "rawResponse": "SECRET-CANARY"}, {**f.observations, "token": "SECRET-CANARY"}):
+                    result = subprocess.run(args, input=json.dumps(bad).encode(), capture_output=True)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertFalse(output.exists())
+                    self.assertNotIn(b"SECRET-CANARY", result.stdout + result.stderr)
+                # Production must reopen the sealed source, not accept a
+                # changed hash after the strict validator returns.
+                release = f.a.release
+                helper = release._activation_helper()
+                validate = helper.validate_resource_observations
+                def substitute(value):
+                    result = validate(value)
+                    f.write(f.root / "resource-observations.json", {})
+                    return result
+                with patch.object(release, "_activation_helper", return_value=helper), patch.object(helper, "validate_resource_observations", side_effect=substitute), self.assertRaises(Exception):
+                    release.create_production_manifest(f.args.runtime_manifest, f.root / "state.env", f.args.owner_flow_receipt, f.root / "substituted-production.json")
+                self.assertFalse((f.root / "substituted-production.json").exists())
+            finally: f.close()
+
     def test_independent_guest_observation_executes_and_rejects_identity_or_cleanup_disagreement(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = ActivationFixture(Path(temporary))
@@ -21,10 +52,11 @@ class LiveEvidenceTests(unittest.TestCase):
                 boundaries.source_head.return_value = f.head
                 boundaries.images.return_value = f.guest["images"]
                 boundaries.runtime_snapshot.return_value = {"containers": []}
-                with patch.object(live.q, "target_module", return_value=SimpleNamespace(verify_target=lambda: target)), patch.object(live.platform, "machine", return_value="x86_64"), patch.object(live.platform, "freedesktop_os_release", return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}), patch.object(live.pwd, "getpwnam", return_value=Mock()), patch.object(live.q, "load_core_environment", return_value={}), patch.object(live.q, "InstalledBoundaries", return_value=boundaries):
+                with patch.object(live.a, "SESSION_SECRET_DIRECTORY", f.secret_directory), patch.object(live.q, "target_module", return_value=SimpleNamespace(verify_target=lambda: target)), patch.object(live.platform, "machine", return_value="x86_64"), patch.object(live.platform, "freedesktop_os_release", return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}), patch.object(live.pwd, "getpwnam", return_value=Mock()), patch.object(live.q, "load_core_environment", return_value={}), patch.object(live.q, "InstalledBoundaries", return_value=boundaries):
                     output = f.root / "guest-independent.json"
                     live.collect_guest(f.repo, f.args.provider_evidence, f.args.runtime_manifest, f.jobid, output)
                     self.assertEqual(f.a.read_json(output)["identity"], f.guest["identity"])
+                    self.assertEqual(f.a.read_json(output)["secretDirectory"], f.directory_observation)
                     for kind in ("identity", "cleanup", "source", "images"):
                         target.droplet_id = "1" if kind == "identity" else "597343619"
                         boundaries.runtime_snapshot.return_value = {"containers": ["leftover"] if kind == "cleanup" else []}

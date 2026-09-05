@@ -28,6 +28,7 @@ ORIGINALS = ("source-root", "local-qualification", "preflight-provider-evidence"
 MANAGED = ("MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE")
 ADDED = MANAGED[:-1]
 RESOURCE_KINDS = ("tunnel", "access_application", "access_policy", "service_token", "secret_directory", "dns", "managed_rule")
+SESSION_SECRET_DIRECTORY = Path("/var/lib/lil-tweak-activation/secrets")
 RELEASE_FILES = ("source-manifest.json", "source.tar.gz", "verification-receipt.json", "host-go.txt", "base-images.txt", "scan-hashes.txt",
                  "core.sbom.json", "core.grype.json", "runner.sbom.json", "runner.grype.json")
 TOPOLOGY = {"route": "direct_core_to_local_podman", "intermediary": "none", "policy": "ENGINEERING_EXECUTION_ONLY"}
@@ -252,12 +253,13 @@ def validate_d1(value):
 
 def validate_guest(value, *, cross=False):
     names = {"schema", "providerSha256", "runtimeSha256", "sourceHead", "identity", "operatingSystem", "architecture", "topology", "images"}
-    fields(value, names | ({"observedAt", "jobId", "noContainers"} if cross else {"checkedAt", "verificationSha256"}))
+    fields(value, names | ({"observedAt", "jobId", "noContainers", "secretDirectory"} if cross else {"checkedAt", "verificationSha256"}))
     exact(value["schema"], "tueiq-guest-activation-cross-check-v1" if cross else "tueiq-guest-evidence-v1")
     timestamp(value["observedAt" if cross else "checkedAt"])
     for name in ("providerSha256", "runtimeSha256"): q.digest(value[name])
     if cross:
         require(re.fullmatch(r"job:[0-9a-f]{32}", value["jobId"]) is not None); exact(value["noContainers"], True)
+        validate_directory_observation(value["secretDirectory"])
     else: q.digest(value["verificationSha256"])
     require(re.fullmatch(r"[0-9a-f]{40}", value["sourceHead"]) is not None)
     exact(value["operatingSystem"], "Ubuntu 24.04 LTS"); exact(value["architecture"], "x86_64"); exact(value["topology"], TOPOLOGY)
@@ -267,8 +269,59 @@ def validate_guest(value, *, cross=False):
     return value
 
 
-def validate_change(value, *, head, tree, preflight, deployment, rollback_time, now):
-    fields(value, ("schema", "sessionNonce", "startedAt", "mutationStartedAt", "completedAt", "preflightProviderSha256", "sourceHead", "sourceTree", "priorSite", "managedBindings", "resources", "additions", "rollbackOrder"))
+def validate_directory_observation(value):
+    fields(value, ("createdId", "device", "inode", "uid", "gid", "mode"))
+    q.integer(value["device"], 0); q.integer(value["inode"], 1)
+    exact([value["uid"], value["gid"], value["mode"]], [0, 0, "0700"])
+    exact(value["createdId"], "directory-" + str(value["device"]) + "-" + str(value["inode"]))
+    return value
+
+
+def observe_secret_directory():
+    # Fixed session staging location, no secret reads or path override.
+    with secure_directory(SESSION_SECRET_DIRECTORY) as fd:
+        info = os.fstat(fd)
+        return validate_directory_observation({"createdId": "directory-" + str(info.st_dev) + "-" + str(info.st_ino),
+            "device": info.st_dev, "inode": info.st_ino, "uid": info.st_uid, "gid": info.st_gid, "mode": "0700"})
+
+
+def validate_resource_observations(value):
+    """Sanitized operation projections, retained separately from rollback claims."""
+    fields(value, ("schema", "sessionNonce", "sourceHead", "sourceTree", "preflight", "creations"))
+    exact(value["schema"], "tueiq-session-resource-observations-v1")
+    require(type(value["sessionNonce"]) is str and re.fullmatch(r"[0-9a-f]{48}", value["sessionNonce"]) is not None)
+    for key in ("sourceHead", "sourceTree"): require(type(value[key]) is str and re.fullmatch(r"[0-9a-f]{40}", value[key]) is not None)
+    before = value["preflight"]
+    fields(before, ("observedAt", "priorSite", "bindingOperation", "managedBindings", "resources"))
+    timestamp(before["observedAt"]); exact(before["bindingOperation"], "sites-environment-list")
+    fields(before["priorSite"], ("versionId", "versionNumber", "accessRevision", "accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount"))
+    identifier(before["priorSite"]["versionId"]); identifier(before["priorSite"]["accessRevision"]); q.integer(before["priorSite"]["versionNumber"], 1)
+    exact([before["priorSite"][k] for k in ("accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount")], ["custom", 1, 0, 0])
+    require(type(before["managedBindings"]) is list and len(before["managedBindings"]) == len(MANAGED))
+    for name, observed in zip(MANAGED, before["managedBindings"]):
+        fields(observed, ("name", "present")); exact(observed, {"name": name, "present": False})
+    require(type(before["resources"]) is list and len(before["resources"]) == len(RESOURCE_KINDS))
+    require(type(value["creations"]) is list and len(value["creations"]) == len(RESOURCE_KINDS))
+    previous = timestamp(before["observedAt"])
+    for kind, absent, created in zip(RESOURCE_KINDS, before["resources"], value["creations"]):
+        fields(absent, ("kind", "name", "operation", "matchingIds"))
+        exact(absent["kind"], kind); identifier(absent["name"]); exact(absent["matchingIds"], [])
+        exact(absent["operation"], "filesystem-lstat" if kind == "secret_directory" else "cloudflare-resource-list")
+        fields(created, ("kind", "name", "operation", "createdId", "observedAt", "preflightSha256", "filesystem"))
+        exact(created["kind"], kind); exact(created["name"], absent["name"]); identifier(created["createdId"])
+        exact(created["operation"], "filesystem-mkdir" if kind == "secret_directory" else "cloudflare-resource-create")
+        exact(created["preflightSha256"], sha(canonical(before)))
+        observed = timestamp(created["observedAt"]); require(previous <= observed); previous = observed
+        if kind == "secret_directory":
+            validate_directory_observation(created["filesystem"]); exact(created["createdId"], created["filesystem"]["createdId"])
+        else: exact(created["filesystem"], None)
+    require(len({r["name"] for r in value["creations"]}) == len(RESOURCE_KINDS))
+    require(len({r["createdId"] for r in value["creations"]}) == len(RESOURCE_KINDS))
+    return value
+
+
+def validate_change(value, *, head, tree, preflight, deployment, rollback_time, now, observations):
+    fields(value, ("schema", "sessionNonce", "startedAt", "mutationStartedAt", "completedAt", "preflightProviderSha256", "sourceHead", "sourceTree", "priorSite", "managedBindings", "resources", "additions", "rollbackOrder", "resourceObservationsSha256"))
     exact(value["schema"], "tueiq-session-change-record-v1")
     require(re.fullmatch(r"[0-9a-f]{48}", value["sessionNonce"]) is not None)
     exact(value["sourceHead"], head); exact(value["sourceTree"], tree); exact(value["preflightProviderSha256"], preflight)
@@ -286,6 +339,14 @@ def validate_change(value, *, head, tree, preflight, deployment, rollback_time, 
         fields(resource, ("kind", "name", "preflight", "createdId")); exact(resource["kind"], expected)
         exact(resource["preflight"], "absent"); identifier(resource["name"]); identifier(resource["createdId"])
     require(len({r["name"] for r in resources}) == len(resources) and len({r["createdId"] for r in resources}) == len(resources))
+    validate_resource_observations(observations)
+    exact(value["resourceObservationsSha256"], sha(canonical(observations)))
+    for key in ("sessionNonce", "sourceHead", "sourceTree"): exact(observations[key], value[key])
+    exact(observations["preflight"]["priorSite"], prior)
+    require(start <= fresh(observations["preflight"]["observedAt"], now) < mutation)
+    for resource, creation in zip(resources, observations["creations"]):
+        exact({k: creation[k] for k in ("kind", "name", "createdId")}, {k: resource[k] for k in ("kind", "name", "createdId")})
+        require(mutation <= fresh(creation["observedAt"], now) <= timestamp(deployment["deployedAt"]))
     additions = ["resource:" + str(i) for i in range(len(resources))] + ["binding:" + name for name in ADDED] + ["site:" + deployment["versionId"]]
     exact(value["additions"], additions); exact(value["rollbackOrder"], list(reversed(additions)))
     return value
@@ -373,7 +434,7 @@ def validate_release(root, runtime, head, tree, now):
 
 
 def validate_production(value, runtime, deployment, job, owner_receipt, digests):
-    fields(value, ("schema", "runtime", "cloudflare", "sites", "owner_flow_receipt", "owner_flow_job_sha256"))
+    fields(value, ("schema", "runtime", "cloudflare", "sites", "owner_flow_receipt", "owner_flow_job_sha256", "resource_observations"))
     exact(value["schema"], release.PRODUCTION_SCHEMA)
     exact(value["runtime"], {"manifest_sha256": digests["runtime-manifest"], "source_commit": runtime["source"]["commit"], "source_tree": runtime["source"]["tree"]})
     fields(value["cloudflare"], ("d1", "r2", "ingress"))
@@ -394,7 +455,8 @@ def validate_production(value, runtime, deployment, job, owner_receipt, digests)
     exact(value["owner_flow_receipt"], release._decision_receipt(owner_receipt, expected, "activation_owner_flow_rejected"))
     times = dict(line.split("=", 1) for line in read_bytes(owner_receipt).decode("ascii").splitlines())
     require(timestamp(deployment["deployedAt"]) <= timestamp(job["checkedAt"]) <= timestamp(times["issued_at"]))
-    return {"runtimeSha256": digests["runtime-manifest"], "ownerFlowSha256": digests["owner-flow-receipt"], "ownerFlowJobSha256": digests["owner-flow-job"],
+    validate_resource_observations(value["resource_observations"])
+    return {"runtimeSha256": digests["runtime-manifest"], "ownerFlowSha256": digests["owner-flow-receipt"], "ownerFlowJobSha256": digests["owner-flow-job"], "resourceObservationsSha256": sha(canonical(value["resource_observations"])),
             "d1": cf["d1"], "r2": cf["r2"], "ingress": {k: v for k, v in cf["ingress"].items() if k != "core_origin"}}
 
 
@@ -452,9 +514,12 @@ def replay(args, *, completed_at=None, now=None):
         exact(value["providerSha256"], digests["provider-evidence"]); exact(value["runtimeSha256"], digests["runtime-manifest"])
         exact(value["identity"], local["identity"]); exact(value["sourceHead"], head); exact(value["images"], local["images"])
     exact(guest["verificationSha256"], release_digests["verification-receipt.json"]); exact(guest_cross["jobId"], owner_job["jobId"])
-    production = validate_production(read_json(args.production_manifest, legacy=True), runtime, deployment, owner_job, args.owner_flow_receipt, digests)
-    change = validate_change(read_json(args.change_record), head=head, tree=tree, preflight=digests["preflight-provider-evidence"], deployment=deployment, rollback_time=timestamp(manifest["captured_at_iso"]), now=now)
-    exact(read_json(args.production_manifest, legacy=True)["sites"]["prior_version_number"], change["priorSite"]["versionNumber"])
+    production_original = read_json(args.production_manifest, legacy=True)
+    production = validate_production(production_original, runtime, deployment, owner_job, args.owner_flow_receipt, digests)
+    observations = production_original["resource_observations"]
+    change = validate_change(read_json(args.change_record), head=head, tree=tree, preflight=digests["preflight-provider-evidence"], deployment=deployment, rollback_time=timestamp(manifest["captured_at_iso"]), now=now, observations=observations)
+    exact(production_original["sites"]["prior_version_number"], change["priorSite"]["versionNumber"])
+    exact(guest_cross["secretDirectory"], observations["creations"][RESOURCE_KINDS.index("secret_directory")]["filesystem"])
     resource_ids = {r["kind"]: r["createdId"] for r in change["resources"]}
     for kind, key in (("tunnel", "tunnel_id"), ("access_application", "access_application_id"), ("access_policy", "access_policy_id"), ("managed_rule", "managed_rule_id")):
         exact(resource_ids[kind], production["ingress"][key])
@@ -475,17 +540,23 @@ def replay(args, *, completed_at=None, now=None):
         "rollback": {"manifestSha256": rollback_digest, "forwardSha256": rollback_inventory["forward-state.json"], "inventorySha256": digests["rollback-receipt"], "capturedAt": manifest["captured_at_iso"], "transactionState": "completed", "rollbackOutcome": "clean"},
         "production": production, "site": status, "ownerFlow": owner_job,
         "localQualification": {"sha256": digests["local-qualification"], "startedAt": local["startedAt"], "completedAt": local["completedAt"], "negativeChecks": local["negativeChecks"], "cleanup": local["cleanup"]}, "changeRecord": change}
-    # Reopen after the entire replay; a mid-validation substitution cannot hide.
-    for key, digest in digests.items():
+    recheck_originals(args, candidate)
+    return candidate, {"release": release_digests, "site": site_inventory, "rollback": rollback_inventory}
+
+
+def recheck_originals(args, candidate):
+    """Compare all reopened inputs to the retained, semantically validated snapshot."""
+    for key, digest in candidate["artifactDigests"].items():
         path = getattr(args, key.replace("-", "_"))
         if key == "release-evidence-root": observed = sha(canonical(inventory(path, RELEASE_FILES)))
         elif key == "rollback-receipt": observed = sha(canonical(inventory(path, recursive=True)))
-        elif key == "site-primary-evidence": observed = sha(canonical(inventory(path, site_inventory)))
+        elif key == "site-primary-evidence": observed = sha(canonical(inventory(path)))
         else: observed = sha(read_bytes(path, mode=0o444 if key in {"runtime-manifest", "production-manifest"} else 0o600))
         exact(observed, digest)
-    exact(release._git(root, "rev-parse", "HEAD"), head)
+    root = Path(args.source_root).absolute()
+    exact(release._git(root, "rev-parse", "HEAD"), candidate["sourceHead"])
+    exact(release._git(root, "rev-parse", "HEAD^{tree}"), candidate["runtime"]["sourceTree"])
     require(release._git(root, "status", "--porcelain=v1", "-z", binary=True) == b"")
-    return candidate, {"release": release_digests, "site": site_inventory, "rollback": rollback_inventory}
 
 
 def verify_candidate(args):
@@ -544,6 +615,7 @@ def main(argv=None):
             if args.command == "finalize-reviewed":
                 final = {"schema": "tueiq-direct-runner-activation-v1", "completedAt": q.iso(time.time()), "candidateSha256": candidate_digest, "independentReviewSha256": review_digest,
                          "CONNECTED": True, "QUALIFIED": True, "READY_TO_WORK": True}
+                reviewer.recheck_review(args, review_digest, candidate_digest)
                 print(publish(args.activation, final))
             else:
                 final = read_json(args.activation)
@@ -555,6 +627,8 @@ def main(argv=None):
                 raw = read_bytes(args.activation)
                 require(raw == canonical(final))
                 digest = sha(raw)
+                reviewer.recheck_review(args, review_digest, candidate_digest)
+                require(read_bytes(args.activation) == raw)
                 print("CONNECTED = YES\nQUALIFIED = YES\nREADY_TO_WORK = YES\n" + digest)
         else: parser.error("choose --check or an explicit phase")
         return 0

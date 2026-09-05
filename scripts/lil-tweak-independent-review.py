@@ -38,7 +38,8 @@ def witness_provider(normalized_path, raw, output):
     exact(normalized["rawResponseSha256"], a.sha(raw)); exact(normalized["droplet"], projection)
     require(a.read_bytes(normalized_path) == a.canonical(normalized))
     value = {"schema": "tueiq-provider-response-witness-v1", "witnessedAt": q.iso(time.time()), "operation": normalized["operation"], "rawResponseSha256": a.sha(raw),
-        "normalizedSha256": a.sha(a.read_bytes(normalized_path)), "projectionSha256": a.sha(a.canonical(projection)), "reviewerNonce": secrets.token_hex(24)}
+        "normalizedSha256": a.sha(a.canonical(normalized)), "projectionSha256": a.sha(a.canonical(projection)), "reviewerNonce": secrets.token_hex(24)}
+    require(a.read_bytes(normalized_path) == a.canonical(normalized))
     return a.publish(output, value)
 
 
@@ -48,12 +49,15 @@ def validate_witness(path, normalized_path, *, candidate, preflight):
     exact(value["schema"], "tueiq-provider-response-witness-v1")
     normalized = q.validate_provider(a.read_json(normalized_path))
     exact(value["operation"], normalized["operation"]); exact(value["rawResponseSha256"], normalized["rawResponseSha256"])
-    exact(value["normalizedSha256"], a.sha(a.read_bytes(normalized_path))); exact(value["projectionSha256"], a.sha(a.canonical(normalized["droplet"])))
+    exact(value["normalizedSha256"], a.sha(a.canonical(normalized))); exact(value["projectionSha256"], a.sha(a.canonical(normalized["droplet"])))
+    exact(value["normalizedSha256"], candidate["artifactDigests"]["preflight-provider-evidence" if preflight else "provider-evidence"])
     require(type(value["reviewerNonce"]) is str and re.fullmatch(r"[0-9a-f]{48}", value["reviewerNonce"]) is not None)
     observed, witnessed = a.timestamp(normalized["observedAt"]), a.fresh(value["witnessedAt"])
     require(observed <= witnessed <= observed + 120)
     boundary = candidate["changeRecord"]["mutationStartedAt"] if preflight else candidate["site"]["checkedAt"]
     require(witnessed <= a.timestamp(boundary))
+    require(a.read_bytes(normalized_path) == a.canonical(normalized))
+    require(a.read_bytes(path) == a.canonical(value))
     return value
 
 
@@ -65,9 +69,9 @@ def review_facts(args, reviewed_at=None):
     reviewed_at = q.iso(time.time()) if reviewed_at is None else reviewed_at
     require(a.timestamp(candidate["completedAt"]) <= a.fresh(reviewed_at) and time.time() - a.timestamp(reviewed_at) <= 300)
     primary_digests = {kind + "/" + name: digest for kind, items in primary.items() for name, digest in items.items()}
-    cross = {name: a.sha(a.read_bytes(getattr(args, name.replace("-", "_")))) for name in ("d1-cross-check", "core-cross-check", "guest-cross-check")}
+    cross = {name: candidate["artifactDigests"][name] for name in ("d1-cross-check", "core-cross-check", "guest-cross-check")}
     return {"schema": "tueiq-direct-runner-independent-review-v1", "reviewedAt": reviewed_at, "candidateSha256": digest,
-        "providerWitnessDigests": {"preflight": a.sha(a.read_bytes(args.preflight_provider_witness)), "live": a.sha(a.read_bytes(args.provider_witness))},
+        "providerWitnessDigests": {name: a.sha(a.canonical(witness)) for name, witness in zip(("preflight", "live"), witnesses)},
         "primaryArtifactDigests": primary_digests, "crossCheckDigests": cross, "decision": "pass"}, witnesses
 
 
@@ -76,7 +80,25 @@ def review_candidate(args):
     value, witnesses = review_facts(args)
     value["reviewerNonce"] = secrets.token_hex(24)
     require(value["reviewerNonce"] not in {w["reviewerNonce"] for w in witnesses})
+    recheck_review_inputs(args, value["candidateSha256"], value["providerWitnessDigests"])
     return a.publish(args.review, value)
+
+
+def recheck_review_inputs(args, candidate_digest, witness_digests):
+    candidate = a.read_json(args.candidate)
+    exact(a.sha(a.canonical(candidate)), candidate_digest)
+    a.recheck_originals(args, candidate)
+    for name, path in (("preflight", args.preflight_provider_witness), ("live", args.provider_witness)):
+        exact(a.sha(a.read_bytes(path)), witness_digests[name])
+    require(a.read_bytes(args.candidate) == a.canonical(candidate))
+
+
+def recheck_review(args, review_digest, candidate_digest):
+    value = a.read_json(args.independent_review)
+    exact(a.sha(a.canonical(value)), review_digest)
+    exact(value["candidateSha256"], candidate_digest)
+    recheck_review_inputs(args, candidate_digest, value["providerWitnessDigests"])
+    require(a.read_bytes(args.independent_review) == a.canonical(value))
 
 
 def verify_review(args):
@@ -88,6 +110,8 @@ def verify_review(args):
     exact(value, {**expected, "reviewerNonce": value["reviewerNonce"]})
     raw = a.read_bytes(args.independent_review)
     require(raw == a.canonical(value))
+    recheck_review_inputs(args, expected["candidateSha256"], expected["providerWitnessDigests"])
+    require(a.read_bytes(args.independent_review) == raw)
     return a.sha(raw), expected["candidateSha256"]
 
 

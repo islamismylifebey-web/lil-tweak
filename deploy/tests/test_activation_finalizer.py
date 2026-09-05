@@ -28,7 +28,7 @@ WITNESS_KEYS = set("schema witnessedAt operation rawResponseSha256 normalizedSha
 STATUS_KEYS = set("schema checkedAt deployment statusSha256 runner controlPlane bridge".split())
 GUEST_KEYS = set("schema checkedAt providerSha256 runtimeSha256 verificationSha256 sourceHead identity operatingSystem architecture topology images".split())
 JOB_KEYS = set("schema checkedAt requestId jobId ownerScope jobRevision mode state gitSource sourceDigest proposalDigest approvalProposal approvalConsumed evidence baselineTreeSha256 finalTreeSha256 fileSha256 commandDigest editJournalDigest".split())
-CHANGE_KEYS = set("schema sessionNonce startedAt mutationStartedAt completedAt preflightProviderSha256 sourceHead sourceTree priorSite managedBindings resources additions rollbackOrder".split())
+CHANGE_KEYS = set("schema sessionNonce startedAt mutationStartedAt completedAt preflightProviderSha256 sourceHead sourceTree priorSite managedBindings resources additions rollbackOrder resourceObservationsSha256".split())
 ORIGINAL_ARGUMENTS = "source-root local-qualification preflight-provider-evidence provider-evidence release-evidence-root runtime-manifest rollback-receipt production-manifest owner-flow-receipt owner-flow-job site-status-evidence guest-evidence site-primary-evidence d1-cross-check core-cross-check guest-cross-check change-record".split()
 # These independent literals pin every object, not implementation-owned schema constants.
 IDENTITY_KEYS = set("owner ownerScope provider dropletId host region os size role".split())
@@ -45,7 +45,7 @@ CANDIDATE_OBJECT_KEYS = {
     "guest.identity": IDENTITY_KEYS, "guest.topology": TOPOLOGY_KEYS, "guest.images": {"core", "postgres", "runner"},
     "runtime": {"manifestSha256", "sourceTree", "archiveSha256"},
     "rollback": set("manifestSha256 forwardSha256 inventorySha256 capturedAt transactionState rollbackOutcome".split()),
-    "production": set("runtimeSha256 ownerFlowSha256 ownerFlowJobSha256 d1 r2 ingress".split()),
+    "production": set("runtimeSha256 ownerFlowSha256 ownerFlowJobSha256 resourceObservationsSha256 d1 r2 ingress".split()),
     "production.d1": {"database_id", "schema_revision", "binding_revision"},
     "production.r2": {"account_id", "bucket_name", "binding_revision"},
     "production.ingress": set("tunnel_id access_application_id access_policy_id access_policy_revision managed_rule_id managed_rule_revision".split()),
@@ -192,10 +192,14 @@ class ActivationFixture:
         self.write(root / "d1.json", self.d1)
         live.collect_core(root / "unused.env", root / "d1.json", root / "core.json", client=self.f.client, now=self.now - 117)
         live.seal_guest(root / "provider.json", runtime, self.primary / "verification-receipt.json", root / "guest.json", now=self.now - 116)
+        self.secret_directory = root / "session-secrets"
+        self.secret_directory.mkdir(mode=0o700)
+        info = self.secret_directory.stat()
+        self.directory_observation = {"createdId": "directory-" + str(info.st_dev) + "-" + str(info.st_ino), "device": info.st_dev, "inode": info.st_ino, "uid": 0, "gid": 0, "mode": "0700"}
         self.guest = {"schema": "tueiq-guest-activation-cross-check-v1", "observedAt": self.t(-115), "jobId": self.jobid,
             "providerSha256": a.sha((root / "provider.json").read_bytes()), "runtimeSha256": a.sha(runtime.read_bytes()), "sourceHead": self.head,
             "identity": q.identity(self.providers[1]), "operatingSystem": "Ubuntu 24.04 LTS", "architecture": "x86_64", "topology": {"route": "direct_core_to_local_podman", "intermediary": "none", "policy": "ENGINEERING_EXECUTION_ONLY"},
-            "images": {k: self.runtime["images"][k]["digest"] for k in ("core", "postgres", "runner")}, "noContainers": True}
+            "images": {k: self.runtime["images"][k]["digest"] for k in ("core", "postgres", "runner")}, "noContainers": True, "secretDirectory": self.directory_observation}
         self.write(root / "guest-cross.json", self.guest)
         self.f.clock.value = self.now - 100
         local = q.Qualification(self.f.client, self.f, clock=self.f.clock.now, monotonic=self.f.clock.monotonic, sleep=self.f.clock.sleep).run(root / "provider.json", root / "qualification")
@@ -213,7 +217,6 @@ class ActivationFixture:
                 return datetime.fromtimestamp(self.now - 110, tz or timezone.utc)
         with patch.object(release, "datetime", FixtureDatetime):
             release.create_owner_flow_receipt(runtime, root / "state.env", job_path, root / "owner-flow.txt")
-        release.create_production_manifest(runtime, root / "state.env", root / "owner-flow.txt", root / "production.json")
         self.change = {"schema": "tueiq-session-change-record-v1", "sessionNonce": "a" * 48, "startedAt": self.t(-180), "mutationStartedAt": self.t(-160), "completedAt": self.t(210),
             "preflightProviderSha256": a.sha((root / "preflight.json").read_bytes()), "sourceHead": self.head, "sourceTree": self.tree,
             "priorSite": {"versionId": "prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
@@ -221,6 +224,18 @@ class ActivationFixture:
             "resources": [{"kind": kind, "name": name, "preflight": "absent", "createdId": ident} for kind, name, ident in (("tunnel", "activation-tunnel", "tunnel-id"), ("access_application", "activation-access", "access-app"), ("access_policy", "activation-policy", "access-policy"), ("service_token", "activation-token", "service-token-id"), ("secret_directory", "activation-secrets", "session-files"), ("dns", "activation-dns", "dns-id"), ("managed_rule", "activation-rule", "managed-rule"))],
             "additions": ["resource:" + str(i) for i in range(7)] + ["binding:" + k for k in ("MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET")] + ["site:site-version"], "rollbackOrder": []}
         self.change["rollbackOrder"] = list(reversed(self.change["additions"]))
+        self.change["resources"][4]["createdId"] = self.directory_observation["createdId"]
+        preflight = {"observedAt": self.t(-165), "priorSite": copy.deepcopy(self.change["priorSite"]), "bindingOperation": "sites-environment-list",
+            "managedBindings": [{"name": name, "present": False} for name in self.change["managedBindings"]],
+            "resources": [{"kind": r["kind"], "name": r["name"], "operation": "filesystem-lstat" if r["kind"] == "secret_directory" else "cloudflare-resource-list", "matchingIds": []} for r in self.change["resources"]]}
+        self.observations = {"schema": "tueiq-session-resource-observations-v1", "sessionNonce": "a" * 48, "sourceHead": self.head, "sourceTree": self.tree,
+            "preflight": preflight, "creations": [{"kind": r["kind"], "name": r["name"], "createdId": r["createdId"], "operation": "filesystem-mkdir" if r["kind"] == "secret_directory" else "cloudflare-resource-create",
+                "observedAt": self.t(-159 + i), "preflightSha256": a.sha(a.canonical(preflight)), "filesystem": self.directory_observation if r["kind"] == "secret_directory" else None} for i, r in enumerate(self.change["resources"])]}
+        self.write(root / "resource-observations.json", self.observations)
+        self.state["ACTIVATION_OBSERVATIONS"] = str(root / "resource-observations.json")
+        self.raw(root / "state.env", "".join(k + "=" + v + "\n" for k, v in self.state.items()).encode())
+        release.create_production_manifest(runtime, root / "state.env", root / "owner-flow.txt", root / "production.json")
+        self.change["resourceObservationsSha256"] = a.sha(a.canonical(self.observations))
         self.write(root / "change.json", self.change)
         paths = [self.repo, local, root / "preflight.json", root / "provider.json", self.primary, runtime, rb.receipt, root / "production.json", root / "owner-flow.txt", job_path,
             root / "site-primary/site-status-evidence.json", root / "guest.json", root / "site-primary", root / "d1.json", root / "core.json", root / "guest-cross.json", root / "change.json"]
@@ -245,6 +260,95 @@ class ActivationFixture:
 
 
 class ActivationFinalizerTests(unittest.TestCase):
+    def test_retained_absence_and_creation_observations_are_load_bearing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                original = f.a.read_json(f.args.production_manifest, legacy=True)
+                source_inventory = f.a.release._git_inventory(f.repo, f.head, verify_checkout=True)
+                cases = [("binding-" + str(i), ("preflight", "managedBindings", i), "present", True) for i in range(7)]
+                cases += [("preexisting-" + str(i), ("preflight", "resources", i), "matchingIds", ["pre-existing-id"]) for i in range(7)]
+                cases += [("creation-" + str(i), ("creations", i), "createdId", "unobserved-id") for i in range(7)]
+                cases += [("session", (), "sessionNonce", "b" * 48), ("head", (), "sourceHead", "0" * 40),
+                    ("tree", (), "sourceTree", "0" * 40), ("preflight-time", ("preflight",), "observedAt", f.t(-150)),
+                    ("creation-time", ("creations", 0), "observedAt", f.t(-161)),
+                    ("prior-site", ("preflight", "priorSite"), "versionId", "unobserved-version")]
+                for name, trail, field, replacement in cases:
+                    observed = replace_at(f.observations, trail, field, replacement)
+                    # Rebind hashes to force semantic rejection, not stale-hash rejection.
+                    for creation in observed["creations"]: creation["preflightSha256"] = f.a.sha(f.a.canonical(observed["preflight"]))
+                    production = {**original, "resource_observations": observed}
+                    f.args.production_manifest.chmod(0o600)
+                    f.raw(f.args.production_manifest, f.a.canonical(production) + b"\n")
+                    f.args.production_manifest.chmod(0o444)
+                    f.write(f.args.change_record, {**f.change, "resourceObservationsSha256": f.a.sha(f.a.canonical(observed))})
+                    # Cache only unchanged fixture Git inventory, as in the
+                    # existing evidence matrix; execute all resource replay.
+                    with self.subTest(case=name), patch.object(f.a.release, "_git_inventory", return_value=source_inventory), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        args = ["build-candidate"]
+                        for key in ORIGINAL_ARGUMENTS: args += ["--" + key, str(getattr(f.args, key.replace("-", "_")))]
+                        args += ["--candidate", str(f.args.candidate)]
+                        self.assertEqual(f.a.main(args), 1)
+                        self.assertFalse(f.args.candidate.exists())
+            finally: f.close()
+
+    def test_guest_directory_identity_is_independent_of_both_authored_records(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                observed = copy.deepcopy(f.observations)
+                directory = observed["creations"][4]["filesystem"]
+                directory["inode"] += 1
+                directory["createdId"] = "directory-" + str(directory["device"]) + "-" + str(directory["inode"])
+                observed["creations"][4]["createdId"] = directory["createdId"]
+                production = f.a.read_json(f.args.production_manifest, legacy=True)
+                production["resource_observations"] = observed
+                f.args.production_manifest.chmod(0o600)
+                f.raw(f.args.production_manifest, f.a.canonical(production) + b"\n")
+                f.args.production_manifest.chmod(0o444)
+                change = copy.deepcopy(f.change)
+                change["resources"][4]["createdId"] = directory["createdId"]
+                change["resourceObservationsSha256"] = f.a.sha(f.a.canonical(observed))
+                f.write(f.args.change_record, change)
+                result = f.cli("build-candidate")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(f.args.candidate.exists())
+            finally: f.close()
+
+    def test_candidate_requires_retained_resource_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                production = f.a.read_json(f.args.production_manifest, legacy=True)
+                production.pop("resource_observations", None)
+                f.args.production_manifest.chmod(0o600)
+                f.raw(f.args.production_manifest, f.a.canonical(production) + b"\n")
+                f.args.production_manifest.chmod(0o444)
+                result = f.cli("build-candidate")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(f.args.candidate.exists())
+            finally: f.close()
+
+    def test_each_resource_id_must_match_retained_creation_observation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                original = f.args.change_record.read_bytes()
+                for index, resource in enumerate(f.change["resources"]):
+                    changed = copy.deepcopy(f.change)
+                    changed["resources"][index]["createdId"] = "unobserved-pre-existing-id"
+                    f.write(f.args.change_record, changed)
+                    try:
+                        result = f.cli("build-candidate")
+                        with self.subTest(kind=resource["kind"]):
+                            self.assertNotEqual(result.returncode, 0)
+                            self.assertFalse(f.args.candidate.exists())
+                            self.assertNotRegex(result.stdout + result.stderr, r"CONNECTED|QUALIFIED|READY_TO_WORK")
+                    finally:
+                        f.raw(f.args.change_record, original)
+                        if f.args.candidate.exists(): f.args.candidate.unlink()
+            finally: f.close()
+
     def test_semantic_scan_accepts_real_package_versions_and_rejects_empty_sbom(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = ActivationFixture(Path(temporary))
@@ -412,7 +516,8 @@ class ActivationFinalizerTests(unittest.TestCase):
                     (f.providers[1], a.q.validate_provider),
                     (a.read_json(f.args.local_qualification), a.q.validate_receipt),
                     (f.deployment, a.validate_deployment),
-                    (f.change, lambda value: a.validate_change(value, head=f.head, tree=f.tree, preflight=a.sha(f.args.preflight_provider_evidence.read_bytes()), deployment=f.deployment, rollback_time=f.now - 170, now=time.time())),
+                    (f.observations, a.validate_resource_observations),
+                    (f.change, lambda value: a.validate_change(value, head=f.head, tree=f.tree, preflight=a.sha(f.args.preflight_provider_evidence.read_bytes()), deployment=f.deployment, rollback_time=f.now - 170, now=time.time(), observations=f.observations)),
                     (json.loads((f.args.site_primary_evidence / "status.body").read_bytes()), live.validate_status),
                 ]
                 checked = 0
@@ -423,7 +528,7 @@ class ActivationFinalizerTests(unittest.TestCase):
                             with self.subTest(schema=original.get("schema", "status"), path=path, field=field), self.assertRaises(Exception):
                                 validate(replace_at(original, trail, field, "SECRET-CANARY", remove=field in obj))
                             checked += 1
-                self.assertEqual(checked, 636)
+                self.assertEqual(checked, 785)
             finally: f.close()
 
     def test_fresh_verification_binds_exact_source_and_is_bound_by_host_go(self):
@@ -472,7 +577,7 @@ class ActivationFinalizerTests(unittest.TestCase):
                             f.write(f.args.candidate, bad)
                             with self.subTest(path=path, field=field), self.assertRaises(Exception): f.a.verify_candidate(f.args)
                             checks += 1
-                self.assertEqual(checks, 332)
+                self.assertEqual(checks, 334)
                 f.write(f.args.candidate, candidate)
                 f.args.d1_cross_check.write_bytes(b"{}")
                 result = f.cli("verify-candidate")

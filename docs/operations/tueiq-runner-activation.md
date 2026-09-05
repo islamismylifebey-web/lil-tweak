@@ -123,7 +123,7 @@ Record prior Site version ID/number and access revision/mode/counts, never prior
 binding secrets. Preserve D1/R2 resource IDs and schema/binding revisions.
 
 Create one `tueiq-session-change-record-v1` with exactly
-`schema,sessionNonce,startedAt,mutationStartedAt,completedAt,preflightProviderSha256,sourceHead,sourceTree,priorSite,managedBindings,resources,additions,rollbackOrder`.
+`schema,sessionNonce,startedAt,mutationStartedAt,completedAt,preflightProviderSha256,sourceHead,sourceTree,priorSite,managedBindings,resources,additions,rollbackOrder,resourceObservationsSha256`.
 `priorSite` has `versionId,versionNumber,accessRevision,accessMode,allowedOwnerCount,allowedGroupCount,allowedVisitorCount`.
 `managedBindings` contains the seven names with the literal value `absent`.
 `resources` is an ordered list of `{kind,name,preflight,createdId}`: kinds are
@@ -132,6 +132,50 @@ This is creation order: protected staging precedes combined installation, then
 DNS and the managed ingress rule precede the six Site keys and deployment.
 All names are checked absent before mutation; every `createdId` is observed from
 this session, never unknown/pre-existing. Record only non-secret opaque IDs.
+
+The change record is a rollback claim, not proof of resource creation. Retain
+separate sanitized operation projections in one
+`tueiq-session-resource-observations-v1` object with exactly
+`schema,sessionNonce,sourceHead,sourceTree,preflight,creations`. Capture the
+preflight before mutation directly from the authorized Cloudflare resource-name
+queries, Sites key-name inventory and fixed-directory lstat; do not derive it
+from the change record. Capture each creation ID directly from that session's
+creation result. Never retain raw responses, addresses, credential values or
+unrelated inventory entries. Missing, ambiguous or present resources stop work.
+
+| Observation | Exact fields and required values |
+| --- | --- |
+| `preflight` | `observedAt,priorSite,bindingOperation,managedBindings,resources`; binding operation `sites-environment-list`; prior Site fields as above |
+| Preflight binding entry | `name,present`; exactly the seven ordered names above, every `present=false` |
+| Preflight resource entry | `kind,name,operation,matchingIds`; seven ordered kinds above; empty matching IDs; `cloudflare-resource-list`, or `filesystem-lstat` for staging |
+| Creation entry | `kind,name,operation,createdId,observedAt,preflightSha256,filesystem`; same ordered kinds/names; `cloudflare-resource-create`, or `filesystem-mkdir` for staging |
+| Directory identity | `createdId,device,inode,uid,gid,mode`; `createdId=directory-DEVICE-INODE`, numeric device/inode, root UID/GID and `mode=0700` |
+
+Each creation binds the SHA-256 of canonical `preflight`, is after mutation and
+before deployment, and has `filesystem=null` except staging's directory identity.
+Use the fixed absent-before-mutation `/var/lib/lil-tweak-activation/secrets`
+directory for staging. Preserve it until independent review/verification.
+Project its creation-time device/inode without reading secret contents; the
+independent guest collector later reopens this fixed directory and checks that
+identity independently. Existing/symlinked/insecure staging is a hard stop.
+
+After all seven creations, stream only this sanitized object to:
+
+```bash
+python3 scripts/lil-tweak-live-evidence.py seal-resource-observations \
+  --observations-stdin --output RESOURCE_OBSERVATIONS
+```
+
+Keep the canonical root-owned `0600` result in a protected directory. Set the
+non-secret `ACTIVATION_OBSERVATIONS=RESOURCE_OBSERVATIONS` path in release state
+before `production-manifest`. Its original `0444` production manifest retains
+the full object as `resource_observations`; activation rejects its absence.
+`resourceObservationsSha256` in the change record and candidate production
+projection binds that object's canonical bytes. Candidate, review and final
+replay reopen production, revalidate every absence/creation observation and
+cross-check all seven IDs/names/session/source/times, prior Site state and the
+independent guest directory identity. Observation provenance depends on direct
+authorized capture: do not replace operation projections with authored claims.
 
 ## New credentials and protected staging
 
@@ -247,7 +291,9 @@ secret bytes never enter an artifact. `collect-core` uses signed fixed loopback
 reads and downloads all five original Core evidence bodies to independently
 recompute the proposal digest, source identity, command result and no-edit proof.
 `collect-guest` freshly checks metadata/hostname, OS/architecture, installed
-source head, effective runtime images and cleanup. It never consumes the derived
+source head, effective runtime images, cleanup and the fixed staging directory's
+device/inode/root ownership/mode. Its cross-check adds the exact `secretDirectory`
+identity above. It never consumes the derived
 guest file. D1, Core and guest may share only correlation IDs/digests, never Site
 collector summaries. The owner-only D1 route authenticates before any binding
 fetch and exposes only the matching job/evidence row projection and ordered
@@ -344,7 +390,7 @@ shape in the candidate, derived records and independent cross-checks.
 | Evidence descriptor | `id,category,filename,mediaType,sizeBytes,sha256,createdAt` |
 | Runtime projection | `manifestSha256,sourceTree,archiveSha256` |
 | Rollback projection | `manifestSha256,forwardSha256,inventorySha256,capturedAt,transactionState,rollbackOutcome` |
-| Production projection | `runtimeSha256,ownerFlowSha256,ownerFlowJobSha256,d1,r2,ingress` |
+| Production projection | `runtimeSha256,ownerFlowSha256,ownerFlowJobSha256,resourceObservationsSha256,d1,r2,ingress` |
 | D1 resource | `database_id,schema_revision,binding_revision` |
 | R2 resource | `account_id,bucket_name,binding_revision` |
 | Ingress projection | `tunnel_id,access_application_id,access_policy_id,access_policy_revision,managed_rule_id,managed_rule_revision` |
@@ -362,6 +408,12 @@ contain no nested objects. The status/deployment, provider witness and session
 change-record key sets are pinned in their collection sections above.
 
 ## Independent candidate review
+
+Review retains validated canonical-byte digests, not freshly reread unvalidated
+hashes. Immediately before review/final publication or final truth output, it
+reopens the complete original set, both witnesses, candidate and review (where
+applicable) against those snapshots. Any mid-phase substitution fails with no
+publication and no truth output.
 
 A different reviewer independently reopens all original paths and both witnesses:
 

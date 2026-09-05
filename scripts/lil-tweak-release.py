@@ -1748,6 +1748,12 @@ def create_production_manifest(
         "owner_flow_receipt": owner_flow,
         "owner_flow_job_sha256": owner_flow_job_digest,
     }
+    if state.get("ACTIVATION_OBSERVATIONS"):
+        observation_path = Path(state["ACTIVATION_OBSERVATIONS"])
+        observations = a.validate_resource_observations(a.read_json(observation_path))
+        a.exact(observations["sourceHead"], source_commit); a.exact(observations["sourceTree"], source_tree)
+        payload["resource_observations"] = observations
+        a.require(a.read_bytes(observation_path) == a.canonical(observations))
     return write_new_manifest(Path(output), payload)
 
 
