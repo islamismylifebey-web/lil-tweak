@@ -1,0 +1,42 @@
+{
+  "name": "icon-inspector",
+  "version": "1.0.0",
+  "description": "Inspect a supplied icon inventory. Use for missing website icons.",
+  "when_to_use": "Use on an owner-supplied website asset inventory.",
+  "inputs": [
+    "An icon inventory supplied by the caller."
+  ],
+  "outputs": [
+    "A report of missing icon references."
+  ],
+  "steps": [
+    "Check required tools before doing work.",
+    "Read the supplied inventory without following links.",
+    "Report missing references and the checks actually performed."
+  ],
+  "requirements": [
+    "read_inventory"
+  ],
+  "stop_conditions": [
+    "Stop if the required tool is unavailable.",
+    "Stop if the inventory is malformed."
+  ],
+  "examples": [
+    {
+      "input": "example-a",
+      "expected": "present"
+    },
+    {
+      "input": "example-b",
+      "expected": "missing"
+    }
+  ],
+  "origin": {
+    "agent_id": "tweeq",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "evidence_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "resources": {
+    "references/notes.md": "Use only the supplied inventory.\n"
+  }
+}
