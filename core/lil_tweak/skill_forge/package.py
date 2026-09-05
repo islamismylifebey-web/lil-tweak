@@ -84,10 +84,10 @@ def text(value: Any, limit: int = 4096, *, scan: bool = True) -> str:
 
 
 def identifier(value: Any) -> str:
-    value = text(value, 128, scan=False)
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
+    checked = text(value, 128, scan=False)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", checked):
         raise ForgeError("invalid_identifier")
-    return value
+    return checked
 
 
 def digest_value(value: Any) -> str:
@@ -97,17 +97,17 @@ def digest_value(value: Any) -> str:
 
 
 def _name(value: Any) -> str:
-    value = text(value, 64)
-    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", value) or value in _RESERVED:
+    checked = text(value, 64)
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", checked) or checked in _RESERVED:
         raise ForgeError("invalid_skill_name")
-    return value
+    return checked
 
 
 def _version(value: Any) -> str:
-    value = text(value, 32)
-    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value):
+    checked = text(value, 32)
+    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", checked):
         raise ForgeError("invalid_version")
-    return value
+    return checked
 
 
 def _strings(value: Any, *, maximum: int = 24) -> tuple[str, ...]:
@@ -120,8 +120,8 @@ def _strings(value: Any, *, maximum: int = 24) -> tuple[str, ...]:
 
 
 def _path(value: Any, *, resource: bool = False) -> str:
-    value = text(value, 180)
-    parts = value.split("/")
+    checked = text(value, 180)
+    parts = checked.split("/")
     if len(parts) > 4 or any(
         not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", part)
         or part.endswith(".") or part.split(".")[0].lower() in _RESERVED
@@ -129,10 +129,10 @@ def _path(value: Any, *, resource: bool = False) -> str:
     ):
         raise ForgeError("unsafe_path")
     generated = {"SKILL.md", "manifest.json", "evidence.json", "tests/examples.json"}
-    if value not in generated or resource:
+    if checked not in generated or resource:
         if len(parts) < 2 or parts[0] not in {"scripts", "references", "assets"}:
             raise ForgeError("unsafe_path")
-    return value
+    return checked
 
 
 def _check_files(files: Mapping[str, bytes]) -> None:
