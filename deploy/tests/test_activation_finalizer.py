@@ -260,6 +260,90 @@ class ActivationFixture:
 
 
 class ActivationFinalizerTests(unittest.TestCase):
+    def test_every_original_and_directory_member_is_snapshot_bound_without_hidden_release_reads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                snapshots = f.a.EvidenceSnapshots()
+                expected = set()
+                for name in ORIGINAL_ARGUMENTS:
+                    if name == "source-root": continue
+                    path = getattr(f.args, name.replace("-", "_"))
+                    expected.update(p.absolute() for p in path.rglob("*") if p.is_file()) if path.is_dir() else expected.add(path.absolute())
+                # Legacy release validators must consume explicit snapshot bytes,
+                # not reopen an artifact behind the shared snapshot boundary.
+                with patch.object(f.a, "read_json", wraps=f.a.read_json) as reads, \
+                     patch.object(f.a.release, "_read_secure", side_effect=AssertionError("hidden release read")), \
+                     patch.object(f.a.release, "_secure_file_spool", side_effect=AssertionError("hidden archive read")):
+                    candidate, _ = f.a.replay(f.args, snapshots=snapshots)
+                self.assertEqual(set(snapshots.files), expected)
+                self.assertTrue(reads.call_args_list)
+                self.assertTrue(all(call.kwargs.get("snapshots") is snapshots for call in reads.call_args_list))
+                for path, (raw, limit, mode) in snapshots.files.items():
+                    self.assertEqual(path.read_bytes(), raw)
+                    try:
+                        path.chmod(0o600); path.write_bytes(b"substituted"); path.chmod(mode)
+                        with self.subTest(path=str(path.relative_to(f.root))), self.assertRaises(Exception):
+                            snapshots.read_bytes(path, limit, mode=mode)
+                    finally:
+                        path.chmod(0o600); path.write_bytes(raw); path.chmod(mode)
+                snapshots.recheck()
+                for directory in snapshots.directories:
+                    extra = directory / "unobserved-directory"
+                    extra.mkdir(mode=0o700)
+                    try:
+                        with self.subTest(directory=str(directory.relative_to(f.root))), self.assertRaises(Exception):
+                            snapshots.recheck()
+                    finally: extra.rmdir()
+                self.assertEqual(candidate["artifactDigests"]["d1-cross-check"], f.a.sha(snapshots.files[f.args.d1_cross_check][0]))
+            finally: f.close()
+
+    def test_rollback_directory_membership_aba_is_rejected_at_the_helper_boundary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                rb = f.a.rollback_helper()
+                extra = f.args.rollback_receipt / "unobserved-directory"
+                extra.mkdir(mode=0o700)
+                verify = rb.verify_receipt
+                def temporarily_absent(*args, **kwargs):
+                    extra.rmdir()
+                    try: return verify(*args, **kwargs)
+                    finally: extra.mkdir(mode=0o700)
+                output = io.StringIO()
+                arguments = ["build-candidate", "--candidate", str(f.args.candidate)]
+                for name in ORIGINAL_ARGUMENTS: arguments += ["--" + name, str(getattr(f.args, name.replace("-", "_")))]
+                with patch.object(rb, "verify_receipt", side_effect=temporarily_absent), redirect_stdout(output), redirect_stderr(output):
+                    self.assertEqual(f.a.main(arguments), 1)
+                self.assertFalse(f.args.candidate.exists())
+                self.assertNotRegex(output.getvalue(), r"CONNECTED|QUALIFIED|READY_TO_WORK")
+                self.assertTrue(extra.is_dir())
+            finally: f.close()
+
+    def test_rollback_forward_aba_is_rejected_at_the_legacy_helper_boundary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                rb = f.a.rollback_helper()
+                path = f.args.rollback_receipt / "forward-state.json"
+                valid = path.read_bytes()
+                f.write(path, {})
+                read = rb._read_regular
+                def temporarily_valid(requested, *args, **kwargs):
+                    if Path(requested) != path: return read(requested, *args, **kwargs)
+                    f.raw(path, valid)
+                    try: return read(requested, *args, **kwargs)
+                    finally: f.write(path, {})
+                output = io.StringIO()
+                arguments = ["build-candidate", "--candidate", str(f.args.candidate)]
+                for name in ORIGINAL_ARGUMENTS: arguments += ["--" + name, str(getattr(f.args, name.replace("-", "_")))]
+                with patch.object(rb, "_read_regular", side_effect=temporarily_valid), redirect_stdout(output), redirect_stderr(output):
+                    self.assertEqual(f.a.main(arguments), 1)
+                self.assertFalse(f.args.candidate.exists())
+                self.assertNotRegex(output.getvalue(), r"CONNECTED|QUALIFIED|READY_TO_WORK")
+                self.assertEqual(path.read_bytes(), b"{}")
+            finally: f.close()
+
     def test_retained_absence_and_creation_observations_are_load_bearing(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = ActivationFixture(Path(temporary))

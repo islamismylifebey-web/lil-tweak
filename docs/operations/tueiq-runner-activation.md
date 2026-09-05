@@ -410,7 +410,18 @@ change-record key sets are pinned in their collection sections above.
 ## Independent candidate review
 
 Review retains validated canonical-byte digests, not freshly reread unvalidated
-hashes. Immediately before review/final publication or final truth output, it
+hashes. Each phase shares one secure bounded byte snapshot per original path,
+including candidate/review/final inputs, both provider witnesses and every
+descriptor-relative release/rollback/Site member. JSON parsing, semantic
+validation, projections and retained hashes consume those exact immutable
+bytes. Every later read must equal its snapshot before use; a file that changes
+only around a semantic read (an ABA substitution) is rejected. Release archive
+and receipt helpers consume snapshot bytes directly. Existing rollback helper
+results are byte-compared at their boundary, with every payload and the lock
+also bound to the same snapshot inventory. Exact directory membership is
+retained/rechecked too, including empty directories; rollback members must
+match the independently validated manifest/payload inventory. Immediately before review/final
+publication or final truth output, it
 reopens the complete original set, both witnesses, candidate and review (where
 applicable) against those snapshots. Any mid-phase substitution fails with no
 publication and no truth output.

@@ -11,6 +11,25 @@ from deploy.tests.test_activation_finalizer import ROOT, ActivationFixture, load
 
 
 class LiveEvidenceTests(unittest.TestCase):
+    def test_every_site_member_is_bound_to_its_semantically_validated_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = ActivationFixture(Path(temporary))
+            try:
+                live = load("lil-tweak-live-evidence")
+                directory = f.args.site_primary_evidence
+                for path in sorted(directory.iterdir()):
+                    original = path.read_bytes()
+                    derive = live.derive_site
+                    def substitute_after_real_semantics(*args, **kwargs):
+                        value = derive(*args, **kwargs)
+                        f.write(path, {})
+                        return value
+                    try:
+                        with self.subTest(member=path.name), patch.object(live, "derive_site", side_effect=substitute_after_real_semantics), self.assertRaises(Exception):
+                            live.reopen_site(directory)
+                    finally: f.raw(path, original)
+            finally: f.close()
+
     def test_resource_sealer_retains_only_strict_sanitized_observations(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = ActivationFixture(Path(temporary))

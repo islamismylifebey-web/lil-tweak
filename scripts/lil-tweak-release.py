@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -1149,8 +1150,15 @@ def _stream_archive(
 def _archive_inventory(
     archive: Path,
     manifest: dict[str, Any],
+    *,
+    snapshot: bytes | None = None,
 ) -> tuple[str, int, list[str]]:
     expected_files, ordered_directories = _validated_manifest_inventory(manifest)
+    if snapshot is not None:
+        if type(snapshot) is not bytes or len(snapshot) > MAX_ARCHIVE_BYTES:
+            raise ReleaseError("archive_invalid")
+        _stream_archive(io.BytesIO(snapshot), manifest, expected_files, ordered_directories)
+        return hashlib.sha256(snapshot).hexdigest(), len(snapshot), ordered_directories
     with _secure_file_spool(Path(archive), maximum=MAX_ARCHIVE_BYTES) as (
         spool,
         archive_digest,
@@ -1240,12 +1248,21 @@ def _image_descriptor(reference: str) -> dict[str, str]:
     return {"reference": reference, "digest": reference.rsplit("@", 1)[1]}
 
 
+def _receipt_snapshot(path: Path, snapshot: bytes | None) -> bytes:
+    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600) if snapshot is None else snapshot
+    if type(data) is not bytes or len(data) > MAX_RECEIPT_BYTES:
+        raise ReleaseError("receipt_invalid")
+    return data
+
+
 def _decision_receipt(
     path: Path,
     expected: list[tuple[str, str]],
     error_code: str,
+    *,
+    snapshot: bytes | None = None,
 ) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+    data = _receipt_snapshot(path, snapshot)
     try:
         text = data.decode("ascii")
     except UnicodeDecodeError as error:
@@ -1302,8 +1319,8 @@ def _decision_receipt(
     return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
-def _base_image_receipt(path: Path, expected: list[str]) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+def _base_image_receipt(path: Path, expected: list[str], *, snapshot: bytes | None = None) -> dict[str, Any]:
+    data = _receipt_snapshot(path, snapshot)
     try:
         lines = [line for line in data.decode("ascii").splitlines() if line]
     except UnicodeDecodeError as error:
@@ -1321,9 +1338,11 @@ def _base_image_receipt(path: Path, expected: list[str]) -> dict[str, Any]:
     return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
-def _scan_receipt(path: Path) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+def _scan_receipt(path: Path, *, snapshot: bytes | None = None, artifact_snapshots: dict[str, bytes] | None = None) -> dict[str, Any]:
+    data = _receipt_snapshot(path, snapshot)
     required = {"core.sbom.json", "runner.sbom.json", "core.grype.json", "runner.grype.json"}
+    if (snapshot is None) != (artifact_snapshots is None) or (artifact_snapshots is not None and set(artifact_snapshots) != required):
+        raise ReleaseError("image_scan_receipt_invalid")
     artifacts: list[dict[str, Any]] = []
     observed: set[str] = set()
     try:
@@ -1338,7 +1357,11 @@ def _scan_receipt(path: Path) -> dict[str, Any]:
         name = source.name
         if name in observed or name not in required or source.resolve().parent != Path(path).resolve().parent:
             raise ReleaseError("image_scan_receipt_invalid")
-        artifact = _file_receipt(source)
+        if artifact_snapshots is None:
+            artifact = _file_receipt(source)
+        else:
+            raw = _receipt_snapshot(source, artifact_snapshots[name])
+            artifact = {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
         if artifact["sha256"] != match.group(1):
             raise ReleaseError("image_scan_receipt_invalid")
         observed.add(name)

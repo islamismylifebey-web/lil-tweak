@@ -32,22 +32,25 @@ def provider_projection(value):
 
 def witness_provider(normalized_path, raw, output):
     a.require_new_output(output)
+    snapshots = a.EvidenceSnapshots()
     require(type(raw) is bytes and 0 < len(raw) <= 1024 * 1024)
-    normalized = q.validate_provider(a.read_json(normalized_path))
+    normalized = q.validate_provider(snapshots.read_json(normalized_path))
     projection = provider_projection(q.parse_json(raw))
     exact(normalized["rawResponseSha256"], a.sha(raw)); exact(normalized["droplet"], projection)
-    require(a.read_bytes(normalized_path) == a.canonical(normalized))
+    require(snapshots.read_bytes(normalized_path) == a.canonical(normalized))
     value = {"schema": "tueiq-provider-response-witness-v1", "witnessedAt": q.iso(time.time()), "operation": normalized["operation"], "rawResponseSha256": a.sha(raw),
         "normalizedSha256": a.sha(a.canonical(normalized)), "projectionSha256": a.sha(a.canonical(projection)), "reviewerNonce": secrets.token_hex(24)}
-    require(a.read_bytes(normalized_path) == a.canonical(normalized))
+    require(snapshots.read_bytes(normalized_path) == a.canonical(normalized))
+    snapshots.recheck()
     return a.publish(output, value)
 
 
-def validate_witness(path, normalized_path, *, candidate, preflight):
-    value = a.read_json(path)
+def validate_witness(path, normalized_path, *, candidate, preflight, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
+    value = snapshots.read_json(path)
     fields(value, ("schema", "witnessedAt", "operation", "rawResponseSha256", "normalizedSha256", "projectionSha256", "reviewerNonce"))
     exact(value["schema"], "tueiq-provider-response-witness-v1")
-    normalized = q.validate_provider(a.read_json(normalized_path))
+    normalized = q.validate_provider(snapshots.read_json(normalized_path))
     exact(value["operation"], normalized["operation"]); exact(value["rawResponseSha256"], normalized["rawResponseSha256"])
     exact(value["normalizedSha256"], a.sha(a.canonical(normalized))); exact(value["projectionSha256"], a.sha(a.canonical(normalized["droplet"])))
     exact(value["normalizedSha256"], candidate["artifactDigests"]["preflight-provider-evidence" if preflight else "provider-evidence"])
@@ -56,15 +59,16 @@ def validate_witness(path, normalized_path, *, candidate, preflight):
     require(observed <= witnessed <= observed + 120)
     boundary = candidate["changeRecord"]["mutationStartedAt"] if preflight else candidate["site"]["checkedAt"]
     require(witnessed <= a.timestamp(boundary))
-    require(a.read_bytes(normalized_path) == a.canonical(normalized))
-    require(a.read_bytes(path) == a.canonical(value))
+    require(snapshots.read_bytes(normalized_path) == a.canonical(normalized))
+    require(snapshots.read_bytes(path) == a.canonical(value))
     return value
 
 
-def review_facts(args, reviewed_at=None):
-    digest, candidate, primary = a.verify_candidate(args)
-    witnesses = [validate_witness(args.preflight_provider_witness, args.preflight_provider_evidence, candidate=candidate, preflight=True),
-                 validate_witness(args.provider_witness, args.provider_evidence, candidate=candidate, preflight=False)]
+def review_facts(args, reviewed_at=None, *, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
+    digest, candidate, primary = a.verify_candidate(args, snapshots=snapshots)
+    witnesses = [validate_witness(args.preflight_provider_witness, args.preflight_provider_evidence, candidate=candidate, preflight=True, snapshots=snapshots),
+                 validate_witness(args.provider_witness, args.provider_evidence, candidate=candidate, preflight=False, snapshots=snapshots)]
     require(len({w["reviewerNonce"] for w in witnesses} | {candidate["changeRecord"]["sessionNonce"]}) == 3)
     reviewed_at = q.iso(time.time()) if reviewed_at is None else reviewed_at
     require(a.timestamp(candidate["completedAt"]) <= a.fresh(reviewed_at) and time.time() - a.timestamp(reviewed_at) <= 300)
@@ -77,41 +81,46 @@ def review_facts(args, reviewed_at=None):
 
 def review_candidate(args):
     a.require_new_output(args.review)
-    value, witnesses = review_facts(args)
+    snapshots = a.EvidenceSnapshots()
+    value, witnesses = review_facts(args, snapshots=snapshots)
     value["reviewerNonce"] = secrets.token_hex(24)
     require(value["reviewerNonce"] not in {w["reviewerNonce"] for w in witnesses})
-    recheck_review_inputs(args, value["candidateSha256"], value["providerWitnessDigests"])
+    recheck_review_inputs(args, value["candidateSha256"], value["providerWitnessDigests"], snapshots=snapshots)
     return a.publish(args.review, value)
 
 
-def recheck_review_inputs(args, candidate_digest, witness_digests):
-    candidate = a.read_json(args.candidate)
+def recheck_review_inputs(args, candidate_digest, witness_digests, *, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
+    candidate = snapshots.read_json(args.candidate)
     exact(a.sha(a.canonical(candidate)), candidate_digest)
-    a.recheck_originals(args, candidate)
+    a.recheck_originals(args, candidate, snapshots=snapshots)
     for name, path in (("preflight", args.preflight_provider_witness), ("live", args.provider_witness)):
-        exact(a.sha(a.read_bytes(path)), witness_digests[name])
-    require(a.read_bytes(args.candidate) == a.canonical(candidate))
+        exact(a.sha(snapshots.read_bytes(path)), witness_digests[name])
+    require(snapshots.read_bytes(args.candidate) == a.canonical(candidate))
+    snapshots.recheck()
 
 
-def recheck_review(args, review_digest, candidate_digest):
-    value = a.read_json(args.independent_review)
+def recheck_review(args, review_digest, candidate_digest, *, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
+    value = snapshots.read_json(args.independent_review)
     exact(a.sha(a.canonical(value)), review_digest)
     exact(value["candidateSha256"], candidate_digest)
-    recheck_review_inputs(args, candidate_digest, value["providerWitnessDigests"])
-    require(a.read_bytes(args.independent_review) == a.canonical(value))
+    recheck_review_inputs(args, candidate_digest, value["providerWitnessDigests"], snapshots=snapshots)
+    require(snapshots.read_bytes(args.independent_review) == a.canonical(value))
 
 
-def verify_review(args):
-    value = a.read_json(args.independent_review)
+def verify_review(args, *, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
+    value = snapshots.read_json(args.independent_review)
     fields(value, ("schema", "reviewedAt", "reviewerNonce", "candidateSha256", "providerWitnessDigests", "primaryArtifactDigests", "crossCheckDigests", "decision"))
-    expected, witnesses = review_facts(args, value["reviewedAt"])
+    expected, witnesses = review_facts(args, value["reviewedAt"], snapshots=snapshots)
     require(type(value["reviewerNonce"]) is str and re.fullmatch(r"[0-9a-f]{48}", value["reviewerNonce"]) is not None)
-    require(value["reviewerNonce"] not in {w["reviewerNonce"] for w in witnesses} | {a.read_json(args.candidate)["changeRecord"]["sessionNonce"]})
+    require(value["reviewerNonce"] not in {w["reviewerNonce"] for w in witnesses} | {snapshots.read_json(args.candidate)["changeRecord"]["sessionNonce"]})
     exact(value, {**expected, "reviewerNonce": value["reviewerNonce"]})
-    raw = a.read_bytes(args.independent_review)
+    raw = snapshots.read_bytes(args.independent_review)
     require(raw == a.canonical(value))
-    recheck_review_inputs(args, expected["candidateSha256"], expected["providerWitnessDigests"])
-    require(a.read_bytes(args.independent_review) == raw)
+    recheck_review_inputs(args, expected["candidateSha256"], expected["providerWitnessDigests"], snapshots=snapshots)
+    require(snapshots.read_bytes(args.independent_review) == raw)
     return a.sha(raw), expected["candidateSha256"]
 
 

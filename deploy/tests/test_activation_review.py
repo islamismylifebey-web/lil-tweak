@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 import io
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import ExitStack, redirect_stdout, redirect_stderr
 from pathlib import Path
 
 from deploy.tests.test_activation_finalizer import ROOT, WITNESS_KEYS, REVIEW_KEYS, FINAL_KEYS, ORIGINAL_ARGUMENTS, ActivationFixture, load, objects, replace_at
@@ -15,6 +15,92 @@ from deploy.tests.test_qualification import provider
 
 
 class ActivationReviewTests(unittest.TestCase):
+    def test_both_provider_witnesses_share_the_original_snapshot_boundary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f, r, _ = self.phase_fixture(Path(temporary))
+            try:
+                f.args.preflight_provider_witness = f.root / "preflight-witness.json"
+                f.args.provider_witness = f.root / "provider-witness.json"
+                snapshots = r.a.EvidenceSnapshots()
+                value, witnesses = r.review_facts(f.args, snapshots=snapshots)
+                candidate = f.a.read_json(f.args.candidate)
+                for preflight, path, witness in zip((True, False), (f.args.preflight_provider_witness, f.args.provider_witness), witnesses):
+                    valid = path.read_bytes()
+                    self.assertEqual(snapshots.files[path][0], valid)
+                    self.assertEqual(valid, f.a.canonical(witness))
+                    self.assertEqual(value["providerWitnessDigests"]["preflight" if preflight else "live"], f.a.sha(valid))
+                    attack = r.a.EvidenceSnapshots()
+                    f.write(path, {})
+                    attack.read_bytes(path)
+                    read = r.a.read_json
+                    def temporarily_valid(requested, *args, **kwargs):
+                        if Path(requested) != path: return read(requested, *args, **kwargs)
+                        f.raw(path, valid)
+                        try: return read(requested, *args, **kwargs)
+                        finally: f.write(path, {})
+                    try:
+                        with self.subTest(preflight=preflight), patch.object(r.a, "read_json", side_effect=temporarily_valid), self.assertRaises(Exception):
+                            r.validate_witness(path, f.args.preflight_provider_evidence if preflight else f.args.provider_evidence, candidate=candidate, preflight=preflight, snapshots=attack)
+                    finally: f.raw(path, valid)
+            finally: f.close()
+
+    def test_initial_hash_semantic_read_aba_rejects_every_phase_without_truth(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f, r, originals = self.phase_fixture(Path(temporary))
+            try:
+                review, final = f.root / "review.json", f.root / "final.json"
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(r.main(["review-candidate", *originals, "--review", str(review)]), 0)
+                    self.assertEqual(f.a.main(["finalize-reviewed", *originals, "--independent-review", str(review), "--activation", str(final)]), 0)
+                valid_d1 = f.args.d1_cross_check.read_bytes()
+                f.write(f.args.d1_cross_check, {})
+                core = f.a.read_json(f.args.core_cross_check)
+                core["d1Sha256"] = f.a.sha(b"{}")
+                f.write(f.args.core_cross_check, core)
+                candidate = f.a.read_json(f.args.candidate)
+                for name in ("d1-cross-check", "core-cross-check"):
+                    candidate["artifactDigests"][name] = f.a.sha(getattr(f.args, name.replace("-", "_")).read_bytes())
+                f.write(f.args.candidate, candidate)
+                reviewed = f.a.read_json(review)
+                reviewed["candidateSha256"] = f.a.sha(f.args.candidate.read_bytes())
+                for name in ("d1-cross-check", "core-cross-check"):
+                    reviewed["crossCheckDigests"][name] = candidate["artifactDigests"][name]
+                f.write(review, reviewed)
+                activation = f.a.read_json(final)
+                activation["candidateSha256"] = reviewed["candidateSha256"]
+                activation["independentReviewSha256"] = f.a.sha(review.read_bytes())
+                f.write(final, activation)
+
+                def swap_only_around_real_json_read(read):
+                    def attacked(path, *args, **kwargs):
+                        if Path(path) != f.args.d1_cross_check:
+                            return read(path, *args, **kwargs)
+                        f.raw(path, valid_d1)
+                        try:
+                            return read(path, *args, **kwargs)
+                        finally:
+                            f.write(path, {})
+                    return attacked
+
+                # Patch only filesystem timing at the secure JSON-read boundary;
+                # every real parser, semantic validator and phase CLI executes.
+                with ExitStack() as stack:
+                    for module in {f.a, r.a}:
+                        stack.enter_context(patch.object(module, "read_json", side_effect=swap_only_around_real_json_read(module.read_json)))
+                    for command in ("build-candidate", "review-candidate", "finalize-reviewed", "verify-final"):
+                        output = f.root / ("aba-" + command + ".json")
+                        args = [command, *(originals[:-4] if command == "build-candidate" else originals)]
+                        if command == "build-candidate": args += ["--candidate", str(output)]
+                        elif command == "review-candidate": args += ["--review", str(output)]
+                        else: args += ["--independent-review", str(review), "--activation", str(final if command == "verify-final" else output)]
+                        captured = io.StringIO()
+                        with self.subTest(command=command), redirect_stdout(captured), redirect_stderr(captured):
+                            self.assertEqual((r.main if command == "review-candidate" else f.a.main)(args), 1)
+                            self.assertFalse(output.exists())
+                            self.assertNotRegex(captured.getvalue(), r"CONNECTED|QUALIFIED|READY_TO_WORK")
+                        self.assertEqual(f.args.d1_cross_check.read_bytes(), b"{}")
+            finally: f.close()
+
     def phase_fixture(self, root):
         f = ActivationFixture(root)
         r = f.a.helper("lil-tweak-independent-review")

@@ -100,11 +100,53 @@ def read_bytes(path, limit=MAX_BYTES, *, mode=0o600):
         return raw
 
 
-def read_json(path, *, legacy=False):
-    raw = read_bytes(path, mode=0o444 if legacy else 0o600)
+def read_json(path, *, legacy=False, snapshots=None):
+    reader = read_bytes if snapshots is None else snapshots.read_bytes
+    raw = reader(path, mode=0o444 if legacy else 0o600)
     value = q.parse_json(raw)
     require(raw == canonical(value) + (b"\n" if legacy else b""))
     return value
+
+
+class EvidenceSnapshots:
+    """One bounded secure byte value per path for an entire replay phase.
+
+    Hashing, JSON parsing and helper inputs consume the same immutable bytes.
+    Later reads must match before their bytes can be used, including ABA swaps
+    between an inventory hash and a semantic read. Never cache parsed objects.
+    """
+    def __init__(self):
+        self.files = {}
+        self.directories = {}
+
+    def read_bytes(self, path, limit=MAX_BYTES, *, mode=0o600):
+        path = Path(path).absolute()
+        observed = read_bytes(path, limit, mode=mode)
+        if path not in self.files:
+            self.files[path] = (observed, limit, mode)
+        retained, _, retained_mode = self.files[path]
+        require(mode == retained_mode and observed == retained and len(retained) <= limit)
+        return retained
+
+    def read_json(self, path, *, legacy=False):
+        return read_json(path, legacy=legacy, snapshots=self)
+
+    def inventory(self, path, expected=None, *, recursive=False):
+        return inventory(path, expected, recursive=recursive, snapshots=self)
+
+    def directory(self, path, names):
+        path = Path(path).absolute()
+        observed = tuple(names)
+        if path not in self.directories:
+            self.directories[path] = observed
+        exact(observed, self.directories[path])
+
+    def recheck(self):
+        for path, names in self.directories.items():
+            with secure_directory(path) as fd:
+                exact(tuple(sorted(os.listdir(fd))), names)
+        for path, (retained, limit, mode) in self.files.items():
+            require(read_bytes(path, limit, mode=mode) == retained)
 
 
 def publish(path, value=None, *, raw=None):
@@ -168,19 +210,21 @@ def require_new_output(path):
         require(False)
 
 
-def inventory(path, expected=None, *, recursive=False):
+def inventory(path, expected=None, *, recursive=False, snapshots=None):
     result = {}
+    reader = read_bytes if snapshots is None else snapshots.read_bytes
     with secure_directory(path) as fd:
         names = sorted(os.listdir(fd))
         require(len(names) <= 256)
         if expected is not None: exact(names, sorted(expected))
+        if snapshots is not None: snapshots.directory(path, names)
         for name in names:
             require(re.fullmatch(r"[A-Za-z0-9_.:-]+", name) is not None)
             info = os.stat(name, dir_fd=fd, follow_symlinks=False)
             if recursive and stat.S_ISDIR(info.st_mode):
-                for nested, digest in inventory(Path(path) / name, recursive=True).items(): result[name + "/" + nested] = digest
+                for nested, digest in inventory(Path(path) / name, recursive=True, snapshots=snapshots).items(): result[name + "/" + nested] = digest
             else:
-                result[name] = sha(read_bytes(Path(path) / name, limit=release.MAX_ARCHIVE_BYTES if name == "source.tar.gz" else MAX_BYTES, mode=0o444 if name == "source-manifest.json" else 0o600))
+                result[name] = sha(reader(Path(path) / name, limit=release.MAX_ARCHIVE_BYTES if name == "source.tar.gz" else MAX_BYTES, mode=0o444 if name == "source-manifest.json" else 0o600))
         exact(sorted(os.listdir(fd)), names)
     return result
 
@@ -393,20 +437,22 @@ def validate_verification(verification, head, tree, manifest_digest, archive_dig
     exact(verification["checks"], dict.fromkeys(("source", "npmVerify", "deployTests", "installerCheck", "deploymentCheck"), True))
 
 
-def validate_release(root, runtime, head, tree, now):
-    digests = inventory(root, RELEASE_FILES)
-    source = read_json(root / "source-manifest.json", legacy=True)
+def validate_release(root, runtime, head, tree, now, *, snapshots=None):
+    snapshots = EvidenceSnapshots() if snapshots is None else snapshots
+    digests = snapshots.inventory(root, RELEASE_FILES)
+    source = snapshots.read_json(root / "source-manifest.json", legacy=True)
     validate_source_manifest(source)
     exact(source["source"], {"commit": head, "tree": tree}); exact(source["official_base"]["commit"], BASE)
     require(source["preserved"])
-    archive_hash, archive_size, _ = release._archive_inventory(root / "source.tar.gz", source)
-    exact(runtime["source"], {"commit": head, "tree": tree, "manifest_sha256": digests["source-manifest.json"], "manifest_size": len(read_bytes(root / "source-manifest.json", mode=0o444)), "archive_sha256": archive_hash, "archive_size": archive_size})
-    verification = read_json(root / "verification-receipt.json")
+    archive_hash, archive_size, _ = release._archive_inventory(root / "source.tar.gz", source, snapshot=snapshots.read_bytes(root / "source.tar.gz", release.MAX_ARCHIVE_BYTES))
+    exact(archive_hash, digests["source.tar.gz"])
+    exact(runtime["source"], {"commit": head, "tree": tree, "manifest_sha256": digests["source-manifest.json"], "manifest_size": len(snapshots.read_bytes(root / "source-manifest.json", mode=0o444)), "archive_sha256": archive_hash, "archive_size": archive_size})
+    verification = snapshots.read_json(root / "verification-receipt.json")
     validate_verification(verification, head, tree, digests["source-manifest.json"], archive_hash, now)
     # Retain exact bounded non-secret tool projections, and inspect semantics.
     for role in ("core", "runner"):
         for suffix, tool, collection in (("sbom", "syft", "artifacts"), ("grype", "grype", "matches")):
-            scan = read_json(root / (role + "." + suffix + ".json"))
+            scan = snapshots.read_json(root / (role + "." + suffix + ".json"))
             fields(scan, ("descriptor", "source", collection))
             exact(scan["descriptor"], {"name": tool, "version": verification["tools"][tool]})
             exact(scan["source"], {"image": runtime["images"][role]["reference"]})
@@ -421,19 +467,22 @@ def validate_release(root, runtime, head, tree, now):
                     require(type(entry["name"]) is str and re.fullmatch(r"(?:@[a-z0-9._-]+/)?[A-Za-z0-9][A-Za-z0-9+._-]{0,127}", entry["name"]) is not None)
                     require(type(entry["version"]) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+:~_-]{0,255}", entry["version"]) is not None)
     images = runtime["images"]
-    exact(runtime["receipts"]["base_images"], release._base_image_receipt(root / "base-images.txt", [images[k]["reference"] for k in ("python_base", "runner_base", "postgres")]))
-    exact(runtime["receipts"]["image_scans"], release._scan_receipt(root / "scan-hashes.txt"))
+    exact(runtime["receipts"]["base_images"], release._base_image_receipt(root / "base-images.txt", [images[k]["reference"] for k in ("python_base", "runner_base", "postgres")], snapshot=snapshots.read_bytes(root / "base-images.txt")))
+    exact(runtime["receipts"]["image_scans"], release._scan_receipt(root / "scan-hashes.txt", snapshot=snapshots.read_bytes(root / "scan-hashes.txt"),
+        artifact_snapshots={name: snapshots.read_bytes(root / name) for name in ("core.sbom.json", "core.grype.json", "runner.sbom.json", "runner.grype.json")}))
     expected = [("schema", "lil-tweak-host-go-receipt-v3"), ("decision", "GO"), ("source_commit", head), ("source_tree", tree), ("source_manifest_sha256", digests["source-manifest.json"]), ("source_archive_sha256", archive_hash)]
     expected += [(k + "_image", images[k]["reference"]) for k in ("core", "runner", "postgres", "python_base", "runner_base")]
     expected += [("base_image_receipt_sha256", digests["base-images.txt"]), ("image_scan_receipt_sha256", digests["scan-hashes.txt"])]
     expected += [("activation_verification_sha256", digests["verification-receipt.json"])]
-    exact(runtime["receipts"]["host_go"], release._decision_receipt(root / "host-go.txt", expected, "activation_release_rejected"))
-    host_times = dict(line.split("=", 1) for line in read_bytes(root / "host-go.txt").decode("ascii").splitlines())
+    exact(runtime["receipts"]["host_go"], release._decision_receipt(root / "host-go.txt", expected, "activation_release_rejected", snapshot=snapshots.read_bytes(root / "host-go.txt")))
+    host_times = dict(line.split("=", 1) for line in snapshots.read_bytes(root / "host-go.txt").decode("ascii").splitlines())
     require(timestamp(verification["verifiedAt"]) <= timestamp(host_times["issued_at"]))
+    snapshots.recheck()
     return digests, verification
 
 
-def validate_production(value, runtime, deployment, job, owner_receipt, digests):
+def validate_production(value, runtime, deployment, job, owner_receipt, digests, *, snapshots=None):
+    snapshots = EvidenceSnapshots() if snapshots is None else snapshots
     fields(value, ("schema", "runtime", "cloudflare", "sites", "owner_flow_receipt", "owner_flow_job_sha256", "resource_observations"))
     exact(value["schema"], release.PRODUCTION_SCHEMA)
     exact(value["runtime"], {"manifest_sha256": digests["runtime-manifest"], "source_commit": runtime["source"]["commit"], "source_tree": runtime["source"]["tree"]})
@@ -452,17 +501,20 @@ def validate_production(value, runtime, deployment, job, owner_receipt, digests)
     release._https_origin(sites["production_url"]); q.integer(sites["prior_version_number"], 1)
     exact(value["owner_flow_job_sha256"], digests["owner-flow-job"])
     expected = release.owner_flow_expected(runtime, digests["runtime-manifest"], sites, digests["owner-flow-job"], deployment["deployedAt"])
-    exact(value["owner_flow_receipt"], release._decision_receipt(owner_receipt, expected, "activation_owner_flow_rejected"))
-    times = dict(line.split("=", 1) for line in read_bytes(owner_receipt).decode("ascii").splitlines())
+    owner_bytes = snapshots.read_bytes(owner_receipt)
+    exact(sha(owner_bytes), digests["owner-flow-receipt"])
+    exact(value["owner_flow_receipt"], release._decision_receipt(owner_receipt, expected, "activation_owner_flow_rejected", snapshot=owner_bytes))
+    times = dict(line.split("=", 1) for line in owner_bytes.decode("ascii").splitlines())
     require(timestamp(deployment["deployedAt"]) <= timestamp(job["checkedAt"]) <= timestamp(times["issued_at"]))
     validate_resource_observations(value["resource_observations"])
     return {"runtimeSha256": digests["runtime-manifest"], "ownerFlowSha256": digests["owner-flow-receipt"], "ownerFlowJobSha256": digests["owner-flow-job"], "resourceObservationsSha256": sha(canonical(value["resource_observations"])),
             "d1": cf["d1"], "r2": cf["r2"], "ingress": {k: v for k, v in cf["ingress"].items() if k != "core_origin"}}
 
 
-def replay(args, *, completed_at=None, now=None):
+def replay(args, *, completed_at=None, now=None, snapshots=None):
     """Reopen the originals. Never use candidate data as provenance input."""
     now = time.time() if now is None else now
+    snapshots = EvidenceSnapshots() if snapshots is None else snapshots
     require(os.geteuid() == 0 and os.getegid() == 0)
     root = Path(args.source_root).absolute()
     with release._open_bound_parent(root / "sentinel", "activation_source_unsafe"):
@@ -470,23 +522,41 @@ def replay(args, *, completed_at=None, now=None):
         head, tree = release._git(root, "rev-parse", "HEAD"), release._git(root, "rev-parse", "HEAD^{tree}")
         require(re.fullmatch(r"[0-9a-f]{40}", head) is not None and re.fullmatch(r"[0-9a-f]{40}", tree) is not None)
         release._git(root, "merge-base", "--is-ancestor", BASE, head)
-    digests = {key: sha(read_bytes(getattr(args, key.replace("-", "_")), mode=0o444 if key in {"runtime-manifest", "production-manifest"} else 0o600)) for key in ORIGINALS if key not in {"source-root", "release-evidence-root", "rollback-receipt", "site-primary-evidence"}}
-    preflight, provider = (q.validate_provider(read_json(path), now=now) for path in (args.preflight_provider_evidence, args.provider_evidence))
-    local = q.validate_receipt(read_json(args.local_qualification), now=now)
+    digests = {key: sha(snapshots.read_bytes(getattr(args, key.replace("-", "_")), mode=0o444 if key in {"runtime-manifest", "production-manifest"} else 0o600)) for key in ORIGINALS if key not in {"source-root", "release-evidence-root", "rollback-receipt", "site-primary-evidence"}}
+    preflight, provider = (q.validate_provider(snapshots.read_json(path), now=now) for path in (args.preflight_provider_evidence, args.provider_evidence))
+    local = q.validate_receipt(snapshots.read_json(args.local_qualification), now=now)
     exact(local["providerEvidence"], {"document": provider, "sha256": digests["provider-evidence"]}); exact(local["sourceHead"], head)
     exact(preflight["droplet"], provider["droplet"]); exact(local["topology"], TOPOLOGY)
-    runtime = release._validated_runtime_manifest(read_json(args.runtime_manifest, legacy=True))
+    runtime = release._validated_runtime_manifest(snapshots.read_json(args.runtime_manifest, legacy=True))
     exact(runtime["source"]["commit"], head); exact(runtime["source"]["tree"], tree)
     exact(local["images"], {k: runtime["images"][k]["digest"] for k in ("core", "postgres", "runner")})
-    release_digests, verification = validate_release(Path(args.release_evidence_root), runtime, head, tree, now)
-    source = read_json(Path(args.release_evidence_root) / "source-manifest.json", legacy=True)
+    release_digests, verification = validate_release(Path(args.release_evidence_root), runtime, head, tree, now, snapshots=snapshots)
+    source = snapshots.read_json(Path(args.release_evidence_root) / "source-manifest.json", legacy=True)
     release._git_inventory(root, head, verify_checkout=True)
     exact(source["files"], [v for _, v in sorted(release._git_inventory(root, head, verify_checkout=True).items())])
     rb = rollback_helper()
-    rollback_inventory = inventory(args.rollback_receipt, recursive=True)
-    rollback_digest = rb.verify_receipt(Path(args.rollback_receipt))
-    manifest, _ = rb._load_manifest(Path(args.rollback_receipt), rollback_digest)
+    rollback_inventory = snapshots.inventory(args.rollback_receipt, recursive=True)
+    rollback_digest = rb.verify_receipt(Path(args.rollback_receipt), rollback_inventory["manifest.json"])
+    manifest, observed_manifest_digest = rb._load_manifest(Path(args.rollback_receipt), rollback_digest)
     forward = rb._load_forward(Path(args.rollback_receipt), rollback_digest)
+    # Legacy rollback helpers still read paths. Bind every semantic result and
+    # every payload they checked to our retained bytes at this boundary.
+    exact(observed_manifest_digest, rollback_inventory["manifest.json"])
+    require(rb.canonical_json_bytes(manifest) == snapshots.read_bytes(Path(args.rollback_receipt) / "manifest.json"))
+    require(rb.canonical_json_bytes(forward) == snapshots.read_bytes(Path(args.rollback_receipt) / "forward-state.json"))
+    for entry in manifest["managed_paths"]:
+        if entry["state"] == "present" and entry["type"] == "regular":
+            payload = snapshots.read_bytes(Path(args.rollback_receipt) / entry["payload"])
+            exact(len(payload), entry["size"]); exact(sha(payload), entry["sha256"])
+    if "rollback.lock" in rollback_inventory:
+        require(snapshots.read_bytes(Path(args.rollback_receipt) / "rollback.lock", 0) == b"")
+    expected_payloads = {entry["payload"] for entry in manifest["managed_paths"] if entry["state"] == "present" and entry["type"] == "regular"}
+    expected_members = {"manifest.json", "forward-state.json"} | expected_payloads
+    if "rollback.lock" in rollback_inventory: expected_members.add("rollback.lock")
+    require(set(rollback_inventory) == expected_members)
+    rollback_root = Path(args.rollback_receipt).absolute()
+    exact(snapshots.directories[rollback_root], tuple(sorted({"manifest.json", "forward-state.json", "payload"} | ({"rollback.lock"} if "rollback.lock" in rollback_inventory else set()))))
+    exact(snapshots.directories[rollback_root / "payload"], tuple(sorted(Path(name).name for name in expected_payloads)))
     exact(manifest["source_commit"], head); exact(manifest["hostname"], local["identity"]["host"])
     exact([forward["transaction_state"], forward["rollback_outcome"]], ["completed", "clean"])
     require(set(forward["files"]) == {p for p, kind, _ in rb.MANAGED_PATHS if kind == "regular"})
@@ -496,35 +566,35 @@ def replay(args, *, completed_at=None, now=None):
     for role, image in forward["images"].items(): exact(image["reference"], runtime["images"][role]["reference"])
     require("quarantine" not in os.listdir(args.rollback_receipt))
     live = helper("lil-tweak-live-evidence")
-    site_inventory, status, owner_job, primary = live.reopen_site(args.site_primary_evidence)
-    exact(read_json(args.site_status_evidence), status); exact(read_json(args.owner_flow_job), owner_job)
+    site_inventory, status, owner_job, primary = live.reopen_site(args.site_primary_evidence, snapshots=snapshots)
+    exact(snapshots.read_json(args.site_status_evidence), status); exact(snapshots.read_json(args.owner_flow_job), owner_job)
     validate_owner_job(owner_job); deployment = validate_deployment(status["deployment"])
     exact([deployment["sourceHead"], deployment["sourceTree"]], [head, tree])
-    d1 = validate_d1(read_json(args.d1_cross_check))
+    d1 = validate_d1(snapshots.read_json(args.d1_cross_check))
     for key in ("jobId", "ownerScope", "jobRevision", "mode", "state", "gitSource", "sourceDigest", "proposalDigest", "approvalProposal", "approvalConsumed", "evidence"):
         exact(d1[key], owner_job[key])
     exact(d1["events"], primary["events"])
-    core = live.validate_core(read_json(args.core_cross_check))
+    core = live.validate_core(snapshots.read_json(args.core_cross_check))
     exact(core["d1Sha256"], digests["d1-cross-check"])
     for key in ("jobId", "remoteJobId", "ownerScope", "jobRevision", "coreRevision", "mode", "state", "gitSource", "sourceDigest", "proposalDigest", "approvalProposal", "approvalConsumed", "decisionCount", "exportCount", "evidence"):
         exact(core[key], d1[key])
     for key in ("baselineTreeSha256", "finalTreeSha256", "fileSha256", "commandDigest", "editJournalDigest"): exact(core[key], owner_job[key])
-    guest, guest_cross = validate_guest(read_json(args.guest_evidence)), validate_guest(read_json(args.guest_cross_check), cross=True)
+    guest, guest_cross = validate_guest(snapshots.read_json(args.guest_evidence)), validate_guest(snapshots.read_json(args.guest_cross_check), cross=True)
     for value in (guest, guest_cross):
         exact(value["providerSha256"], digests["provider-evidence"]); exact(value["runtimeSha256"], digests["runtime-manifest"])
         exact(value["identity"], local["identity"]); exact(value["sourceHead"], head); exact(value["images"], local["images"])
     exact(guest["verificationSha256"], release_digests["verification-receipt.json"]); exact(guest_cross["jobId"], owner_job["jobId"])
-    production_original = read_json(args.production_manifest, legacy=True)
-    production = validate_production(production_original, runtime, deployment, owner_job, args.owner_flow_receipt, digests)
+    production_original = snapshots.read_json(args.production_manifest, legacy=True)
+    production = validate_production(production_original, runtime, deployment, owner_job, args.owner_flow_receipt, digests, snapshots=snapshots)
     observations = production_original["resource_observations"]
-    change = validate_change(read_json(args.change_record), head=head, tree=tree, preflight=digests["preflight-provider-evidence"], deployment=deployment, rollback_time=timestamp(manifest["captured_at_iso"]), now=now, observations=observations)
+    change = validate_change(snapshots.read_json(args.change_record), head=head, tree=tree, preflight=digests["preflight-provider-evidence"], deployment=deployment, rollback_time=timestamp(manifest["captured_at_iso"]), now=now, observations=observations)
     exact(production_original["sites"]["prior_version_number"], change["priorSite"]["versionNumber"])
     exact(guest_cross["secretDirectory"], observations["creations"][RESOURCE_KINDS.index("secret_directory")]["filesystem"])
     resource_ids = {r["kind"]: r["createdId"] for r in change["resources"]}
     for kind, key in (("tunnel", "tunnel_id"), ("access_application", "access_application_id"), ("access_policy", "access_policy_id"), ("managed_rule", "managed_rule_id")):
         exact(resource_ids[kind], production["ingress"][key])
     finish = q.iso(now) if completed_at is None else completed_at
-    host_issued = dict(line.split("=", 1) for line in read_bytes(Path(args.release_evidence_root) / "host-go.txt").decode("ascii").splitlines())["issued_at"]
+    host_issued = dict(line.split("=", 1) for line in snapshots.read_bytes(Path(args.release_evidence_root) / "host-go.txt").decode("ascii").splitlines())["issued_at"]
     order = [change["startedAt"], preflight["observedAt"], verification["verifiedAt"], host_issued, manifest["captured_at_iso"], change["mutationStartedAt"], deployment["deployedAt"], provider["observedAt"], primary["startedAt"], status["checkedAt"], owner_job["checkedAt"], d1["observedAt"], core["observedAt"], guest["checkedAt"], guest_cross["observedAt"], local["startedAt"], local["completedAt"], change["completedAt"], finish]
     epochs = [fresh(value, now) for value in order]
     require(epochs == sorted(epochs) and now - timestamp(finish) <= 900)
@@ -540,30 +610,33 @@ def replay(args, *, completed_at=None, now=None):
         "rollback": {"manifestSha256": rollback_digest, "forwardSha256": rollback_inventory["forward-state.json"], "inventorySha256": digests["rollback-receipt"], "capturedAt": manifest["captured_at_iso"], "transactionState": "completed", "rollbackOutcome": "clean"},
         "production": production, "site": status, "ownerFlow": owner_job,
         "localQualification": {"sha256": digests["local-qualification"], "startedAt": local["startedAt"], "completedAt": local["completedAt"], "negativeChecks": local["negativeChecks"], "cleanup": local["cleanup"]}, "changeRecord": change}
-    recheck_originals(args, candidate)
+    recheck_originals(args, candidate, snapshots=snapshots)
     return candidate, {"release": release_digests, "site": site_inventory, "rollback": rollback_inventory}
 
 
-def recheck_originals(args, candidate):
+def recheck_originals(args, candidate, *, snapshots=None):
     """Compare all reopened inputs to the retained, semantically validated snapshot."""
+    snapshots = EvidenceSnapshots() if snapshots is None else snapshots
     for key, digest in candidate["artifactDigests"].items():
         path = getattr(args, key.replace("-", "_"))
-        if key == "release-evidence-root": observed = sha(canonical(inventory(path, RELEASE_FILES)))
-        elif key == "rollback-receipt": observed = sha(canonical(inventory(path, recursive=True)))
-        elif key == "site-primary-evidence": observed = sha(canonical(inventory(path)))
-        else: observed = sha(read_bytes(path, mode=0o444 if key in {"runtime-manifest", "production-manifest"} else 0o600))
+        if key == "release-evidence-root": observed = sha(canonical(snapshots.inventory(path, RELEASE_FILES)))
+        elif key == "rollback-receipt": observed = sha(canonical(snapshots.inventory(path, recursive=True)))
+        elif key == "site-primary-evidence": observed = sha(canonical(snapshots.inventory(path)))
+        else: observed = sha(snapshots.read_bytes(path, mode=0o444 if key in {"runtime-manifest", "production-manifest"} else 0o600))
         exact(observed, digest)
     root = Path(args.source_root).absolute()
     exact(release._git(root, "rev-parse", "HEAD"), candidate["sourceHead"])
     exact(release._git(root, "rev-parse", "HEAD^{tree}"), candidate["runtime"]["sourceTree"])
     require(release._git(root, "status", "--porcelain=v1", "-z", binary=True) == b"")
+    snapshots.recheck()
 
 
-def verify_candidate(args):
-    value = read_json(args.candidate)
-    expected, primary = replay(args, completed_at=value.get("completedAt"))
+def verify_candidate(args, *, snapshots=None):
+    snapshots = EvidenceSnapshots() if snapshots is None else snapshots
+    value = snapshots.read_json(args.candidate)
+    expected, primary = replay(args, completed_at=value.get("completedAt"), snapshots=snapshots)
     exact(value, expected)
-    raw = read_bytes(args.candidate)
+    raw = snapshots.read_bytes(args.candidate)
     require(raw == canonical(value))
     return sha(raw), value, primary
 
@@ -611,24 +684,25 @@ def main(argv=None):
             print(verify_candidate(args)[0])
         elif args.command in {"finalize-reviewed", "verify-final"}:
             reviewer = helper("lil-tweak-independent-review")
-            review_digest, candidate_digest = reviewer.verify_review(args)
+            snapshots = EvidenceSnapshots()
+            review_digest, candidate_digest = reviewer.verify_review(args, snapshots=snapshots)
             if args.command == "finalize-reviewed":
                 final = {"schema": "tueiq-direct-runner-activation-v1", "completedAt": q.iso(time.time()), "candidateSha256": candidate_digest, "independentReviewSha256": review_digest,
                          "CONNECTED": True, "QUALIFIED": True, "READY_TO_WORK": True}
-                reviewer.recheck_review(args, review_digest, candidate_digest)
+                reviewer.recheck_review(args, review_digest, candidate_digest, snapshots=snapshots)
                 print(publish(args.activation, final))
             else:
-                final = read_json(args.activation)
+                final = snapshots.read_json(args.activation)
                 fields(final, ("schema", "completedAt", "candidateSha256", "independentReviewSha256", "CONNECTED", "QUALIFIED", "READY_TO_WORK"))
                 exact(final["schema"], "tueiq-direct-runner-activation-v1")
                 exact(final["candidateSha256"], candidate_digest); exact(final["independentReviewSha256"], review_digest)
                 for key in ("CONNECTED", "QUALIFIED", "READY_TO_WORK"): exact(final[key], True)
-                require(timestamp(read_json(args.independent_review)["reviewedAt"]) <= fresh(final["completedAt"]))
-                raw = read_bytes(args.activation)
+                require(timestamp(snapshots.read_json(args.independent_review)["reviewedAt"]) <= fresh(final["completedAt"]))
+                raw = snapshots.read_bytes(args.activation)
                 require(raw == canonical(final))
                 digest = sha(raw)
-                reviewer.recheck_review(args, review_digest, candidate_digest)
-                require(read_bytes(args.activation) == raw)
+                reviewer.recheck_review(args, review_digest, candidate_digest, snapshots=snapshots)
+                require(snapshots.read_bytes(args.activation) == raw)
                 print("CONNECTED = YES\nQUALIFIED = YES\nREADY_TO_WORK = YES\n" + digest)
         else: parser.error("choose --check or an explicit phase")
         return 0

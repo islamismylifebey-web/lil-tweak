@@ -168,9 +168,10 @@ def seal_site(capture, deployment_path, output):
     return a.sha(a.read_bytes(output / "manifest.json"))
 
 
-def reopen_site(path):
+def reopen_site(path, *, snapshots=None):
+    snapshots = a.EvidenceSnapshots() if snapshots is None else snapshots
     path = Path(path)
-    manifest = a.read_json(path / "manifest.json")
+    manifest = snapshots.read_json(path / "manifest.json")
     fields(manifest, ("schema", "requestId", "startedAt", "completedAt", "deployment", "responses"))
     exact(manifest["schema"], "tueiq-site-primary-evidence-v1")
     responses = []
@@ -178,14 +179,16 @@ def reopen_site(path):
     for m in manifest["responses"]:
         fields(m, ("id", "status", "mediaType", "declaredLength", "contentSha256", "sha256", "sizeBytes"))
         require(m["id"] in RESPONSE_NAMES or re.fullmatch(r"evidence:[0-9a-f]{32}", m["id"]) is not None)
-        raw = a.read_bytes(path / (m["id"] + ".body"))
+        raw = snapshots.read_bytes(path / (m["id"] + ".body"))
         exact(a.sha(raw), m["sha256"]); exact(len(raw), m["sizeBytes"])
         responses.append({k: m[k] for k in ("id", "status", "mediaType", "declaredLength", "contentSha256")} | {"bodyBase64": base64.b64encode(raw).decode()})
     capture = {"schema": "tueiq-site-primary-capture-v1", **{k: manifest[k] for k in ("requestId", "startedAt", "completedAt")}, "responses": responses}
     expected, _, status, job, events = derive_site(capture, manifest["deployment"])
-    exact(manifest, expected); exact(a.read_json(path / "site-status-evidence.json"), status); exact(a.read_json(path / "owner-flow-job.json"), job)
+    exact(manifest, expected); exact(snapshots.read_json(path / "site-status-evidence.json"), status); exact(snapshots.read_json(path / "owner-flow-job.json"), job)
     files = [r["id"] + ".body" for r in responses] + ["manifest.json", "site-status-evidence.json", "owner-flow-job.json"]
-    return a.inventory(path, files), status, job, {"events": events, "startedAt": manifest["startedAt"]}
+    retained_inventory = snapshots.inventory(path, files)
+    snapshots.recheck()
+    return retained_inventory, status, job, {"events": events, "startedAt": manifest["startedAt"]}
 
 
 def seal_d1(raw, job_id, output):
