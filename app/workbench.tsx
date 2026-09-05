@@ -1123,7 +1123,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
               <span>Access controls</span><small>Owner only</small>
             </button>
             <div id="chat-access-detail" className="chat-control-detail" hidden={chatMenuDetail !== "access"}>
-              <p>Owner only. Identity is enforced at managed ingress and every mutation is checked again by the server.</p>
+              <p>Owner only. Private Sites access and dispatch-owned identity are enforced before every server authorization check.</p>
             </div>
             <button type="button" className="chat-control-row" disabled><span>Archive chat</span><small>No saved chat</small></button>
             <button type="button" className="chat-control-row danger-row" disabled><span>Delete chat</span><small>No saved chat</small></button>

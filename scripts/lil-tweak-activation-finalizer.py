@@ -25,10 +25,13 @@ MAX_SESSION = 1800
 ORIGINALS = ("source-root", "local-qualification", "preflight-provider-evidence", "provider-evidence", "release-evidence-root",
              "runtime-manifest", "rollback-receipt", "production-manifest", "owner-flow-receipt", "owner-flow-job",
              "site-status-evidence", "guest-evidence", "site-primary-evidence", "d1-cross-check", "core-cross-check", "guest-cross-check", "change-record")
-MANAGED = ("MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE")
+MANAGED = ("CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE")
 ADDED = MANAGED[:-1]
-RESOURCE_KINDS = ("tunnel", "access_application", "access_policy", "service_token", "secret_directory", "dns", "managed_rule")
+RESOURCE_KINDS = ("tunnel", "access_application", "service_token", "access_policy", "secret_directory", "dns")
 SESSION_SECRET_DIRECTORY = Path("/var/lib/lil-tweak-activation/secrets")
+ACCESS_APPLICATION_NAME = "Lil Tweak private core"
+ACCESS_POLICY_NAME = "Lil Tweak Worker service token only"
+CLOUDFLARE_DISPLAY_NAME_MAX_BYTES = 100
 RELEASE_FILES = ("source-manifest.json", "source.tar.gz", "verification-receipt.json", "host-go.txt", "base-images.txt", "scan-hashes.txt",
                  "core.sbom.json", "core.grype.json", "runner.sbom.json", "runner.grype.json")
 TOPOLOGY = {"route": "direct_core_to_local_podman", "intermediary": "none", "policy": "ENGINEERING_EXECUTION_ONLY"}
@@ -66,6 +69,38 @@ def fresh(value, now=None):
 
 def identifier(value):
     require(type(value) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", value) is not None)
+
+
+def site_identifier(value):
+    require(type(value) is str)
+    return release._site_identifier({"SITES_ID": value}, "SITES_ID")
+
+
+def resource_name(kind, value):
+    """Validate the exact external lookup/create name for one resource kind."""
+    require(kind in RESOURCE_KINDS and type(value) is str)
+    if kind == "access_application":
+        exact(value, ACCESS_APPLICATION_NAME)
+    elif kind == "access_policy":
+        exact(value, ACCESS_POLICY_NAME)
+    elif kind == "dns":
+        require(len(value) <= 253 and re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
+            value,
+        ) is not None)
+    elif kind == "secret_directory":
+        exact(value, SESSION_SECRET_DIRECTORY.as_posix())
+    else:
+        try:
+            encoded = value.encode("ascii")
+        except UnicodeEncodeError:
+            require(False)
+        require(
+            1 <= len(encoded) <= CLOUDFLARE_DISPLAY_NAME_MAX_BYTES
+            and value == value.strip()
+            and all(0x20 <= byte <= 0x7E for byte in encoded)
+        )
+    return value
 
 
 def uuid4(value):
@@ -230,12 +265,17 @@ def inventory(path, expected=None, *, recursive=False, snapshots=None):
 
 
 def validate_deployment(value):
-    fields(value, ("schema", "sourceHead", "sourceTree", "versionId", "versionNumber", "deploymentId", "archiveSha256", "environmentRevision", "accessRevision", "accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount", "deployedAt"))
+    fields(value, ("schema", "sourceHead", "sourceTree", "versionId", "versionNumber", "deploymentId", "archiveSha256", "environmentRevision", "accessRevision", "accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount", "productionOrigin", "customDomainCount", "anonymousDenied", "forgedIdentityDenied", "alternateHostRejected", "ownerSameOriginSucceeded", "deployedAt"))
     exact(value["schema"], "tueiq-site-deployment-record-v1")
     for name in ("sourceHead", "sourceTree"): require(type(value[name]) is str and re.fullmatch(r"[0-9a-f]{40}", value[name]) is not None)
-    for name in ("versionId", "deploymentId", "environmentRevision", "accessRevision"): identifier(value[name])
+    for name in ("versionId", "deploymentId"): site_identifier(value[name])
+    for name in ("environmentRevision", "accessRevision"): identifier(value[name])
     q.integer(value["versionNumber"], 1); q.digest(value["archiveSha256"]); timestamp(value["deployedAt"])
     exact([value[k] for k in ("accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount")], ["custom", 1, 0, 0])
+    exact(release._https_origin(value["productionOrigin"]), value["productionOrigin"])
+    exact(value["customDomainCount"], 0)
+    for name in ("anonymousDenied", "forgedIdentityDenied", "alternateHostRejected", "ownerSameOriginSucceeded"):
+        exact(value[name], True)
     return value
 
 
@@ -339,7 +379,7 @@ def validate_resource_observations(value):
     fields(before, ("observedAt", "priorSite", "bindingOperation", "managedBindings", "resources"))
     timestamp(before["observedAt"]); exact(before["bindingOperation"], "sites-environment-list")
     fields(before["priorSite"], ("versionId", "versionNumber", "accessRevision", "accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount"))
-    identifier(before["priorSite"]["versionId"]); identifier(before["priorSite"]["accessRevision"]); q.integer(before["priorSite"]["versionNumber"], 1)
+    site_identifier(before["priorSite"]["versionId"]); identifier(before["priorSite"]["accessRevision"]); q.integer(before["priorSite"]["versionNumber"], 1)
     exact([before["priorSite"][k] for k in ("accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount")], ["custom", 1, 0, 0])
     require(type(before["managedBindings"]) is list and len(before["managedBindings"]) == len(MANAGED))
     for name, observed in zip(MANAGED, before["managedBindings"]):
@@ -349,10 +389,10 @@ def validate_resource_observations(value):
     previous = timestamp(before["observedAt"])
     for kind, absent, created in zip(RESOURCE_KINDS, before["resources"], value["creations"]):
         fields(absent, ("kind", "name", "operation", "matchingIds"))
-        exact(absent["kind"], kind); identifier(absent["name"]); exact(absent["matchingIds"], [])
+        exact(absent["kind"], kind); resource_name(kind, absent["name"]); exact(absent["matchingIds"], [])
         exact(absent["operation"], "filesystem-lstat" if kind == "secret_directory" else "cloudflare-resource-list")
         fields(created, ("kind", "name", "operation", "createdId", "observedAt", "preflightSha256", "filesystem"))
-        exact(created["kind"], kind); exact(created["name"], absent["name"]); identifier(created["createdId"])
+        exact(created["kind"], kind); exact(created["name"], absent["name"]); resource_name(kind, created["name"]); identifier(created["createdId"])
         exact(created["operation"], "filesystem-mkdir" if kind == "secret_directory" else "cloudflare-resource-create")
         exact(created["preflightSha256"], sha(canonical(before)))
         observed = timestamp(created["observedAt"]); require(previous <= observed); previous = observed
@@ -374,14 +414,14 @@ def validate_change(value, *, head, tree, preflight, deployment, rollback_time, 
     exact(value["managedBindings"], dict.fromkeys(MANAGED, "absent"))
     prior = value["priorSite"]
     fields(prior, ("versionId", "versionNumber", "accessRevision", "accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount"))
-    identifier(prior["versionId"]); identifier(prior["accessRevision"]); q.integer(prior["versionNumber"], 1)
+    site_identifier(prior["versionId"]); identifier(prior["accessRevision"]); q.integer(prior["versionNumber"], 1)
     require(prior["versionId"] != deployment["versionId"] and prior["versionNumber"] < deployment["versionNumber"])
     exact([prior[k] for k in ("accessMode", "allowedOwnerCount", "allowedGroupCount", "allowedVisitorCount")], ["custom", 1, 0, 0])
     resources = value["resources"]
     require(type(resources) is list and len(resources) == len(RESOURCE_KINDS))
     for expected, resource in zip(RESOURCE_KINDS, resources):
         fields(resource, ("kind", "name", "preflight", "createdId")); exact(resource["kind"], expected)
-        exact(resource["preflight"], "absent"); identifier(resource["name"]); identifier(resource["createdId"])
+        exact(resource["preflight"], "absent"); resource_name(expected, resource["name"]); identifier(resource["createdId"])
     require(len({r["name"] for r in resources}) == len(resources) and len({r["createdId"] for r in resources}) == len(resources))
     validate_resource_observations(observations)
     exact(value["resourceObservationsSha256"], sha(canonical(observations)))
@@ -489,16 +529,16 @@ def validate_production(value, runtime, deployment, job, owner_receipt, digests,
     fields(value["cloudflare"], ("d1", "r2", "ingress"))
     cf = value["cloudflare"]
     fields(cf["d1"], ("database_id", "schema_revision", "binding_revision")); fields(cf["r2"], ("account_id", "bucket_name", "binding_revision"))
-    fields(cf["ingress"], ("core_origin", "tunnel_id", "access_application_id", "access_policy_id", "access_policy_revision", "managed_rule_id", "managed_rule_revision"))
+    fields(cf["ingress"], ("core_origin", "tunnel_id", "access_application_id", "access_policy_id", "access_policy_revision"))
     for group in cf.values():
         for key, ident in group.items():
             if key == "core_origin": release._https_origin(ident)
             else: identifier(ident)
     sites = value["sites"]
-    fields(sites, ("source_commit", "version_id", "version_number", "deployment_id", "archive_sha256", "environment_revision", "access_revision", "access_mode", "allowed_owner_count", "allowed_group_count", "allowed_visitor_count", "production_url", "prior_version_number"))
-    mapping = {"source_commit": "sourceHead", "version_id": "versionId", "version_number": "versionNumber", "deployment_id": "deploymentId", "archive_sha256": "archiveSha256", "environment_revision": "environmentRevision", "access_revision": "accessRevision", "access_mode": "accessMode", "allowed_owner_count": "allowedOwnerCount", "allowed_group_count": "allowedGroupCount", "allowed_visitor_count": "allowedVisitorCount"}
+    fields(sites, ("source_commit", "version_id", "version_number", "deployment_id", "archive_sha256", "environment_revision", "access_revision", "access_mode", "allowed_owner_count", "allowed_group_count", "allowed_visitor_count", "production_url", "custom_domain_count", "anonymous_denied", "forged_identity_denied", "alternate_host_rejected", "owner_same_origin_succeeded", "prior_version_number"))
+    mapping = {"source_commit": "sourceHead", "version_id": "versionId", "version_number": "versionNumber", "deployment_id": "deploymentId", "archive_sha256": "archiveSha256", "environment_revision": "environmentRevision", "access_revision": "accessRevision", "access_mode": "accessMode", "allowed_owner_count": "allowedOwnerCount", "allowed_group_count": "allowedGroupCount", "allowed_visitor_count": "allowedVisitorCount", "production_url": "productionOrigin", "custom_domain_count": "customDomainCount", "anonymous_denied": "anonymousDenied", "forged_identity_denied": "forgedIdentityDenied", "alternate_host_rejected": "alternateHostRejected", "owner_same_origin_succeeded": "ownerSameOriginSucceeded"}
     for key, name in mapping.items(): exact(sites[key], deployment[name])
-    release._https_origin(sites["production_url"]); q.integer(sites["prior_version_number"], 1)
+    exact(release._https_origin(sites["production_url"]), sites["production_url"]); q.integer(sites["prior_version_number"], 1)
     exact(value["owner_flow_job_sha256"], digests["owner-flow-job"])
     expected = release.owner_flow_expected(runtime, digests["runtime-manifest"], sites, digests["owner-flow-job"], deployment["deployedAt"])
     owner_bytes = snapshots.read_bytes(owner_receipt)
@@ -591,7 +631,7 @@ def replay(args, *, completed_at=None, now=None, snapshots=None):
     exact(production_original["sites"]["prior_version_number"], change["priorSite"]["versionNumber"])
     exact(guest_cross["secretDirectory"], observations["creations"][RESOURCE_KINDS.index("secret_directory")]["filesystem"])
     resource_ids = {r["kind"]: r["createdId"] for r in change["resources"]}
-    for kind, key in (("tunnel", "tunnel_id"), ("access_application", "access_application_id"), ("access_policy", "access_policy_id"), ("managed_rule", "managed_rule_id")):
+    for kind, key in (("tunnel", "tunnel_id"), ("access_application", "access_application_id"), ("access_policy", "access_policy_id")):
         exact(resource_ids[kind], production["ingress"][key])
     finish = q.iso(now) if completed_at is None else completed_at
     host_issued = dict(line.split("=", 1) for line in snapshots.read_bytes(Path(args.release_evidence_root) / "host-go.txt").decode("ascii").splitlines())["issued_at"]
@@ -652,7 +692,10 @@ def add_witnesses(parser):
 
 
 def offline_check():
-    require(BASE == "e76996970e816c4cce7b8334e0495e1e0de48e7d" and len(ORIGINALS) == 17 and len(MANAGED) == 7 and len(ADDED) == 6)
+    require(BASE == "e76996970e816c4cce7b8334e0495e1e0de48e7d" and len(ORIGINALS) == 17 and len(MANAGED) == 6 and len(ADDED) == 5)
+    application = q.parse_json((ROOT / "deploy/cloudflare/access-application.json").read_bytes())
+    policy = q.parse_json((ROOT / "deploy/cloudflare/access-policy.json").read_bytes())
+    exact(application["name"], ACCESS_APPLICATION_NAME); exact(policy["name"], ACCESS_POLICY_NAME)
     exact(TOPOLOGY, {"route": "direct_core_to_local_podman", "intermediary": "none", "policy": "ENGINEERING_EXECUTION_ONLY"})
     for name in ("lil-tweak-activation-finalizer", "lil-tweak-independent-review", "lil-tweak-live-evidence", "lil-tweak-qualification", "lil-tweak-release", "lil-tweak-rollback"):
         path = ROOT / "scripts" / (name + ".py")

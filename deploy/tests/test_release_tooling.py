@@ -198,6 +198,16 @@ class ReleaseFixture:
 
 
 class ReleaseToolingTests(unittest.TestCase):
+    def test_native_sites_identifiers_remain_opaque_and_bounded(self) -> None:
+        release = load_release_module()
+        native = "appgprj_6a7c11351b548191a9f9e936ae8ff837~appgver_51bb788eee4481919fa8cb280a126f89"
+        self.assertEqual(release._site_identifier({"SITES_VERSION_ID": native}, "SITES_VERSION_ID"), native)
+        for invalid in (" " + native, native + "\n", "https://site.invalid/id", "x" * 257):
+            with self.subTest(invalid=invalid), self.assertRaises(release.ReleaseError):
+                release._site_identifier({"SITES_VERSION_ID": invalid}, "SITES_VERSION_ID")
+        with self.assertRaises(release.ReleaseError):
+            release._identifier({"RESOURCE_ID": native}, "RESOURCE_ID")
+
     def test_release_target_gate_has_a_host_safe_offline_check(self) -> None:
         target = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"
         result = subprocess.run(
@@ -941,13 +951,11 @@ class ReleaseToolingTests(unittest.TestCase):
                 "ACCESS_APPLICATION_ID": "access-app",
                 "ACCESS_POLICY_ID": "access-policy",
                 "ACCESS_POLICY_REVISION": "access-r1",
-                "MANAGED_INGRESS_RULE_ID": "managed-rule",
-                "MANAGED_INGRESS_REVISION": "managed-r1",
                 "CORE_ORIGIN": "https://core.example.invalid",
                 "SITES_SOURCE_COMMIT": runtime_payload["source"]["commit"],
-                "SITES_VERSION_ID": "site-version",
+                "SITES_VERSION_ID": "site-project~site-version",
                 "SITES_VERSION_NUMBER": "2",
-                "SITES_DEPLOYMENT_ID": "site-deployment",
+                "SITES_DEPLOYMENT_ID": "site-project~site-deployment",
                 "SITES_ARCHIVE_HASH": "c" * 64,
                 "SITES_ENVIRONMENT_REVISION": "env-r1",
                 "SITES_ACCESS_REVISION": "access-r2",
@@ -955,6 +963,11 @@ class ReleaseToolingTests(unittest.TestCase):
                 "SITES_ALLOWED_OWNER_COUNT": "1",
                 "SITES_ALLOWED_GROUP_COUNT": "0",
                 "SITES_ALLOWED_VISITOR_COUNT": "0",
+                "SITES_CUSTOM_DOMAIN_COUNT": "0",
+                "SITES_ANONYMOUS_DENIED": "true",
+                "SITES_FORGED_IDENTITY_DENIED": "true",
+                "SITES_ALTERNATE_HOST_REJECTED": "true",
+                "SITES_OWNER_SAME_ORIGIN_SUCCEEDED": "true",
                 "PRODUCTION_URL": "https://tweak.example.invalid",
                 "PUBLIC_ORIGIN": "https://tweak.example.invalid",
                 "PRIOR_SITES_VERSION_NUMBER": "1",
@@ -974,6 +987,13 @@ class ReleaseToolingTests(unittest.TestCase):
             self.assertEqual(manifest["runtime"]["manifest_sha256"], runtime_digest)
             self.assertEqual(manifest["sites"]["access_mode"], "custom")
             self.assertEqual(manifest["sites"]["allowed_owner_count"], 1)
+            self.assertEqual(manifest["sites"]["production_url"], values["PUBLIC_ORIGIN"])
+            self.assertEqual(manifest["sites"]["custom_domain_count"], 0)
+            self.assertEqual(
+                {name: manifest["sites"][name] for name in ("anonymous_denied", "forged_identity_denied", "alternate_host_rejected", "owner_same_origin_succeeded")},
+                dict.fromkeys(("anonymous_denied", "forged_identity_denied", "alternate_host_rejected", "owner_same_origin_succeeded"), True),
+            )
+            self.assertEqual(set(manifest["cloudflare"]["ingress"]), {"core_origin", "tunnel_id", "access_application_id", "access_policy_id", "access_policy_revision"})
 
             for label, options in (
                 ("stale", {"stale": True}),
@@ -1116,6 +1136,20 @@ class ReleaseToolingTests(unittest.TestCase):
                         )
 
             values["SITES_ALLOWED_VISITOR_COUNT"] = "0"
+            for field, replacement in (
+                ("SITES_CUSTOM_DOMAIN_COUNT", "1"),
+                ("SITES_ANONYMOUS_DENIED", "false"),
+                ("SITES_FORGED_IDENTITY_DENIED", "false"),
+                ("SITES_ALTERNATE_HOST_REJECTED", "false"),
+                ("SITES_OWNER_SAME_ORIGIN_SUCCEEDED", "false"),
+            ):
+                original = values[field]
+                values[field] = replacement
+                state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+                with self.subTest(live_site_boundary=field), self.assertRaisesRegex(self.release.ReleaseError, "sites_access_rejected"):
+                    self.release.create_production_manifest(runtime, state, owner, root / f"bad-{field.lower()}.json")
+                values[field] = original
+
             values["RUNTIME_MANIFEST_SHA256"] = "f" * 64
             state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
             with self.assertRaisesRegex(self.release.ReleaseError, "runtime_manifest_mismatch"):

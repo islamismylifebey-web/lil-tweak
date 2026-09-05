@@ -1510,11 +1510,25 @@ def _identifier(values: dict[str, str], name: str) -> str:
     return value
 
 
+def _site_identifier(values: dict[str, str], name: str) -> str:
+    """Preserve native Sites composite IDs without widening provider IDs."""
+    value = _required_state(values, name)
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.~-]{0,255}", value) is None:
+        raise ReleaseError("release_state_invalid")
+    return value
+
+
 def _decimal(values: dict[str, str], name: str) -> int:
     value = _required_state(values, name)
     if DECIMAL.fullmatch(value) is None:
         raise ReleaseError("sites_access_rejected")
     return int(value)
+
+
+def _required_true(values: dict[str, str], name: str) -> bool:
+    if _required_state(values, name) != "true":
+        raise ReleaseError("sites_access_rejected")
+    return True
 
 
 def _runtime_size(value: Any) -> bool:
@@ -1662,8 +1676,8 @@ def create_owner_flow_receipt(runtime_manifest, release_state, owner_flow_job, o
         or _required_state(state, "SOURCE_TREE") != runtime["source"]["tree"]
         or _required_state(state, "SITES_SOURCE_COMMIT") != runtime["source"]["commit"]):
         raise ReleaseError("owner_flow_receipt_rejected")
-    sites = {"version_id": _identifier(state, "SITES_VERSION_ID"), "version_number": _decimal(state, "SITES_VERSION_NUMBER"),
-        "deployment_id": _identifier(state, "SITES_DEPLOYMENT_ID"), "archive_sha256": _required_state(state, "SITES_ARCHIVE_HASH"), "production_url": _https_origin(_required_state(state, "PRODUCTION_URL"))}
+    sites = {"version_id": _site_identifier(state, "SITES_VERSION_ID"), "version_number": _decimal(state, "SITES_VERSION_NUMBER"),
+        "deployment_id": _site_identifier(state, "SITES_DEPLOYMENT_ID"), "archive_sha256": _required_state(state, "SITES_ARCHIVE_HASH"), "production_url": _https_origin(_required_state(state, "PRODUCTION_URL"))}
     if not SHA256.fullmatch(sites["archive_sha256"]): raise ReleaseError("owner_flow_receipt_rejected")
     now = datetime.now(timezone.utc).replace(microsecond=0)
     if _activation_helper().timestamp(job["checkedAt"]) > now.timestamp(): raise ReleaseError("owner_flow_receipt_rejected")
@@ -1697,23 +1711,31 @@ def create_production_manifest(
     sites_source = _required_state(state, "SITES_SOURCE_COMMIT")
     if sites_source != source_commit:
         raise ReleaseError("sites_source_mismatch")
-    production_url = _https_origin(_required_state(state, "PRODUCTION_URL"))
-    if _https_origin(_required_state(state, "PUBLIC_ORIGIN")) != production_url:
+    production_url_value = _required_state(state, "PRODUCTION_URL")
+    public_origin_value = _required_state(state, "PUBLIC_ORIGIN")
+    production_url = _https_origin(production_url_value)
+    public_origin = _https_origin(public_origin_value)
+    if production_url_value != production_url or public_origin_value != public_origin or public_origin != production_url:
         raise ReleaseError("production_origin_mismatch")
     core_origin = _https_origin(_required_state(state, "CORE_ORIGIN"))
     access_mode = _required_state(state, "SITES_ACCESS_MODE")
     owner_count = _decimal(state, "SITES_ALLOWED_OWNER_COUNT")
     group_count = _decimal(state, "SITES_ALLOWED_GROUP_COUNT")
     visitor_count = _decimal(state, "SITES_ALLOWED_VISITOR_COUNT")
+    custom_domain_count = _decimal(state, "SITES_CUSTOM_DOMAIN_COUNT")
+    anonymous_denied = _required_true(state, "SITES_ANONYMOUS_DENIED")
+    forged_identity_denied = _required_true(state, "SITES_FORGED_IDENTITY_DENIED")
+    alternate_host_rejected = _required_true(state, "SITES_ALTERNATE_HOST_REJECTED")
+    owner_same_origin_succeeded = _required_true(state, "SITES_OWNER_SAME_ORIGIN_SUCCEEDED")
     version_number = _decimal(state, "SITES_VERSION_NUMBER")
     prior_version = _decimal(state, "PRIOR_SITES_VERSION_NUMBER")
-    if (access_mode, owner_count, group_count, visitor_count) != ("custom", 1, 0, 0):
+    if (access_mode, owner_count, group_count, visitor_count, custom_domain_count) != ("custom", 1, 0, 0, 0):
         raise ReleaseError("sites_access_rejected")
     archive_hash = _required_state(state, "SITES_ARCHIVE_HASH")
     if not SHA256.fullmatch(archive_hash):
         raise ReleaseError("release_state_invalid")
-    sites_version_id = _identifier(state, "SITES_VERSION_ID")
-    sites_deployment_id = _identifier(state, "SITES_DEPLOYMENT_ID")
+    sites_version_id = _site_identifier(state, "SITES_VERSION_ID")
+    sites_deployment_id = _site_identifier(state, "SITES_DEPLOYMENT_ID")
     job, owner_flow_job_digest, deployed_at = _owner_job_binding(state)
     owner_flow = _decision_receipt(
         Path(owner_flow_receipt),
@@ -1749,8 +1771,6 @@ def create_production_manifest(
                 "access_application_id": _identifier(state, "ACCESS_APPLICATION_ID"),
                 "access_policy_id": _identifier(state, "ACCESS_POLICY_ID"),
                 "access_policy_revision": _identifier(state, "ACCESS_POLICY_REVISION"),
-                "managed_rule_id": _identifier(state, "MANAGED_INGRESS_RULE_ID"),
-                "managed_rule_revision": _identifier(state, "MANAGED_INGRESS_REVISION"),
             },
         },
         "sites": {
@@ -1766,6 +1786,11 @@ def create_production_manifest(
             "allowed_group_count": group_count,
             "allowed_visitor_count": visitor_count,
             "production_url": production_url,
+            "custom_domain_count": custom_domain_count,
+            "anonymous_denied": anonymous_denied,
+            "forged_identity_denied": forged_identity_denied,
+            "alternate_host_rejected": alternate_host_rejected,
+            "owner_same_origin_succeeded": owner_same_origin_succeeded,
             "prior_version_number": prior_version,
         },
         "owner_flow_receipt": owner_flow,

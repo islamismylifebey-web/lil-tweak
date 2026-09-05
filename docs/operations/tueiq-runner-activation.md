@@ -115,23 +115,47 @@ rollback directory before mutation. Bind its source/runtime/image ledger; do not
 mark incomplete or dirty rollback as clean. It must eventually end with
 `transaction_state=completed` and `rollback_outcome=clean`.
 
-All seven activation-managed binding names must be absent, including the unused
+All six activation-managed binding names must be absent, including the unused
 alternative `CUSTOMER_HTTP_LIL_TWEAK_CORE`. Any collision stops activation.
 Existing `LIL_TWEAK_ENVIRONMENT`, `PUBLIC_ORIGIN`, and owner-only direct-chat
 `OPENAI_API_KEY` remain untouched; never read or rewrite their secret values.
 Record prior Site version ID/number and access revision/mode/counts, never prior
 binding secrets. Preserve D1/R2 resource IDs and schema/binding revisions.
 
+<!-- exact-site-managed-absence -->
+```text
+CORE_ORIGIN
+CORE_ACCESS_CLIENT_ID
+CORE_ACCESS_CLIENT_SECRET
+CORE_SIGNING_KEY_ID
+CORE_SIGNING_SECRET
+CUSTOMER_HTTP_LIL_TWEAK_CORE
+```
+
 Create one `tueiq-session-change-record-v1` with exactly
 `schema,sessionNonce,startedAt,mutationStartedAt,completedAt,preflightProviderSha256,sourceHead,sourceTree,priorSite,managedBindings,resources,additions,rollbackOrder,resourceObservationsSha256`.
 `priorSite` has `versionId,versionNumber,accessRevision,accessMode,allowedOwnerCount,allowedGroupCount,allowedVisitorCount`.
-`managedBindings` contains the seven names with the literal value `absent`.
+`managedBindings` contains the six names with the literal value `absent`.
 `resources` is an ordered list of `{kind,name,preflight,createdId}`: kinds are
-`tunnel,access_application,access_policy,service_token,secret_directory,dns,managed_rule`.
-This is creation order: protected staging precedes combined installation, then
-DNS and the managed ingress rule precede the six Site keys and deployment.
+`tunnel,access_application,service_token,access_policy,secret_directory,dns`.
+This is the required creation order: the Access service token is created before
+the policy that consumes its ID; protected staging precedes combined installation;
+and DNS precedes the five Site keys and deployment.
 All names are checked absent before mutation; every `createdId` is observed from
 this session, never unknown/pre-existing. Record only non-secret opaque IDs.
+
+Resource names are validated by kind. The Access application is exactly
+`Lil Tweak private core`, the Access policy is exactly
+`Lil Tweak Worker service token only`, DNS is a strict lowercase FQDN with no
+scheme, path, port, or wildcard, and the staging directory is exactly
+`/var/lib/lil-tweak-activation/secrets`. Tunnel and service-token display names
+are printable ASCII, at most 100 bytes, have no control characters, and have no
+leading or trailing whitespace. Returned `createdId` values use the stricter
+opaque identifier grammar `[A-Za-z0-9][A-Za-z0-9_-]{0,127}`. Preflight and
+creation names must be byte-for-byte equal; aliases are forbidden. Native Sites version/deployment IDs
+are separate opaque values, preserved exactly with the bounded grammar
+`[A-Za-z0-9][A-Za-z0-9_.~-]{0,255}`; never replace a compound ID with its suffix.
+Environment/access revisions remain on the existing strict identifier validator.
 
 The change record is a rollback claim, not proof of resource creation. Retain
 separate sanitized operation projections in one
@@ -146,8 +170,8 @@ unrelated inventory entries. Missing, ambiguous or present resources stop work.
 | Observation | Exact fields and required values |
 | --- | --- |
 | `preflight` | `observedAt,priorSite,bindingOperation,managedBindings,resources`; binding operation `sites-environment-list`; prior Site fields as above |
-| Preflight binding entry | `name,present`; exactly the seven ordered names above, every `present=false` |
-| Preflight resource entry | `kind,name,operation,matchingIds`; seven ordered kinds above; empty matching IDs; `cloudflare-resource-list`, or `filesystem-lstat` for staging |
+| Preflight binding entry | `name,present`; exactly the six ordered names above, every `present=false` |
+| Preflight resource entry | `kind,name,operation,matchingIds`; six ordered kinds above; empty matching IDs; `cloudflare-resource-list`, or `filesystem-lstat` for staging |
 | Creation entry | `kind,name,operation,createdId,observedAt,preflightSha256,filesystem`; same ordered kinds/names; `cloudflare-resource-create`, or `filesystem-mkdir` for staging |
 | Directory identity | `createdId,device,inode,uid,gid,mode`; `createdId=directory-DEVICE-INODE`, numeric device/inode, root UID/GID and `mode=0700` |
 
@@ -159,7 +183,7 @@ Project its creation-time device/inode without reading secret contents; the
 independent guest collector later reopens this fixed directory and checks that
 identity independently. Existing/symlinked/insecure staging is a hard stop.
 
-After all seven creations, stream only this sanitized object to:
+After all six creations, stream only this sanitized object to:
 
 ```bash
 python3 scripts/lil-tweak-live-evidence.py seal-resource-observations \
@@ -173,13 +197,13 @@ the full object as `resource_observations`; activation rejects its absence.
 `resourceObservationsSha256` in the change record and candidate production
 projection binds that object's canonical bytes. Candidate, review and final
 replay reopen production, revalidate every absence/creation observation and
-cross-check all seven IDs/names/session/source/times, prior Site state and the
+cross-check all six IDs/names/session/source/times, prior Site state and the
 independent guest directory identity. Observation provenance depends on direct
 authorized capture: do not replace operation projections with authored claims.
 
 ## New credentials and protected staging
 
-Create the new Tunnel, Access application/policy/service token, and matching
+Create the new Tunnel, Access application, service token, policy, and matching
 HMAC pair only after the inventory gate. Create protected secret directories
 outside the repository, and stage matching Core/cloudflared inputs using the
 approved secret-entry channel and existing strict validators. Do not print a
@@ -205,11 +229,10 @@ without printing, exporting, or weakening their protection.
 
 Create the session DNS route and private Site binding/deployment. Select
 `CORE_ORIGIN` and leave `CUSTOMER_HTTP_LIL_TWEAK_CORE` absent. This release adds
-exactly the six values below; it does not add or change any other Site key.
+exactly the five values below; it does not add or change any other Site key.
 
 <!-- exact-site-additions -->
 ```text
-MANAGED_INGRESS_SECRET
 CORE_ORIGIN
 CORE_ACCESS_CLIENT_ID
 CORE_ACCESS_CLIENT_SECRET
@@ -220,9 +243,14 @@ CORE_SIGNING_SECRET
 Capture actual Site source head/tree, version ID/number, deployment ID, archive
 SHA-256, environment/access revisions and deployed time into
 `tueiq-site-deployment-record-v1`: exact fields are
-`schema,sourceHead,sourceTree,versionId,versionNumber,deploymentId,archiveSha256,environmentRevision,accessRevision,accessMode,allowedOwnerCount,allowedGroupCount,allowedVisitorCount,deployedAt`.
-Access is exactly `custom`, one owner, zero groups, zero visitors. Cross-check
-these platform observations against the deployed page before collection.
+`schema,sourceHead,sourceTree,versionId,versionNumber,deploymentId,archiveSha256,environmentRevision,accessRevision,accessMode,allowedOwnerCount,allowedGroupCount,allowedVisitorCount,productionOrigin,customDomainCount,anonymousDenied,forgedIdentityDenied,alternateHostRejected,ownerSameOriginSucceeded,deployedAt`.
+Access is exactly `custom`, one owner, zero groups, zero visitors, and zero custom
+domains. `productionOrigin` must byte-equal the unchanged canonical
+`PUBLIC_ORIGIN`. From the deployed Site, prove an anonymous request is denied, a
+request with forged identity is denied, an alternate hostname is rejected, and
+an authenticated owner same-origin flow succeeds. Store only the four booleans;
+never store a cookie, identity/header value, secret, or raw response. Any failed
+probe stops activation before collection.
 
 ## Second provider witness
 
@@ -331,7 +359,7 @@ Run the unchanged Task 5 `run` command against the fixed installed environment,
 exact source root and `LIVE_PROVIDER`, with a nonexistent child evidence directory.
 Keep `tueiq-direct-runner-local-qualification-v1` unchanged; all negative and
 cleanup checks must remain true. Finish the change record: additions are
-`resource:0` through `resource:6`, the six `binding:NAME` entries in the displayed
+`resource:0` through `resource:5`, the five `binding:NAME` entries in the displayed
 order, then `site:VERSION_ID`; `rollbackOrder` is their exact reverse. Nothing
 pre-existing may appear as session-created. All times fit one 30-minute session;
 local evidence is at most 15 minutes old and independent review at most five.
@@ -393,7 +421,7 @@ shape in the candidate, derived records and independent cross-checks.
 | Production projection | `runtimeSha256,ownerFlowSha256,ownerFlowJobSha256,resourceObservationsSha256,d1,r2,ingress` |
 | D1 resource | `database_id,schema_revision,binding_revision` |
 | R2 resource | `account_id,bucket_name,binding_revision` |
-| Ingress projection | `tunnel_id,access_application_id,access_policy_id,access_policy_revision,managed_rule_id,managed_rule_revision` |
+| Ingress projection | `tunnel_id,access_application_id,access_policy_id,access_policy_revision` |
 | Provider projection | `preflightSha256,liveSha256` |
 | Local qualification projection | `sha256,startedAt,completedAt,negativeChecks,cleanup`; nested sets are the unchanged Task 5 sets |
 | Review witness digest map | `preflight,live` |
@@ -483,7 +511,7 @@ state “activation not yet independently verified”; do not infer live readine
 from local fixtures or a receipt's existence.
 
 For Site rollback, first redeploy the recorded prior Site version, then undo only
-the six previously absent Site keys and session-created resources/files in the
+the five previously absent Site keys and session-created resources/files in the
 recorded reverse order. Never read, copy or restore a prior Site binding secret.
 Do not delete unknown or pre-existing resources. Protected host rollback still
 restores exact sensitive pre-existing bytes through its transaction helper.

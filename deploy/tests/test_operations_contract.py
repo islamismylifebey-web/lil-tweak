@@ -28,14 +28,17 @@ def text(relative: str) -> str:
 
 
 class QualificationInventoryTests(unittest.TestCase):
-    def test_activation_runbook_has_exact_order_and_six_key_contract(self):
+    def test_activation_runbook_has_exact_order_and_five_key_contract(self):
         document = text("docs/operations/tueiq-runner-activation.md")
         order = ("Provider preflight and witness", "Approved guest entry", "Exact source and images", "Pre-mutation inventory", "New credentials and protected staging", "Combined installation", "DNS and private Site deployment", "Second provider witness", "Primary Site collection", "Independent cross-checks", "Post-deployment owner flow", "Local qualification", "Candidate replay", "Independent candidate review", "Reviewed finalization", "Independent final verification", "Redaction and rollback decision")
         positions = [document.index("## " + item) for item in order]
         self.assertEqual(positions, sorted(positions))
         match = re.search(r"<!-- exact-site-additions -->\n```text\n(.*?)\n```", document, re.S)
         self.assertIsNotNone(match)
-        self.assertEqual(match.group(1).splitlines(), ["MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET"])
+        self.assertEqual(match.group(1).splitlines(), ["CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET"])
+        absent = re.search(r"<!-- exact-site-managed-absence -->\n```text\n(.*?)\n```", document, re.S)
+        self.assertIsNotNone(absent)
+        self.assertEqual(absent.group(1).splitlines(), ["CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE"])
         self.assertIn("CUSTOMER_HTTP_LIL_TWEAK_CORE", document)
         self.assertIn("OPENAI_API_KEY", document)
         self.assertIn("scripts/install-lil-tweak-release.sh --install", document)
@@ -114,7 +117,7 @@ class TunnelContractTests(unittest.TestCase):
             ):
                 self.assertIn(phrase, document)
 
-    def test_tunnel_access_and_managed_ingress_artifacts_are_concrete(self) -> None:
+    def test_tunnel_access_and_private_site_artifacts_are_concrete(self) -> None:
         required = (
             "deploy/cloudflare/access-application.json",
             "deploy/cloudflare/access-policy.json",
@@ -134,6 +137,9 @@ class TunnelContractTests(unittest.TestCase):
         self.assertNotRegex(config, r"(?i)galor[-_.]?(network|volume|database)")
 
         policy = json.loads(text("deploy/cloudflare/access-policy.json"))
+        application = json.loads(text("deploy/cloudflare/access-application.json"))
+        self.assertEqual(application["name"], "Lil Tweak private core")
+        self.assertEqual(policy["name"], "Lil Tweak Worker service token only")
         self.assertEqual(policy["decision"], "non_identity")
         self.assertEqual(policy["include"], [{"service_token": {"token_id": "__SERVICE_TOKEN_ID__"}}])
         self.assertNotIn("everyone", json.dumps(policy).lower())
@@ -144,7 +150,6 @@ class TunnelContractTests(unittest.TestCase):
         for name in (
             "LIL_TWEAK_ENVIRONMENT",
             "PUBLIC_ORIGIN",
-            "MANAGED_INGRESS_SECRET",
             "CORE_ORIGIN",
             "CORE_ACCESS_CLIENT_ID",
             "CORE_ACCESS_CLIENT_SECRET",
@@ -152,21 +157,32 @@ class TunnelContractTests(unittest.TestCase):
             "CORE_SIGNING_SECRET",
         ):
             self.assertRegex(env_contract, rf"(?m)^{name}=")
+        self.assertNotIn("MANAGED_INGRESS_SECRET", env_contract)
+        self.assertNotIn("X-Lil-Tweak-Managed-Ingress", env_contract)
 
         runbook = text("docs/operations/cloudflare-private-ingress.md")
         for phrase in (
             "CF-Access-Client-Id",
             "CF-Access-Client-Secret",
-            "X-Lil-Tweak-Managed-Ingress",
             "PUBLIC_ORIGIN",
             "workers.dev",
             "never open port 8017",
             "owned only by Lil Tweak",
             "missing LIL_TWEAK_ENVIRONMENT fails closed",
+            "private Sites custom access",
+            "dispatch-owned SIWC",
+            "one owner, zero groups, and zero visitors",
+            "zero custom domains",
+            "anonymous request",
+            "forged identity",
+            "alternate hostname",
+            "owner same-origin flow",
             "at least 32 UTF-8 bytes",
             "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
         ):
             self.assertIn(phrase.lower(), runbook.lower())
+        for retired in ("MANAGED_INGRESS_SECRET", "X-Lil-Tweak-Managed-Ingress", "managed_rule"):
+            self.assertNotIn(retired, runbook)
 
     def test_cloudflared_unit_and_installer_are_separate_and_hardened(self) -> None:
         unit = text("deploy/cloudflared/lil-tweak-cloudflared.service")

@@ -8,7 +8,7 @@ import {
   validateCoreSigningConfig,
   validateCoreTransportConfig,
 } from "../lib/core-transport.ts";
-import { enforceManagedIngress } from "../lib/ingress-boundary.ts";
+import { enforceSiteIngress } from "../lib/ingress-boundary.ts";
 
 test("production core transport requires a complete Access service token", () => {
   assert.throws(
@@ -63,49 +63,39 @@ test("maps only safe core failure semantics to the owner", () => {
   assert.deepEqual(publicCoreFailure(418), { status: 503, message: "The private engineering core is unavailable." });
 });
 
-test("managed production ingress rejects direct hosts and honors optional assertions", async () => {
+test("production Site ingress accepts only the exact configured public origin", async () => {
   const config = {
     environment: "production",
     publicOrigin: "https://lil-tweak.example",
-    managedIngressSecret: "a-long-random-managed-ingress-secret",
-  };
-  assert.equal(await enforceManagedIngress(new Request("https://lil-tweak.example/", {
-    headers: { "x-lil-tweak-managed-ingress": config.managedIngressSecret },
-  }), config), true);
-  assert.equal(await enforceManagedIngress(new Request("https://direct.workers.dev/", {
-    headers: { "x-lil-tweak-managed-ingress": config.managedIngressSecret },
-  }), config), false);
-  assert.equal(await enforceManagedIngress(new Request("https://lil-tweak.example/"), config), false);
-  const publicConfig = {
-    environment: "production",
-    publicOrigin: "https://lil-tweak.example",
   };
   assert.equal(
-    await enforceManagedIngress(new Request("https://lil-tweak.example/"), publicConfig),
+    await enforceSiteIngress(new Request("https://lil-tweak.example/"), config),
     true,
   );
   assert.equal(
-    await enforceManagedIngress(new Request("https://direct.workers.dev/"), publicConfig),
+    await enforceSiteIngress(new Request("https://direct.workers.dev/"), config),
     false,
-  );
-  await assert.rejects(
-    enforceManagedIngress(new Request("https://lil-tweak.example/"), {
-      ...publicConfig,
-      managedIngressSecret: "short",
-    }),
-    /configuration/i,
-  );
-  await assert.rejects(
-    enforceManagedIngress(new Request("https://lil-tweak.example/"), { environment: "production" }),
-    /configuration/i,
   );
 });
 
-test("managed ingress fails closed when its environment is omitted", async () => {
-  await assert.rejects(
-    enforceManagedIngress(new Request("https://lil-tweak.example/"), {}),
-    /configuration/i,
-  );
+test("production Site ingress rejects noncanonical or missing public origins", async () => {
+  for (const publicOrigin of [
+    undefined,
+    "http://lil-tweak.example",
+    "https://lil-tweak.example/",
+    "https://LIL-TWEAK.example",
+    "https://lil-tweak.example:443",
+    "https://lil-tweak.example/path",
+  ]) {
+    await assert.rejects(
+      enforceSiteIngress(new Request("https://lil-tweak.example/"), {
+        environment: "production",
+        publicOrigin,
+      }),
+      /configuration/i,
+    );
+  }
+  await assert.rejects(enforceSiteIngress(new Request("https://lil-tweak.example/"), {}), /configuration/i);
 });
 
 test("private core credentials never follow redirects", async () => {

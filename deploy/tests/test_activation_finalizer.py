@@ -34,7 +34,17 @@ ORIGINAL_ARGUMENTS = "source-root local-qualification preflight-provider-evidenc
 IDENTITY_KEYS = set("owner ownerScope provider dropletId host region os size role".split())
 TOPOLOGY_KEYS = set("route intermediary policy".split())
 DESCRIPTOR_KEYS = set("id category filename mediaType sizeBytes sha256 createdAt".split())
-DEPLOYMENT_KEYS = set("schema sourceHead sourceTree versionId versionNumber deploymentId archiveSha256 environmentRevision accessRevision accessMode allowedOwnerCount allowedGroupCount allowedVisitorCount deployedAt".split())
+DEPLOYMENT_KEYS = set("schema sourceHead sourceTree versionId versionNumber deploymentId archiveSha256 environmentRevision accessRevision accessMode allowedOwnerCount allowedGroupCount allowedVisitorCount productionOrigin customDomainCount anonymousDenied forgedIdentityDenied alternateHostRejected ownerSameOriginSucceeded deployedAt".split())
+MANAGED_BINDINGS = ("CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE")
+ADDED_BINDINGS = MANAGED_BINDINGS[:-1]
+RESOURCE_FIXTURES = (
+    ("tunnel", "Lil Tweak core tunnel", "tunnel-id"),
+    ("access_application", "Lil Tweak private core", "access-app"),
+    ("service_token", "Lil Tweak Worker service token", "service-token-id"),
+    ("access_policy", "Lil Tweak Worker service token only", "access-policy"),
+    ("secret_directory", "/var/lib/lil-tweak-activation/secrets", "session-files"),
+    ("dns", "core.lil-tweak.invalid", "dns-id"),
+)
 CANDIDATE_OBJECT_KEYS = {
     "": CANDIDATE_KEYS,
     "artifactDigests": set("local-qualification preflight-provider-evidence provider-evidence runtime-manifest production-manifest owner-flow-receipt owner-flow-job site-status-evidence guest-evidence d1-cross-check core-cross-check guest-cross-check change-record release-evidence-root rollback-receipt site-primary-evidence".split()),
@@ -48,7 +58,7 @@ CANDIDATE_OBJECT_KEYS = {
     "production": set("runtimeSha256 ownerFlowSha256 ownerFlowJobSha256 resourceObservationsSha256 d1 r2 ingress".split()),
     "production.d1": {"database_id", "schema_revision", "binding_revision"},
     "production.r2": {"account_id", "bucket_name", "binding_revision"},
-    "production.ingress": set("tunnel_id access_application_id access_policy_id access_policy_revision managed_rule_id managed_rule_revision".split()),
+    "production.ingress": set("tunnel_id access_application_id access_policy_id access_policy_revision".split()),
     "site": STATUS_KEYS, "site.deployment": DEPLOYMENT_KEYS,
     "site.runner": set("owner provider dropletId host role route intermediary imagePolicy connection qualification".split()),
     "site.controlPlane": {"storage", "d1", "r2"}, "site.bridge": {"origin", "transport", "signing", "access", "missing"},
@@ -58,7 +68,7 @@ CANDIDATE_OBJECT_KEYS = {
     "localQualification.cleanup": set("checkedAt noContainers allJobsTerminal sacrificialJobId sacrificialState wrongRevisionJobId wrongRevisionState".split()),
     "changeRecord": CHANGE_KEYS,
     "changeRecord.priorSite": set("versionId versionNumber accessRevision accessMode allowedOwnerCount allowedGroupCount allowedVisitorCount".split()),
-    "changeRecord.managedBindings": set("MANAGED_INGRESS_SECRET CORE_ORIGIN CORE_ACCESS_CLIENT_ID CORE_ACCESS_CLIENT_SECRET CORE_SIGNING_KEY_ID CORE_SIGNING_SECRET CUSTOMER_HTTP_LIL_TWEAK_CORE".split()),
+    "changeRecord.managedBindings": set(MANAGED_BINDINGS),
     "changeRecord.resources[]": {"kind", "name", "preflight", "createdId"},
 }
 
@@ -169,7 +179,9 @@ class ActivationFixture:
         self.deployment = {"schema": "tueiq-site-deployment-record-v1", "sourceHead": self.head, "sourceTree": self.tree,
             "versionId": "site-version", "versionNumber": 2, "deploymentId": "site-deployment", "archiveSha256": "c" * 64,
             "environmentRevision": "env-r1", "accessRevision": "access-r2", "accessMode": "custom", "allowedOwnerCount": 1,
-            "allowedGroupCount": 0, "allowedVisitorCount": 0, "deployedAt": self.t(-140)}
+            "allowedGroupCount": 0, "allowedVisitorCount": 0, "productionOrigin": "https://tweak.example.invalid", "customDomainCount": 0,
+            "anonymousDenied": True, "forgedIdentityDenied": True, "alternateHostRejected": True, "ownerSameOriginSucceeded": True,
+            "deployedAt": self.t(-140)}
         self.write(root / "site-deployment.json", self.deployment)
         status = {"generatedAt": self.t(-121), "controlPlane": dict.fromkeys(("storage", "d1", "r2"), "configured"),
             "bridge": {"origin": "core_origin", "transport": "configured", "signing": "configured", "access": "configured", "missing": []},
@@ -206,9 +218,10 @@ class ActivationFixture:
         job_path = root / "site-primary/owner-flow-job.json"
         self.state = {"RUNTIME_MANIFEST": str(runtime), "RUNTIME_MANIFEST_SHA256": a.sha(runtime.read_bytes()), "SOURCE_COMMIT": self.head, "SOURCE_TREE": self.tree,
             "D1_DATABASE_ID": "d1-database", "D1_SCHEMA_REVISION": "0002", "D1_BINDING_REVISION": "d1-r1", "R2_ACCOUNT_ID": "r2-account", "R2_BUCKET_NAME": "evidence-bucket", "R2_BINDING_REVISION": "r2-r1",
-            "LIL_TWEAK_TUNNEL_ID": "tunnel-id", "ACCESS_APPLICATION_ID": "access-app", "ACCESS_POLICY_ID": "access-policy", "ACCESS_POLICY_REVISION": "access-r1", "MANAGED_INGRESS_RULE_ID": "managed-rule", "MANAGED_INGRESS_REVISION": "managed-r1",
+            "LIL_TWEAK_TUNNEL_ID": "tunnel-id", "ACCESS_APPLICATION_ID": "access-app", "ACCESS_POLICY_ID": "access-policy", "ACCESS_POLICY_REVISION": "access-r1",
             "CORE_ORIGIN": "https://core.example.invalid", "SITES_SOURCE_COMMIT": self.head, "SITES_VERSION_ID": "site-version", "SITES_VERSION_NUMBER": "2", "SITES_DEPLOYMENT_ID": "site-deployment", "SITES_ARCHIVE_HASH": "c" * 64,
             "SITES_ENVIRONMENT_REVISION": "env-r1", "SITES_ACCESS_REVISION": "access-r2", "SITES_ACCESS_MODE": "custom", "SITES_ALLOWED_OWNER_COUNT": "1", "SITES_ALLOWED_GROUP_COUNT": "0", "SITES_ALLOWED_VISITOR_COUNT": "0",
+            "SITES_CUSTOM_DOMAIN_COUNT": "0", "SITES_ANONYMOUS_DENIED": "true", "SITES_FORGED_IDENTITY_DENIED": "true", "SITES_ALTERNATE_HOST_REJECTED": "true", "SITES_OWNER_SAME_ORIGIN_SUCCEEDED": "true",
             "PRODUCTION_URL": "https://tweak.example.invalid", "PUBLIC_ORIGIN": "https://tweak.example.invalid", "PRIOR_SITES_VERSION_NUMBER": "1", "SITES_DEPLOYED_AT": self.t(-140), "OWNER_FLOW_JOB": str(job_path)}
         self.raw(root / "state.env", "".join(k + "=" + v + "\n" for k, v in self.state.items()).encode())
         class FixtureDatetime(datetime):
@@ -220,9 +233,9 @@ class ActivationFixture:
         self.change = {"schema": "tueiq-session-change-record-v1", "sessionNonce": "a" * 48, "startedAt": self.t(-180), "mutationStartedAt": self.t(-160), "completedAt": self.t(210),
             "preflightProviderSha256": a.sha((root / "preflight.json").read_bytes()), "sourceHead": self.head, "sourceTree": self.tree,
             "priorSite": {"versionId": "prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
-            "managedBindings": dict.fromkeys(("MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE"), "absent"),
-            "resources": [{"kind": kind, "name": name, "preflight": "absent", "createdId": ident} for kind, name, ident in (("tunnel", "activation-tunnel", "tunnel-id"), ("access_application", "activation-access", "access-app"), ("access_policy", "activation-policy", "access-policy"), ("service_token", "activation-token", "service-token-id"), ("secret_directory", "activation-secrets", "session-files"), ("dns", "activation-dns", "dns-id"), ("managed_rule", "activation-rule", "managed-rule"))],
-            "additions": ["resource:" + str(i) for i in range(7)] + ["binding:" + k for k in ("MANAGED_INGRESS_SECRET", "CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET")] + ["site:site-version"], "rollbackOrder": []}
+            "managedBindings": dict.fromkeys(MANAGED_BINDINGS, "absent"),
+            "resources": [{"kind": kind, "name": name, "preflight": "absent", "createdId": ident} for kind, name, ident in RESOURCE_FIXTURES],
+            "additions": ["resource:" + str(i) for i in range(6)] + ["binding:" + k for k in ADDED_BINDINGS] + ["site:site-version"], "rollbackOrder": []}
         self.change["rollbackOrder"] = list(reversed(self.change["additions"]))
         self.change["resources"][4]["createdId"] = self.directory_observation["createdId"]
         preflight = {"observedAt": self.t(-165), "priorSite": copy.deepcopy(self.change["priorSite"]), "bindingOperation": "sites-environment-list",
@@ -350,9 +363,9 @@ class ActivationFinalizerTests(unittest.TestCase):
             try:
                 original = f.a.read_json(f.args.production_manifest, legacy=True)
                 source_inventory = f.a.release._git_inventory(f.repo, f.head, verify_checkout=True)
-                cases = [("binding-" + str(i), ("preflight", "managedBindings", i), "present", True) for i in range(7)]
-                cases += [("preexisting-" + str(i), ("preflight", "resources", i), "matchingIds", ["pre-existing-id"]) for i in range(7)]
-                cases += [("creation-" + str(i), ("creations", i), "createdId", "unobserved-id") for i in range(7)]
+                cases = [("binding-" + str(i), ("preflight", "managedBindings", i), "present", True) for i in range(6)]
+                cases += [("preexisting-" + str(i), ("preflight", "resources", i), "matchingIds", ["pre-existing-id"]) for i in range(6)]
+                cases += [("creation-" + str(i), ("creations", i), "createdId", "unobserved-id") for i in range(6)]
                 cases += [("session", (), "sessionNonce", "b" * 48), ("head", (), "sourceHead", "0" * 40),
                     ("tree", (), "sourceTree", "0" * 40), ("preflight-time", ("preflight",), "observedAt", f.t(-150)),
                     ("creation-time", ("creations", 0), "observedAt", f.t(-161)),
@@ -444,8 +457,66 @@ class ActivationFinalizerTests(unittest.TestCase):
                 with self.assertRaises(Exception): f.a.validate_release(f.primary, f.runtime, f.head, f.tree, time.time())
             finally: f.close()
 
-    def test_resource_rollback_order_matches_live_creation_sequence(self):
-        self.assertEqual(load().RESOURCE_KINDS, ("tunnel", "access_application", "access_policy", "service_token", "secret_directory", "dns", "managed_rule"))
+    def test_resource_creation_order_requires_service_token_before_policy(self):
+        a = load()
+        self.assertEqual(a.RESOURCE_KINDS, ("tunnel", "access_application", "service_token", "access_policy", "secret_directory", "dns"))
+
+        before = {
+            "observedAt": "2026-09-04T16:00:00Z",
+            "priorSite": {"versionId": "prior-version", "versionNumber": 1, "accessRevision": "prior-access", "accessMode": "custom", "allowedOwnerCount": 1, "allowedGroupCount": 0, "allowedVisitorCount": 0},
+            "bindingOperation": "sites-environment-list",
+            "managedBindings": [{"name": name, "present": False} for name in MANAGED_BINDINGS],
+            "resources": [{"kind": kind, "name": name, "operation": "filesystem-lstat" if kind == "secret_directory" else "cloudflare-resource-list", "matchingIds": []} for kind, name, _ in RESOURCE_FIXTURES],
+        }
+        directory = {"createdId": "directory-1-2", "device": 1, "inode": 2, "uid": 0, "gid": 0, "mode": "0700"}
+
+        def observations(offsets):
+            creations = []
+            for (kind, name, created_id), minute in zip(RESOURCE_FIXTURES, offsets):
+                created_id = directory["createdId"] if kind == "secret_directory" else created_id
+                creations.append({"kind": kind, "name": name, "operation": "filesystem-mkdir" if kind == "secret_directory" else "cloudflare-resource-create",
+                    "createdId": created_id, "observedAt": f"2026-09-04T16:{minute:02d}:00Z", "preflightSha256": a.sha(a.canonical(before)),
+                    "filesystem": directory if kind == "secret_directory" else None})
+            return {"schema": "tueiq-session-resource-observations-v1", "sessionNonce": "a" * 48, "sourceHead": "b" * 40, "sourceTree": "c" * 40,
+                "preflight": before, "creations": creations}
+
+        a.validate_resource_observations(observations((1, 2, 3, 4, 5, 6)))
+        with self.assertRaises(Exception):
+            a.validate_resource_observations(observations((1, 2, 4, 3, 5, 6)))
+
+    def test_native_sites_identifiers_remain_opaque_and_bounded(self):
+        a = load()
+        native = "appgprj_6a7c11351b548191a9f9e936ae8ff837~appgver_51bb788eee4481919fa8cb280a126f89"
+        self.assertEqual(a.site_identifier(native), native)
+        for invalid in (" " + native, native + "\n", "https://site.invalid/id", "x" * 257):
+            with self.subTest(invalid=invalid), self.assertRaises(Exception):
+                a.site_identifier(invalid)
+        with self.assertRaises(Exception):
+            a.identifier(native)
+
+    def test_resource_names_use_kind_specific_contracts(self):
+        a = load()
+        for kind, name, _ in RESOURCE_FIXTURES:
+            with self.subTest(kind=kind, name=name):
+                self.assertEqual(a.resource_name(kind, name), name)
+
+        invalid = {
+            "access_application": ("Lil-Tweak-private-core", "Lil Tweak private core ", "lil tweak private core"),
+            "access_policy": ("Lil Tweak Worker token only", "Lil Tweak Worker service token only "),
+            "dns": ("CORE.lil-tweak.invalid", "https://core.lil-tweak.invalid", "core.lil-tweak.invalid/path", "core.lil-tweak.invalid:443", "*.lil-tweak.invalid", "core..invalid", "localhost"),
+            "secret_directory": ("/var/lib/lil-tweak-activation/secret", "var/lib/lil-tweak-activation/secrets", "/tmp/secrets"),
+            "tunnel": (" leading", "trailing ", "line\nbreak", "é", "x" * 101),
+            "service_token": (" leading", "trailing ", "tab\tname", "é", "x" * 101),
+        }
+        for kind, values in invalid.items():
+            for value in values:
+                with self.subTest(kind=kind, invalid=value), self.assertRaises(Exception):
+                    a.resource_name(kind, value)
+
+        a.identifier("opaque-id_123")
+        for created_id in ("opaque.id", "created id", "/var/lib/value"):
+            with self.subTest(created_id=created_id), self.assertRaises(Exception):
+                a.identifier(created_id)
 
     def test_original_evidence_fault_matrix_rejects_without_candidate_or_truth(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -496,6 +567,12 @@ class ActivationFinalizerTests(unittest.TestCase):
                     ("site_status_evidence", ("deployment", "versionId"), "different"),
                     ("site_status_evidence", ("deployment", "deploymentId"), "different"),
                     ("site_status_evidence", ("deployment", "allowedVisitorCount"), 1),
+                    ("site_status_evidence", ("deployment", "productionOrigin"), "https://other.example.invalid"),
+                    ("site_status_evidence", ("deployment", "customDomainCount"), 1),
+                    ("site_status_evidence", ("deployment", "anonymousDenied"), False),
+                    ("site_status_evidence", ("deployment", "forgedIdentityDenied"), False),
+                    ("site_status_evidence", ("deployment", "alternateHostRejected"), False),
+                    ("site_status_evidence", ("deployment", "ownerSameOriginSucceeded"), False),
                     ("site_status_evidence", ("runner", "connection"), "failed"),
                     ("site_status_evidence", ("bridge", "signing"), "missing"),
                     ("site_status_evidence", ("runner", "connectionState"), "connected"),
@@ -522,6 +599,12 @@ class ActivationFinalizerTests(unittest.TestCase):
                     ("core_cross_check", ("proposalDigest",), "0" * 64),
                     ("core_cross_check", ("evidence", 0, "sha256"), "0" * 64),
                     ("production_manifest", ("sites", "version_id"), "different"),
+                    ("production_manifest", ("sites", "production_url"), "https://other.example.invalid"),
+                    ("production_manifest", ("sites", "custom_domain_count"), 1),
+                    ("production_manifest", ("sites", "anonymous_denied"), False),
+                    ("production_manifest", ("sites", "forged_identity_denied"), False),
+                    ("production_manifest", ("sites", "alternate_host_rejected"), False),
+                    ("production_manifest", ("sites", "owner_same_origin_succeeded"), False),
                     ("production_manifest", ("owner_flow_job_sha256",), "0" * 64),
                     ("production_manifest", ("runtime", "manifest_sha256"), "0" * 64),
                     ("change_record", ("managedBindings", "CORE_ORIGIN"), "present"),
@@ -551,7 +634,7 @@ class ActivationFinalizerTests(unittest.TestCase):
                         finally:
                             path.chmod(0o600); path.write_bytes(original); path.chmod(mode)
                             if f.args.candidate.exists(): f.args.candidate.unlink()
-                self.assertEqual(len(cases), 71)
+                self.assertEqual(len(cases), 83)
                 for kind in ("dirty-source", "changed-head"):
                     if kind == "dirty-source":
                         (f.repo / "untracked.txt").write_text("fixture mutation")

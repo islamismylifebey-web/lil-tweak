@@ -70,14 +70,17 @@ The migration list must be empty. Every missing-or-incompatible table, column, i
 
 Only after the schema gate passes may the matching Worker/Sites release be selected. Before routing owner traffic, prove all of these from an external client:
 
-- the managed Sites hostname is the only public origin;
+- the exact configured Sites production origin is the only accepted browser origin;
 - direct Worker and service origins are unreachable;
-- caller-supplied `oai-authenticated-user-id`, `oai-authenticated-user-email`, and `oai-authenticated-user-name` are stripped and replaced by the trusted managed ingress;
-- requests without the private managed-ingress assertion fail closed;
+- private Sites custom access reports one owner, zero groups, zero visitors, and zero custom domains;
+- an anonymous request is denied by native Sites access;
+- a request with forged `oai-authenticated-*` values but no authenticated dispatch session is denied;
+- an alternate-host request is rejected because it differs from the unchanged `PUBLIC_ORIGIN`;
 - D1 is bound as `DB`, R2 is bound as `FILES`, and an authenticated owner can perform a read-only project/job lookup;
-- a non-owner identity and a forged identity-header request cannot read that owner data.
+- a non-owner identity cannot read that owner data; and
+- an authenticated owner same-origin flow passes the server allowlist and existing mutation checks.
 
-If header replacement has not been provisioned and negative-tested, do not cut over. Merely adding a shared ingress header to public requests is not an authentication boundary.
+If any native Sites access, dispatch-owned identity, exact-origin, owner allowlist, or mutation same-origin probe fails, do not cut over. Do not substitute a custom-domain proxy or caller-controlled identity mechanism.
 
 ## 6. Rollback
 

@@ -403,7 +403,7 @@ test("keeps chat controls truthful, reversible, and owner-only", async () => {
   assert.match(controls, /disabled><span>Delete chat/);
   assert.match(controls, /disabled><span>Share/);
   assert.match(controls, /No saved chat/);
-  assert.match(controls, /Owner only\. Identity is enforced at managed ingress and every mutation is checked again by the server\./);
+  assert.match(controls, /Owner only\. Private Sites access and dispatch-owned identity are enforced before every server authorization check\./);
   assert.match(controls, /Direct chat capacity is/);
   assert.match(controls, /<span>Code<\/span><small>Secure gateway/);
   for (const id of ["chat-access-detail", "chat-files-detail", "chat-usage-detail"]) {

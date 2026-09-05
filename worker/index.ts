@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for Lil Tweak's owner-only control plane. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { enforceManagedIngress } from "../lib/ingress-boundary";
+import { enforceSiteIngress } from "../lib/ingress-boundary";
 import { withBrowserSecurityHeaders } from "../lib/security-headers";
 
 interface Env {
@@ -15,7 +15,6 @@ interface Env {
   CORE_ACCESS_CLIENT_SECRET?: string;
   LIL_TWEAK_ENVIRONMENT?: string;
   PUBLIC_ORIGIN?: string;
-  MANAGED_INGRESS_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -39,10 +38,9 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      const allowed = await enforceManagedIngress(request, {
+      const allowed = await enforceSiteIngress(request, {
         environment: env.LIL_TWEAK_ENVIRONMENT,
         publicOrigin: env.PUBLIC_ORIGIN,
-        managedIngressSecret: env.MANAGED_INGRESS_SECRET,
       });
       if (!allowed) {
         return withBrowserSecurityHeaders(new Response("Not found", {

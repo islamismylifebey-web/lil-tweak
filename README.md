@@ -18,7 +18,7 @@ This repository contains the application, execution core, migrations, tests, and
 - `deploy/` and `scripts/`: digest-pinned Quadlets and checked DigitalOcean install/verification tooling.
 - `deploy/Containerfile.runner`: credential-free Node/Python/Go/Rust/Java sandbox toolchain built from an operator-supplied base digest.
 
-Cloudflare Sites must be the only browser ingress. The managed ingress must strip and replace all `oai-authenticated-*` identity headers, and the service must not have a separate public origin. The DigitalOcean core listens only on `127.0.0.1:8017` behind a constrained Cloudflare Tunnel and still requires signed, nonce-protected requests.
+Cloudflare Sites must be the only browser ingress. Production uses private Sites custom access for exactly one owner and dispatch-owned SIWC identity headers; the Worker accepts only the exact configured `PUBLIC_ORIGIN`, and server routes retain their exact owner allowlist and mutation same-origin checks. The Site has no custom domain or front proxy. The DigitalOcean core listens only on `127.0.0.1:8017` behind a constrained Cloudflare Tunnel and still requires Access service-token plus signed, nonce-protected requests.
 
 ## Safety boundary
 
