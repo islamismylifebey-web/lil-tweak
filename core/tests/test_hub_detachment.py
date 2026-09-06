@@ -18,6 +18,11 @@ class HubDetachmentTests(unittest.TestCase):
                 "self.galor",
                 "galor: Any",
             ),
+            "lil_tweak/failure_recovery/orchestrator_bridge.py": (
+                "self.galor",
+                "galor: Any",
+                '"galor": self.galor',
+            ),
             "lil_tweak/openai_agent.py": ("galor_context",),
             "lil_tweak/store.py": ('"galor_unavailable"',),
         }
