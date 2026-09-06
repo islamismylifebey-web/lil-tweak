@@ -1,8 +1,8 @@
 # Lil'Tweak.AI
 
-Lil Tweak is an owner-only, approval-gated code engineer. Its public control plane runs on Cloudflare; its trusted execution core runs in an isolated rootless Podman service on `galor-private-cloud-01`.
+Lil Tweak is an owner-only, approval-gated code engineer. Its public control plane runs on Cloudflare; its trusted execution core runs in an isolated rootless Podman service on `galor-tweak-runner-01`.
 
-`galor-private-cloud-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path, and the retired `LIL_TWEAK_GALOR_READONLY_URL` setting is rejected. This code does not claim that any dedicated runner host has passed live connection or qualification gates.
+`galor-tweak-runner-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path, and the retired `LIL_TWEAK_GALOR_READONLY_URL` setting is rejected. This code does not claim that any dedicated runner host has passed live connection or qualification gates.
 
 This repository contains the application, execution core, migrations, tests, and deployment assets. It has not been deployed from this workspace. Production still requires a live Podman/Quadlet qualification on the target droplet and real integration checks against PostgreSQL, R2, Cloudflare Tunnel, and the OpenAI API. Four-GiB deployment remains blocked until live headroom qualification; use at least the eight-GiB plan class until live evidence supports otherwise.
 

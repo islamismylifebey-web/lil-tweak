@@ -208,7 +208,7 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
   const runbook = read("docs/operations/digitalocean.md");
 
   for (const phrase of [
-    "galor-private-cloud-01",
+    "galor-tweak-runner-01",
     "Cloudflare Tunnel",
     "never open port 8017",
     "dedicated `lil-tweak` Unix user",
@@ -229,7 +229,7 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
     assert.ok(runbook.toLowerCase().includes(phrase.toLowerCase()), `missing ${phrase}`);
   }
   for (const phrase of [
-    "galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host.",
+    "galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host.",
     "GALOR Hub is abandoned and is not a Lil Tweak dependency.",
     "Four-GiB deployment remains blocked until live headroom qualification",
   ]) {

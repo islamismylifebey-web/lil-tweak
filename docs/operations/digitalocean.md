@@ -1,6 +1,6 @@
-# Lil Tweak on `galor-private-cloud-01`
+# Lil Tweak on `galor-tweak-runner-01`
 
-galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path, and the retired LIL_TWEAK_GALOR_READONLY_URL setting is rejected. This runbook does not claim that any dedicated runner host has passed live connection or qualification gates. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
+galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path, and the retired LIL_TWEAK_GALOR_READONLY_URL setting is rejected. This runbook does not claim that any dedicated runner host has passed live connection or qualification gates. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
 
 ## Invariants
 
@@ -19,7 +19,7 @@ Confirm the target before doing anything:
 
 ```bash
 hostname --short
-test "$(hostname --short)" = galor-private-cloud-01
+test "$(hostname --short)" = galor-tweak-runner-01
 ```
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.

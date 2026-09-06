@@ -48,7 +48,7 @@ Install a distribution-packaged or otherwise audited `cloudflared` binary at `/u
 scripts/install-lil-tweak-release.sh --check
 ```
 
-On `galor-private-cloud-01`, supply the reviewed values below alongside the core inputs in the DigitalOcean runbook. The production release must use `scripts/install-lil-tweak-release.sh` so one host-global rollback lease covers the core and Tunnel stages; do not split the initial release into two independent transactions.
+On `galor-tweak-runner-01`, supply the reviewed values below alongside the core inputs in the DigitalOcean runbook. The production release must use `scripts/install-lil-tweak-release.sh` so one host-global rollback lease covers the core and Tunnel stages; do not split the initial release into two independent transactions.
 
 ```bash
 export LIL_TWEAK_TUNNEL_ID='LOWERCASE_TUNNEL_UUID'

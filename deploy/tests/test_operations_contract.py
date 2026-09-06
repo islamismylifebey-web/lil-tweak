@@ -100,7 +100,15 @@ class TunnelContractTests(unittest.TestCase):
 
         installer = text("scripts/install-cloudflare-tunnel.sh")
         self.assertIn('TUNNEL_USER="lil-tweak-tunnel"', installer)
-        self.assertIn('EXPECTED_HOST="galor-private-cloud-01"', installer)
+        self.assertIn('EXPECTED_HOST="galor-tweak-runner-01"', installer)
+        self.assertIn(
+            'EXPECTED_HOST="galor-tweak-runner-01"',
+            text("scripts/install-digitalocean.sh"),
+        )
+        self.assertIn(
+            'EXPECTED_HOST = "galor-tweak-runner-01"',
+            text("scripts/lil-tweak-rollback.py"),
+        )
         self.assertIn("--user-group", installer)
         self.assertIn("deploy/cloudflared/verify_binary.py", installer)
         self.assertIn("--expected-sha256", installer)
