@@ -16,11 +16,16 @@ from .reasoning_provider import OpenAIResponsesReasoningProvider
 from .vercel_boundary import VercelOwnerBoundary
 
 
+def _private_directory(path: Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+
+
 def _state_root() -> Path:
     root = Path(os.getenv("LILTWEAK_VERCEL_STATE_ROOT", "/tmp/liltweak"))
-    root.mkdir(parents=True, exist_ok=True)
+    _private_directory(root)
     for child in ("repositories", "artifacts", "workbench-tasks"):
-        (root / child).mkdir(parents=True, exist_ok=True)
+        _private_directory(root / child)
     return root
 
 
