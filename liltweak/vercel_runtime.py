@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
-from .api import create_app
+from .api import build_default_service, create_app
 from .config import Settings
 from .operational_qualification import load_operational_qualifications
 from .planning_chat import PlanningChatService, PlanningConversationStore
@@ -87,6 +87,7 @@ def create_vercel_app(*, enable_model: bool | None = None) -> FastAPI:
         raise RuntimeError("live model qualification evidence is not available")
 
     settings = _settings(root, owner_key, model_enabled=model_enabled)
+    service = build_default_service(settings)
     provider: OpenAIResponsesReasoningProvider | None = None
     planning_chat: PlanningChatService | None = None
     if model_enabled:
@@ -103,6 +104,7 @@ def create_vercel_app(*, enable_model: bool | None = None) -> FastAPI:
         )
 
     app = create_app(
+        service=service,
         settings=settings,
         workbench_reasoning_provider=provider,
         planning_chat_service=planning_chat,
