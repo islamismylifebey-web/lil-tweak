@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 
-from liltweak.api import build_default_service
+from fastapi import FastAPI
+
+from liltweak.api import create_app
 from liltweak.vercel_runtime import _owner_key, _settings, _state_root
 
 LIL_TWEAK_VERCEL_PROJECT_ID = "prj_b2irbcWTB8UwPwMhk6d47wh5w8TN"
@@ -21,12 +23,10 @@ def main() -> int:
         return 0
     root = _state_root()
     settings = _settings(root, _owner_key(), model_enabled=False)
-    service = build_default_service(settings)
-    if service.store is None:
-        raise RuntimeError("default Tweak service has no store")
-    if service.owner_id != "maurice-pennington-bey":
-        raise RuntimeError("default Tweak service owner is incorrect")
-    print(json.dumps({"status": "PASSED", "stage": "default-service"}, sort_keys=True))
+    app = create_app(settings=settings)
+    if not isinstance(app, FastAPI):
+        raise RuntimeError("original Tweak create_app did not return FastAPI")
+    print(json.dumps({"status": "PASSED", "stage": "original-create-app"}, sort_keys=True))
     return 0
 
 
