@@ -59,7 +59,7 @@ def _settings(root: Path, owner_key: str, *, model_enabled: bool) -> Settings:
         workbench_workspace_root=root / "workbench-tasks",
         evidence_signing_key=(
             hashlib.sha256(
-                owner_key.encode("ascii") + b"LilTweakVercelEvidencePreviewV1"
+                owner_key.encode("ascii") + b"LilTweakVercelEvidenceV1"
             ).digest()
             if environment == "production"
             else None
@@ -111,5 +111,6 @@ def create_vercel_app(*, enable_model: bool | None = None) -> FastAPI:
         VercelOwnerBoundary,
         owner_key=owner_key,
         deployment_host=os.getenv("VERCEL_URL"),
+        branch_host=os.getenv("VERCEL_BRANCH_URL"),
     )
     return app
