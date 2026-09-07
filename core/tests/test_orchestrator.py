@@ -210,27 +210,6 @@ class OrchestratorTests(unittest.TestCase):
             all(completed.proposal_digest in key for key in object_keys)
         )
 
-    def test_galor_is_fail_open_and_records_only_stable_unavailable_event(self):
-        class Galor:
-            def fetch(self, context):
-                from core.lil_tweak.galor import GalorResult
-
-                return GalorResult(None, "galor_unavailable")
-
-        agent = FakeAgent(AgentResult("Answer", "Done", "", ""))
-        completed = EngineeringOrchestrator(
-            store=self.store,
-            agent=agent,
-            evidence_store=self.evidence,
-            galor=Galor(),
-        ).run_job(self.job.id, "owner")
-        self.assertEqual(completed.state, JobState.COMPLETED)
-        self.assertIsNone(agent.calls[0]["galor_context"])
-        events = self.store.list_events(self.job.id, "owner")
-        self.assertIn(("galor_unavailable", {"code": "galor_unavailable"}), [
-            (event.kind, event.data) for event in events
-        ])
-
     def setUp(self):
         self.store = MemoryJobStore()
         self.job = self.store.create_job("owner", "idem", JobMode.BUILD, "Build it")

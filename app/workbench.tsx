@@ -437,7 +437,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
     activeJob?.approvalProposal &&
     approvalProposalIsExpired(activeJob.approvalProposal, approvalClock),
   );
-  const runnerState = connectionStatus?.runner.state ?? "secure-gateway";
+  const runnerState = connectionStatus?.bridge.state ?? "pending_configuration";
   const runnerLabel = connectionStatus?.runner.label ?? "Secure code gateway";
 
   function recoverStaleProject(caught: unknown, retryMessage: string) {
@@ -1576,10 +1576,6 @@ function CapabilityGapPanel() {
   );
 }
 
-function shortSha(value: string) {
-  return value.slice(0, 12);
-}
-
 function bridgeOriginLabel(status: EngineeringConnectionStatus) {
   if (status.bridge.origin === "sites_private_tunnel") return "Sites private tunnel";
   if (status.bridge.origin === "core_origin") return "Core origin";
@@ -1588,7 +1584,7 @@ function bridgeOriginLabel(status: EngineeringConnectionStatus) {
 
 function bridgeNote(status: EngineeringConnectionStatus | null, error: string) {
   if (error) return `Status endpoint unavailable: ${error}`;
-  if (!status) return "Checking GitHub provenance and runtime bridge settings.";
+  if (!status) return "Checking the Lil Tweak runtime bridge settings.";
   if (status.bridge.state === "health_reachable") return "Core health is reachable. Job execution still uses signed owner-scoped dispatch.";
   if (status.bridge.state === "health_unreachable") return "Bridge settings are present, but the core health check did not pass.";
   if (status.bridge.state === "configured_pending_probe") return "Bridge settings are present and waiting on a runtime probe.";
@@ -1608,7 +1604,7 @@ function ConnectionStatusPanel({
     <article className="connection-panel" aria-live="polite">
       <div className="connection-panel-head">
         <div>
-          <strong>GitHub + runner connection</strong>
+          <strong>Lil Tweak runner connection</strong>
           <p>{bridgeNote(status, error)}</p>
         </div>
         <span className="connection-pill" data-bridge-state={state}>{label}</span>
@@ -1616,16 +1612,20 @@ function ConnectionStatusPanel({
       {status ? (
         <div className="status-list connection-list">
           <div>
-            <span>Lil Tweak main</span>
-            <strong><code>{shortSha(status.github.lilTweak.head)}</code> after PR #6</strong>
+            <span>Lil Tweak repository</span>
+            <strong>{status.github.lilTweak.repository} · {status.github.lilTweak.branch}</strong>
           </div>
           <div>
-            <span>GALOR Hub main</span>
-            <strong><code>{shortSha(status.github.galorHub.head)}</code> from PR #28</strong>
+            <span>Runner owner</span>
+            <strong>Lil Tweak · no intermediary</strong>
           </div>
           <div>
-            <span>Runner contract</span>
-            <strong>{status.galor.contract} v{status.galor.version} on {status.galor.executionHost}</strong>
+            <span>Runner path</span>
+            <strong>Signed Core → digest-pinned Podman sandbox</strong>
+          </div>
+          <div>
+            <span>Runner evidence</span>
+            <strong>Connection not reported · qualification not reported</strong>
           </div>
           <div>
             <span>Core bridge</span>

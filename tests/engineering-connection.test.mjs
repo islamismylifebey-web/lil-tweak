@@ -28,7 +28,7 @@ test("engineering connection status fails closed without runtime bridge configur
   ]);
 });
 
-test("engineering connection status exposes merged provenance without leaking secrets", async () => {
+test("engineering connection status exposes the standalone direct runner boundary without leaking secrets", async () => {
   const secret = "status-secret-value-that-must-not-leak";
   const calls = [];
   const status = await engineeringConnectionStatus({
@@ -52,13 +52,28 @@ test("engineering connection status exposes merged provenance without leaking se
   assert.equal(status.bridge.state, "health_reachable");
   assert.equal(status.bridge.origin, "sites_private_tunnel");
   assert.equal(status.bridge.access, "not_required");
-  assert.equal(status.github.lilTweak.head, "191189c515b9dbd8ddb82e9ad3fc86853cc815df");
-  assert.equal(status.github.lilTweak.pr6Merge, "08e3705227ec428d0b6ce6bc6d58dca3657b2683");
-  assert.equal(status.github.galorHub.pr28Merge, "ac15ba6cf794375339528fe7c7e5b21a81bf34f0");
-  assert.equal(status.galor.version, "1.0.0");
-  assert.equal(status.galor.executionHost, "galor-private-cloud-01");
+  assert.deepEqual(status.github, {
+    lilTweak: {
+      repository: "islamismylifebey-web/lil-tweak",
+      branch: "main",
+    },
+  });
+  assert.deepEqual(status.runner, {
+    owner: "lil-tweak",
+    route: "direct_core_to_podman",
+    intermediary: "none",
+    imagePolicy: "digest_pinned",
+    connection: "not_reported",
+    qualification: "not_reported",
+    label: "Lil Tweak direct Podman runner",
+  });
+  assert.equal("galor" in status, false);
+  assert.equal("galorHub" in status.github, false);
   assert.deepEqual(calls, [{ url: "https://core.example/healthz", headers: { Accept: "application/json" } }]);
   assert.doesNotMatch(JSON.stringify(status), new RegExp(secret));
+
+  const workbench = await readFile(new URL("../app/workbench.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(workbench, /GALOR Hub main|Runner contract|status\.galor|status\.github\.galorHub/);
 });
 
 test("engineering connection status route is owner-only", async () => {

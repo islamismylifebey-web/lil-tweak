@@ -25,9 +25,9 @@ The managed host must remove every client-supplied `X-Lil-Tweak-Managed-Ingress`
 
 ## Named Tunnel and Access
 
-Create a named Tunnel dedicated to Lil Tweak. Never reuse a GALOR Hub Tunnel or credential. Route exactly one private core hostname to it. The locally managed configuration is rendered from `deploy/cloudflared/config.yml.example`; its only origin is `http://127.0.0.1:8017` and its final ingress rule returns `404`.
+Create a named Tunnel dedicated to Lil Tweak. The Tunnel is owned only by Lil Tweak and must not reuse another product's Tunnel or credential. Route exactly one private core hostname to it. The locally managed configuration is rendered from `deploy/cloudflared/config.yml.example`; its only origin is `http://127.0.0.1:8017` and its final ingress rule returns `404`.
 
-Before adding DNS or starting `cloudflared`, create a Cloudflare Access self-hosted application for the exact core hostname. `deploy/cloudflare/access-application.json` is the application payload. Create a dedicated service token, substitute its opaque ID into `deploy/cloudflare/access-policy.json`, and attach that policy to the application with the Service Auth action (`decision: non_identity`). Do not add an Everyone, Bypass, email, IP, or reusable GALOR policy.
+Before adding DNS or starting `cloudflared`, create a Cloudflare Access self-hosted application for the exact core hostname. `deploy/cloudflare/access-application.json` is the application payload. Create a dedicated service token, substitute its opaque ID into `deploy/cloudflare/access-policy.json`, and attach that policy to the application with the Service Auth action (`decision: non_identity`). Do not add an Everyone, Bypass, email, IP, or reusable cross-product policy.
 
 The Worker sends both official Access headers on every HMAC-signed core request:
 
@@ -60,9 +60,9 @@ export ROLLBACK_MANIFEST_SHA256='64_HEX_DIGEST'
 # Then run the combined transaction command in docs/operations/digitalocean.md.
 ```
 
-The connector runs as the separate `lil-tweak-tunnel` Unix user. It does not join a container network, read `/var/lib/lil-tweak`, or access GALOR Hub storage, credentials, networks, or databases. It needs outbound Cloudflare connectivity and loopback access only. Metrics bind to `127.0.0.1:20241`.
+The connector runs as the separate `lil-tweak-tunnel` Unix user. It does not join a container network, read `/var/lib/lil-tweak`, or access another product's storage, credentials, networks, or databases. It needs outbound Cloudflare connectivity and loopback access only. Metrics bind to `127.0.0.1:20241`.
 
-At the DigitalOcean Cloud Firewall and host firewall, never open port 8017. There is no public origin IP or load balancer for the core. `127.0.0.1:8017` is the sole listener, and the Tunnel is outbound-only. A DNS-only record pointing at the droplet, a second Tunnel hostname, or a GALOR reverse-proxy route is prohibited.
+At the DigitalOcean Cloud Firewall and host firewall, never open port 8017. There is no public origin IP or load balancer for the core. `127.0.0.1:8017` is the sole listener, and the Tunnel is outbound-only. A DNS-only record pointing at the droplet, a second Tunnel hostname, or an intermediary reverse-proxy route is prohibited.
 
 ## Required negative tests
 
@@ -74,7 +74,7 @@ Run these from an external trusted workstation without printing secrets:
 4. Request the owner application through its `workers.dev` or any alternate hostname. The Worker must reject it because it differs from `PUBLIC_ORIGIN`.
 5. Send a public request with a forged `X-Lil-Tweak-Managed-Ingress` and forged `oai-*` identity headers. Managed ingress must overwrite/remove them, and the Worker must reject a value that does not match `MANAGED_INGRESS_SECRET`.
 6. Scan the droplet externally. TCP 8017 must be unreachable. Locally, `ss -lnt` must show only `127.0.0.1:8017`.
-7. Stop `lil-tweak-cloudflared.service`. The core hostname must become unavailable while GALOR Hub remains unaffected. Restart it and confirm the inverse isolation as well.
+7. Stop `lil-tweak-cloudflared.service`. The core hostname must become unavailable while unrelated services remain unaffected. Restart it and confirm the Lil Tweak route recovers without changing unrelated services.
 
 Record Access application ID, policy ID, service-token ID and expiry, Tunnel ID, connector binary digest, Worker deployment ID, image digests, and test results. Never record token bytes, signing keys, the managed-ingress secret, owner emails, or Tunnel credential contents.
 
@@ -82,6 +82,6 @@ Record Access application ID, policy ID, service-token ID and expiry, Tunnel ID,
 
 Rotate the Access service token with overlap: create a new token, permit it in Access, update both Worker secrets, verify, then remove and revoke the old token. Access service-token headers are never accepted as HMAC headers. Rotate HMAC keys separately using the dual-key procedure in the DigitalOcean runbook.
 
-Rotate a Tunnel credential only during an audited maintenance window. Install the replacement under the same dedicated identity, validate ingress, start a second connector if the Cloudflare plan supports replicas, verify it, then retire the old credential. Revoking a Tunnel credential must not touch GALOR Hub.
+Rotate a Tunnel credential only during an audited maintenance window. Install the replacement under the same dedicated identity, validate ingress, start a second connector if the Cloudflare plan supports replicas, verify it, then retire the old credential. Revoking a Tunnel credential must not touch another product's services or credentials.
 
 If any direct-origin path is found, immediately remove the DNS/route or firewall rule, revoke the Access token and Tunnel credential if exposure is suspected, rotate HMAC, pause job admission, and audit Access plus Lil Tweak request IDs.

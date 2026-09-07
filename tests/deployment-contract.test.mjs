@@ -217,8 +217,8 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
     "restore",
     "signing-key rotation",
     "rollback",
-    "GALOR Hub",
-    "read-only",
+    "directly owns",
+    "no intermediary runner control plane",
     "/healthz",
     "/readyz",
     "1 GiB",
@@ -230,8 +230,8 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
   }
   for (const phrase of [
     "galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host.",
-    "GALOR Hub is not installed by this release and LIL_TWEAK_GALOR_READONLY_URL remains unset.",
-    "Four-GiB co-residency remains blocked; a four-GiB dedicated host still requires live headroom qualification.",
+    "GALOR Hub is abandoned and is not a Lil Tweak dependency.",
+    "Four-GiB deployment remains blocked until live headroom qualification",
   ]) {
     for (const document of [readme, runbook]) {
       const normalized = document.replaceAll("`", "");
@@ -241,7 +241,7 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
   assert.doesNotMatch(runbook, /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/);
 });
 
-test("four-GiB GALOR co-residency is formally blocked", () => {
+test("four-GiB standalone deployment stays blocked pending live evidence", () => {
   const readme = read("README.md").toLowerCase();
   const runbook = read("docs/operations/digitalocean.md").toLowerCase();
 

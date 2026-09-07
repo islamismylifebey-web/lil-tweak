@@ -418,7 +418,6 @@ class CodeEngineer:
         prompt: str,
         source_inventory: Sequence[str],
         project_context: Mapping[str, Any] | None = None,
-        galor_context: Mapping[str, Any] | None = None,
         deadline: float | None = None,
         monotonic: Any = time.monotonic,
     ) -> AgentResult:
@@ -454,8 +453,6 @@ class CodeEngineer:
                 "max_tool_calls": self.max_tool_calls,
             },
         }
-        if galor_context is not None:
-            initial["galor_context"] = dict(galor_context)
         history: list[Any] = [
             {
                 "role": "user",

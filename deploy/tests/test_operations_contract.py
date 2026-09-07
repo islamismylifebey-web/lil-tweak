@@ -71,7 +71,7 @@ class TunnelContractTests(unittest.TestCase):
             "PUBLIC_ORIGIN",
             "workers.dev",
             "never open port 8017",
-            "GALOR Hub",
+            "owned only by Lil Tweak",
             "missing LIL_TWEAK_ENVIRONMENT fails closed",
             "at least 32 UTF-8 bytes",
             "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
