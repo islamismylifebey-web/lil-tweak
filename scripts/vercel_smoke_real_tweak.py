@@ -3,9 +3,7 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi import FastAPI
-
-from liltweak.vercel_runtime import create_vercel_app
+from liltweak.vercel_runtime import _owner_key, _settings, _state_root
 
 LIL_TWEAK_VERCEL_PROJECT_ID = "prj_b2irbcWTB8UwPwMhk6d47wh5w8TN"
 
@@ -20,10 +18,14 @@ def main() -> int:
     if not _is_lil_tweak_project():
         print("Skipping real Tweak smoke for another Vercel project.")
         return 0
-    app = create_vercel_app(enable_model=False)
-    if not isinstance(app, FastAPI):
-        raise RuntimeError("real Tweak Vercel composition did not return FastAPI")
-    print(json.dumps({"status": "PASSED", "stage": "fastapi-composition"}, sort_keys=True))
+    root = _state_root()
+    owner_key = _owner_key()
+    settings = _settings(root, owner_key, model_enabled=False)
+    if not settings.workbench_enabled:
+        raise RuntimeError("real Tweak Workbench is not enabled")
+    if settings.owner_id != "maurice-pennington-bey":
+        raise RuntimeError("real Tweak owner identity is incorrect")
+    print(json.dumps({"status": "PASSED", "stage": "settings"}, sort_keys=True))
     return 0
 
 
