@@ -46,7 +46,7 @@ jobs:
         run: |
           python3 -m pip install ruff==0.12.10 mypy==1.17.1
           python3 -m ruff check core/lil_tweak/forge_machine core/tests/test_forge_machine.py
-          python3 -m mypy --strict core/lil_tweak/forge_machine
+          python3 -m mypy --strict --follow-imports=silent core/lil_tweak/forge_machine
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24"

@@ -46,8 +46,8 @@ def compare_candidates(
 
         metrics: dict[str, list[float]] = defaultdict(list)
         for bundle in bundles:
-            for metric in bundle.metrics:
-                metrics[metric.name].append(metric.value)
+            for trial_metric in bundle.metrics:
+                metrics[trial_metric.name].append(trial_metric.value)
         missing = [name for name in required_metrics if not metrics.get(name)]
         if missing:
             rejected.append((piece_hash, "missing metric: " + ", ".join(missing)))
@@ -66,19 +66,19 @@ def compare_candidates(
     weights = dict(profile.weights)
     total_weight = sum(weights.values())
     ranges: dict[str, tuple[float, float]] = {}
-    for metric in required_metrics:
-        values = tuple(candidate[metric] for candidate in accepted.values())
-        ranges[metric] = (min(values), max(values))
+    for metric_name in required_metrics:
+        values = tuple(candidate[metric_name] for candidate in accepted.values())
+        ranges[metric_name] = (min(values), max(values))
 
     scores: list[tuple[str, float]] = []
     for piece_hash in sorted(accepted):
         score = 0.0
-        for metric, weight in profile.weights:
-            value = accepted[piece_hash][metric]
-            low, high = ranges[metric]
+        for metric_name, weight in profile.weights:
+            value = accepted[piece_hash][metric_name]
+            low, high = ranges[metric_name]
             if high == low:
                 normalized = 1.0
-            elif directions[metric] == "min":
+            elif directions[metric_name] == "min":
                 normalized = (high - value) / (high - low)
             else:
                 normalized = (value - low) / (high - low)
