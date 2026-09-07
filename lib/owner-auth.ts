@@ -1,23 +1,28 @@
 // Keep the established D1 partition key so existing workspace records remain reachable.
 // Login authorization is controlled separately by OWNER_IDENTITIES.
-const CANONICAL_OWNER_KEY = "beythetruth4ever@paradigmshiftingthepodcast.net";
+export const CANONICAL_OWNER_KEY = "beythetruth4ever@paradigmshiftingthepodcast.net";
+export const OWNER_EMAIL = "islamismylifebey@gmail.com";
 const OWNER_IDENTITIES = new Set([
-  "islamismylifebey@gmail.com",
+  OWNER_EMAIL,
 ]);
 
 export function ownerIdentityIsAllowed(value: string | null | undefined) {
   return OWNER_IDENTITIES.has(value?.trim().toLowerCase() ?? "");
 }
 
-export function authenticatedOwner(request: Request) {
-  const forwardedId = request.headers.get("oai-authenticated-user-id")?.trim();
-  const forwarded = request.headers
+export function trustedOwnerFromHeaders(headers: Headers) {
+  const forwardedId = headers.get("oai-authenticated-user-id")?.trim();
+  const forwarded = headers
     .get("oai-authenticated-user-email")
     ?.trim()
     .toLowerCase();
   return forwardedId && ownerIdentityIsAllowed(forwarded)
     ? CANONICAL_OWNER_KEY
     : null;
+}
+
+export function authenticatedOwner(request: Request) {
+  return trustedOwnerFromHeaders(request.headers);
 }
 
 export function mutationRequestIsSafe(request: Request) {
