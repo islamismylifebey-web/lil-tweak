@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 
-from liltweak.service import build_default_service
+from liltweak.api import build_default_service
 from liltweak.vercel_runtime import _owner_key, _settings, _state_root
 
 LIL_TWEAK_VERCEL_PROJECT_ID = "prj_b2irbcWTB8UwPwMhk6d47wh5w8TN"
