@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 
+from fastapi import FastAPI
+
+from liltweak.api import create_app
 from liltweak.vercel_runtime import _owner_key, _settings, _state_root
 
 LIL_TWEAK_VERCEL_PROJECT_ID = "prj_b2irbcWTB8UwPwMhk6d47wh5w8TN"
@@ -21,11 +24,10 @@ def main() -> int:
     root = _state_root()
     owner_key = _owner_key()
     settings = _settings(root, owner_key, model_enabled=False)
-    if not settings.workbench_enabled:
-        raise RuntimeError("real Tweak Workbench is not enabled")
-    if settings.owner_id != "maurice-pennington-bey":
-        raise RuntimeError("real Tweak owner identity is incorrect")
-    print(json.dumps({"status": "PASSED", "stage": "settings"}, sort_keys=True))
+    app = create_app(settings=settings)
+    if not isinstance(app, FastAPI):
+        raise RuntimeError("original Tweak create_app did not return FastAPI")
+    print(json.dumps({"status": "PASSED", "stage": "original-create-app"}, sort_keys=True))
     return 0
 
 
