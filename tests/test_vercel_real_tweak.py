@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from liltweak.vercel_boundary import trusted_vercel_deployment_host
 from liltweak.vercel_runtime import create_vercel_app
+
+
+def test_vercel_build_prepares_qualification_before_smoke() -> None:
+    config = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())
+    build_command = config["buildCommand"]
+    prepare = "python scripts/vercel_prepare_real_tweak.py"
+    smoke = "python scripts/vercel_smoke_real_tweak.py"
+    assert prepare in build_command
+    assert smoke in build_command
+    assert build_command.index(prepare) < build_command.index(smoke)
 
 
 def test_only_vercel_owned_deployment_hosts_are_trusted() -> None:
