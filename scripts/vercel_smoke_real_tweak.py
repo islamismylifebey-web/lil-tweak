@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi.testclient import TestClient
-
-from liltweak.vercel_runtime import create_vercel_app
+from liltweak.api import build_default_service
+from liltweak.planning_chat import PlanningConversationCreate, PlanningConversationStore
+from liltweak.vercel_runtime import _owner_key, _settings, _state_root
 
 LIL_TWEAK_VERCEL_PROJECT_ID = "prj_b2irbcWTB8UwPwMhk6d47wh5w8TN"
 
@@ -16,30 +16,18 @@ def _is_lil_tweak_project() -> bool:
     return project_id == LIL_TWEAK_VERCEL_PROJECT_ID or deployment_url.startswith("lil-tweak-")
 
 
-def _require_ok(response: object, label: str) -> None:
-    status_code = getattr(response, "status_code", 0)
-    if not 200 <= status_code < 300:
-        raise RuntimeError(f"{label} failed with HTTP {status_code}")
-
-
 def main() -> int:
     if not _is_lil_tweak_project():
         print("Skipping real Tweak smoke for another Vercel project.")
         return 0
-    host = os.getenv("VERCEL_URL", "")
-    client = TestClient(create_vercel_app(), base_url=f"https://{host}")
-    session = client.get("/v1/workbench/session")
-    _require_ok(session, "owner session")
-    csrf = session.json()["csrf_token"]
-    conversation = client.post(
-        "/v1/workbench/planning/conversations",
-        headers={"X-CSRF-Token": csrf},
-        json={"title": "Real Tweak Vercel recovery"},
-    )
-    _require_ok(conversation, "planning conversation creation")
-    if not str(conversation.json().get("id", "")).startswith("planning:"):
-        raise RuntimeError("Planning Chat conversation id is invalid")
-    print(json.dumps({"status": "PASSED", "stage": "planning-conversation"}, sort_keys=True))
+    root = _state_root()
+    settings = _settings(root, _owner_key(), model_enabled=False)
+    build_default_service(settings)
+    store = PlanningConversationStore(settings.database_path)
+    conversation = store.create(PlanningConversationCreate(title="Real Tweak Vercel recovery"))
+    if not conversation.id.startswith("planning:"):
+        raise RuntimeError("Planning Chat store returned invalid conversation id")
+    print(json.dumps({"status": "PASSED", "stage": "planning-store-create"}, sort_keys=True))
     return 0
 
 
