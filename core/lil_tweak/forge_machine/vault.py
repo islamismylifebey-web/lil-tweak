@@ -115,7 +115,6 @@ class ForgeVault:
         return best
 
     def store_discovery(self, discovery: Discovery) -> str:
-        self.load_piece(discovery.origin_piece_hash)
         self._write_once(self._path("discoveries", f"{discovery.discovery_id}.json"), discovery.to_dict())
         return discovery.discovery_id
 
