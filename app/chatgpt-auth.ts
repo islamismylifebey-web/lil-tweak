@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { protectedVercelOwnerEmail } from "@/lib/owner-auth";
 
 export type ChatGPTUser = {
   userId: string;
@@ -18,6 +19,15 @@ const SIGN_OUT_PATH = "/signout-with-chatgpt";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  const protectedOwner = protectedVercelOwnerEmail(requestHeaders.get("host"));
+  if (protectedOwner) {
+    return {
+      userId: "vercel-protected-owner",
+      displayName: protectedOwner,
+      email: protectedOwner,
+      fullName: null,
+    };
+  }
   const userId = requestHeaders.get(USER_ID_HEADER)?.trim();
   const email = requestHeaders.get(USER_EMAIL_HEADER)?.trim().toLowerCase();
   if (!userId || !email) return null;
