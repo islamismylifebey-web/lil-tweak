@@ -1186,7 +1186,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     <div className="engineering-empty">
                       <img className="tweak-stage-avatar" src="/lil-tueeq-avatar.png" alt="" aria-hidden="true" />
                       <h1>What can I help you create?</h1>
-                      <p>Chat directly with Lil&apos;Tweak.AI. Tools and engineering actions stay off until you choose a work mode.</p>
+                      <p>Model calls are temporarily disabled. Engineering work remains available through the approval-gated runner.</p>
                     </div>
                   )
                 ) : activeJob ? (
@@ -1412,7 +1412,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     </button>
                   </div>
                 </div>
-                <span id="task-connection-status" className="sr-only">{engineerMode === "chat" ? "Direct OpenAI chat. No tools are enabled." : "Secure code gateway. Source is uploaded only when the task is submitted."}</span>
+                <span id="task-connection-status" className="sr-only">{engineerMode === "chat" ? "Model calls are temporarily disabled." : "Secure code gateway. Source is uploaded only when the task is submitted."}</span>
               </form>
             </div>
           </section>

@@ -133,10 +133,10 @@ test("renders the workbench only for an approved signed-in identity", async () =
     ]) {
       assert.match(html, new RegExp(label));
     }
-    assert.match(html, /OpenAI direct chat/);
     assert.match(html, /144k \/ 25,772/);
     assert.match(html, /What can I help you create\?/);
-    assert.match(html, /Direct OpenAI chat\. No tools are enabled\./);
+    assert.match(html, /Model calls are temporarily disabled\./);
+    assert.match(html, /Engineering work remains available through the approval-gated runner\./);
     assert.doesNotMatch(html, /Refactor this code|Explain this code|Write tests/);
     assert.doesNotMatch(html, />Disconnected</);
     assert.doesNotMatch(html, />Sign in</);
