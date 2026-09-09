@@ -70,6 +70,21 @@ def _entry_status(parent_fd: int, name: str) -> os.stat_result:
     return os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
 
 
+def _hash_descriptor(descriptor: int, size: int) -> str:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    digest = hashlib.sha256()
+    remaining = size
+    while remaining:
+        chunk = os.read(descriptor, min(remaining, READ_BYTES))
+        if not chunk:
+            raise BinaryVerificationError
+        digest.update(chunk)
+        remaining -= len(chunk)
+    if os.read(descriptor, 1):
+        raise BinaryVerificationError
+    return digest.hexdigest()
+
+
 def _open_verified_under_anchor(
     anchor: Path,
     components: Sequence[str],
@@ -156,26 +171,19 @@ def _open_verified_under_anchor(
         ):
             raise BinaryVerificationError
 
-        digest = hashlib.sha256()
-        remaining = before.st_size
-        while remaining:
-            chunk = os.read(binary_fd, min(remaining, READ_BYTES))
-            if not chunk:
-                raise BinaryVerificationError
-            digest.update(chunk)
-            remaining -= len(chunk)
-        if os.read(binary_fd, 1):
-            raise BinaryVerificationError
+        initial_digest = _hash_descriptor(binary_fd, before.st_size)
 
         if _test_hook is not None:
             _test_hook("after_hash")
 
+        verified_digest = _hash_descriptor(binary_fd, before.st_size)
         after = os.fstat(binary_fd)
         linked_after = _entry_status(parent_fd, binary_name)
         if (
             not _same_fields(before, after, FILE_STABLE_FIELDS)
             or not _same_fields(linked_after, after, FILE_STABLE_FIELDS)
-            or digest.hexdigest() != expected_sha256
+            or initial_digest != expected_sha256
+            or verified_digest != expected_sha256
         ):
             raise BinaryVerificationError
 
