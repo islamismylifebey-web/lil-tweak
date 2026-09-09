@@ -93,7 +93,8 @@ test("renders the workbench only for an approved signed-in identity", async () =
     assert.match(html, /aria-label="Open sidebar"/);
     assert.match(html, /aria-expanded="false"/);
     assert.match(html, /aria-controls="workspace-sidebar"/);
-    assert.match(html, /data-runner-state="secure-gateway"/);
+    assert.match(html, /data-runner-route="direct-core-to-local-podman"/);
+    assert.match(html, /data-live-runner-state="pending_configuration"/);
     assert.match(html, /aria-label="Local preparation load estimated at 0 percent/);
     assert.match(html, /data-tier="0"/);
     assert.match(html, /aria-label="Chat controls"/);
@@ -352,7 +353,8 @@ test("ships a real approval-gated engineering workflow without fabricated eviden
     readFile(new URL("../app/api/engineering/jobs/[id]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/engineering/jobs/[id]/decision/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(workbench, /data-runner-state="secure-gateway"/);
+  assert.match(workbench, /data-runner-route="direct-core-to-local-podman"/);
+  assert.match(workbench, /data-live-runner-state=\{runnerState\}/);
   assert.match(workbench, /createEngineeringJob/);
   assert.match(workbench, /uploadSourcesForJob/);
   assert.match(workbench, /dispatchEngineeringJob/);
@@ -405,7 +407,7 @@ test("keeps chat controls truthful, reversible, and owner-only", async () => {
   assert.match(controls, /No saved chat/);
   assert.match(controls, /Owner only\. Private Sites access and dispatch-owned identity are enforced before every server authorization check\./);
   assert.match(controls, /Direct chat capacity is/);
-  assert.match(controls, /<span>Code<\/span><small>Secure gateway/);
+  assert.match(controls, /<span>Code<\/span><small>Tueiq Core runner/);
   for (const id of ["chat-access-detail", "chat-files-detail", "chat-usage-detail"]) {
     assert.match(controls, new RegExp(`aria-controls="${id}"`));
     assert.match(controls, new RegExp(`id="${id}"`));
@@ -504,7 +506,8 @@ test("leaves authentication, API, model, runner, and approval contracts untouche
 
   assert.match(auth, /if \(!userId \|\| !email\) return null/);
   assert.match(chatRoute, /ownerFor\(request\)/);
-  assert.match(chatRoute, /OPENAI_API_KEY/);
+  assert.match(chatRoute, /MODEL_CALLS_DISABLED/);
+  assert.doesNotMatch(chatRoute, /OPENAI_API_KEY|responses\.create|fetch\(/);
   assert.match(engineeringRoute, /createCoreJob/);
   assert.match(engineeringRoute, /reserveDispatch/);
   assert.match(decisionRoute, /recordDecisionIntent/);
