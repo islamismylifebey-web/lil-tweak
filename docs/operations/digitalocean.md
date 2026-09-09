@@ -28,22 +28,22 @@ Every mutating core installer, Tunnel installer, combined wrapper path (includin
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.
 
-Build the core in CI or on a dedicated build host. Pass the Python-capable base image by digest because `Containerfile.core` intentionally has no mutable default. Debian bases must already provide Python 3.12; Wolfi bases install the pinned Python 3.12 package during the image build:
+Build the core in CI or on a dedicated build host. Pass a current Chainguard Python development image by digest because `Containerfile.core` intentionally has no mutable default. The tracked Python base is used for both the discarded builder stage and the runtime stage, so the release manifest retains its exact five image roles. It must provide a supported Python 3.12 through 3.14 runtime and `apk`. The build reconstructs Podman remote from a SHA-256-verified official source archive and upgrades the explicitly pinned vulnerable Go modules before copying only the static client into the runtime image:
 
 ```bash
 podman build \
   --build-arg PYTHON_BASE_IMAGE='REGISTRY/PYTHON@sha256:64_HEX_DIGEST' \
-  --build-arg PODMAN_REMOTE_STATIC_URL='HTTPS_DOWNLOAD_URL' \
-  --build-arg PODMAN_REMOTE_STATIC_SHA256='64_HEX_DIGEST' \
+  --build-arg PODMAN_SOURCE_URL='HTTPS_SOURCE_ARCHIVE_URL' \
+  --build-arg PODMAN_SOURCE_SHA256='64_HEX_DIGEST' \
   --file deploy/Containerfile.core \
   --tag TEMPORARY_BUILD_TAG .
 ```
 
-Build the disposable runner separately from a digest-pinned Node 22 Debian base. The shipped runner adds Python/pytest, a dedicated patch utility, Make/CMake, Go, Rust, and a headless JDK. It deliberately contains no Git binary, contains no Lil Tweak service credentials, and receives no network at runtime. Git source intake occurs only in the trusted core before files enter the sandbox:
+Build the disposable runner separately from a digest-pinned Wolfi base. The shipped runner installs current Wolfi packages for Node 22/npm, Python/pip/pytest, a dedicated patch utility, Make/CMake, Go, Rust/Cargo, and a JDK. The build verifies every required command and verifies that Git is absent. The image contains no Lil Tweak service credentials and receives no network at runtime. Git source intake occurs only in the trusted core before files enter the sandbox:
 
 ```bash
 podman build \
-  --build-arg RUNNER_BASE_IMAGE='REGISTRY/NODE22-DEBIAN@sha256:64_HEX_DIGEST' \
+  --build-arg RUNNER_BASE_IMAGE='REGISTRY/WOLFI-BASE@sha256:64_HEX_DIGEST' \
   --file deploy/Containerfile.runner \
   --tag TEMPORARY_RUNNER_BUILD_TAG .
 ```

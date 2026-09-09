@@ -102,10 +102,12 @@ test("ships a reproducible non-root multi-language sandbox image", () => {
   const runner = read("deploy/Containerfile.runner");
   assert.match(runner, /^ARG RUNNER_BASE_IMAGE$/m);
   assert.match(runner, /^FROM \$\{RUNNER_BASE_IMAGE\}$/m);
-  assert.match(runner, /python3-pytest/);
-  assert.match(runner, /golang-go/);
-  assert.match(runner, /cargo/);
-  assert.match(runner, /default-jdk-headless/);
+  assert.match(runner, /apk add --no-cache/);
+  assert.match(runner, /py3\.14-pytest/);
+  assert.match(runner, /go-1\.26/);
+  assert.match(runner, /rust-1\.97/);
+  assert.match(runner, /openjdk-26-default-jdk/);
+  assert.match(runner, /command -v cargo/);
   assert.match(runner, /\bpatch\b/);
   assert.match(runner, /! command -v git/);
   assert.doesNotMatch(runner, /^\s*git\s*\\?$/m);

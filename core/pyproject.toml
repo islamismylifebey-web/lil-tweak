@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "lil-tweak-core"
 version = "0.1.0"
 description = "Trusted execution core for the owner-only Lil Tweak code engineer"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "boto3>=1.35,<2",
   "openai>=1.109,<3",
