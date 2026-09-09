@@ -1,17 +1,37 @@
 ARG PYTHON_BASE_IMAGE
+
+FROM ${PYTHON_BASE_IMAGE} AS podman-builder
+USER root
+ARG PODMAN_SOURCE_URL
+ARG PODMAN_SOURCE_SHA256
+RUN apk add --no-cache ca-certificates curl go-1.27 \
+    && test -n "${PODMAN_SOURCE_URL}" \
+    && test -n "${PODMAN_SOURCE_SHA256}" \
+    && curl -fsSL -o /tmp/podman-source.tar.gz "${PODMAN_SOURCE_URL}" \
+    && echo "${PODMAN_SOURCE_SHA256}  /tmp/podman-source.tar.gz" | sha256sum -c - \
+    && mkdir /src \
+    && tar -xzf /tmp/podman-source.tar.gz -C /src --strip-components=1 \
+    && cd /src \
+    && go get google.golang.org/grpc@v1.83.2 golang.org/x/crypto@v0.56.0 \
+    && CGO_ENABLED=0 go build -mod=mod \
+        -tags "remote exclude_graphdriver_btrfs containers_image_openpgp" \
+        -o /podman ./cmd/podman \
+    && /podman --version
+
 FROM ${PYTHON_BASE_IMAGE}
+USER root
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     CONTAINER_HOST=unix:///run/podman/podman.sock
 
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates git podman util-linux \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates git util-linux
+COPY --from=podman-builder /podman /usr/local/bin/podman
+RUN podman --version
 
-RUN groupadd --gid 10001 lil-tweak \
-    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent lil-tweak
+RUN addgroup -g 10001 lil-tweak \
+    && adduser -D -H -u 10001 -G lil-tweak -h /nonexistent lil-tweak
 
 WORKDIR /app
 COPY core/pyproject.toml /app/core/pyproject.toml

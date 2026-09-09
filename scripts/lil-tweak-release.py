@@ -5,6 +5,8 @@ import argparse
 from contextlib import contextmanager
 import gzip
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import re
@@ -16,6 +18,7 @@ import tarfile
 import tempfile
 import unicodedata
 from datetime import datetime, timezone
+from datetime import timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -32,6 +35,7 @@ IMAGE = re.compile(
 )
 STATE_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 STATE_VALUE = re.compile(r"^[A-Za-z0-9._/:@+-]{1,4096}$")
+SITE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.~-]{0,255}")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)$")
 MAX_MANIFEST_BYTES = 32 * 1024 * 1024
@@ -1147,8 +1151,15 @@ def _stream_archive(
 def _archive_inventory(
     archive: Path,
     manifest: dict[str, Any],
+    *,
+    snapshot: bytes | None = None,
 ) -> tuple[str, int, list[str]]:
     expected_files, ordered_directories = _validated_manifest_inventory(manifest)
+    if snapshot is not None:
+        if type(snapshot) is not bytes or len(snapshot) > MAX_ARCHIVE_BYTES:
+            raise ReleaseError("archive_invalid")
+        _stream_archive(io.BytesIO(snapshot), manifest, expected_files, ordered_directories)
+        return hashlib.sha256(snapshot).hexdigest(), len(snapshot), ordered_directories
     with _secure_file_spool(Path(archive), maximum=MAX_ARCHIVE_BYTES) as (
         spool,
         archive_digest,
@@ -1238,12 +1249,21 @@ def _image_descriptor(reference: str) -> dict[str, str]:
     return {"reference": reference, "digest": reference.rsplit("@", 1)[1]}
 
 
+def _receipt_snapshot(path: Path, snapshot: bytes | None) -> bytes:
+    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600) if snapshot is None else snapshot
+    if type(data) is not bytes or len(data) > MAX_RECEIPT_BYTES:
+        raise ReleaseError("receipt_invalid")
+    return data
+
+
 def _decision_receipt(
     path: Path,
     expected: list[tuple[str, str]],
     error_code: str,
+    *,
+    snapshot: bytes | None = None,
 ) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+    data = _receipt_snapshot(path, snapshot)
     try:
         text = data.decode("ascii")
     except UnicodeDecodeError as error:
@@ -1300,8 +1320,8 @@ def _decision_receipt(
     return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
-def _base_image_receipt(path: Path, expected: list[str]) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+def _base_image_receipt(path: Path, expected: list[str], *, snapshot: bytes | None = None) -> dict[str, Any]:
+    data = _receipt_snapshot(path, snapshot)
     try:
         lines = [line for line in data.decode("ascii").splitlines() if line]
     except UnicodeDecodeError as error:
@@ -1319,9 +1339,11 @@ def _base_image_receipt(path: Path, expected: list[str]) -> dict[str, Any]:
     return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
-def _scan_receipt(path: Path) -> dict[str, Any]:
-    data = _read_secure(Path(path), maximum=MAX_RECEIPT_BYTES, required_mode=0o600)
+def _scan_receipt(path: Path, *, snapshot: bytes | None = None, artifact_snapshots: dict[str, bytes] | None = None) -> dict[str, Any]:
+    data = _receipt_snapshot(path, snapshot)
     required = {"core.sbom.json", "runner.sbom.json", "core.grype.json", "runner.grype.json"}
+    if (snapshot is None) != (artifact_snapshots is None) or (artifact_snapshots is not None and set(artifact_snapshots) != required):
+        raise ReleaseError("image_scan_receipt_invalid")
     artifacts: list[dict[str, Any]] = []
     observed: set[str] = set()
     try:
@@ -1336,7 +1358,11 @@ def _scan_receipt(path: Path) -> dict[str, Any]:
         name = source.name
         if name in observed or name not in required or source.resolve().parent != Path(path).resolve().parent:
             raise ReleaseError("image_scan_receipt_invalid")
-        artifact = _file_receipt(source)
+        if artifact_snapshots is None:
+            artifact = _file_receipt(source)
+        else:
+            raw = _receipt_snapshot(source, artifact_snapshots[name])
+            artifact = {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
         if artifact["sha256"] != match.group(1):
             raise ReleaseError("image_scan_receipt_invalid")
         observed.add(name)
@@ -1363,6 +1389,7 @@ def create_runtime_manifest(
     base_image_receipt: Path,
     image_scan_hashes: Path,
     output: Path,
+    activation_verification_receipt: Path | None = None,
 ) -> str:
     source, source_digest, source_manifest_size = load_canonical_manifest(
         Path(source_manifest), SOURCE_SCHEMA
@@ -1380,10 +1407,8 @@ def create_runtime_manifest(
         [python_base_image, runner_base_image, postgres_image],
     )
     image_scans = _scan_receipt(Path(image_scan_hashes))
-    host_go = _decision_receipt(
-        Path(host_go_receipt),
-        [
-            ("schema", "lil-tweak-host-go-receipt-v2"),
+    host_expected = [
+            ("schema", "lil-tweak-host-go-receipt-v3" if activation_verification_receipt is not None else "lil-tweak-host-go-receipt-v2"),
             ("decision", "GO"),
             ("source_commit", source["source"]["commit"]),
             ("source_tree", source["source"]["tree"]),
@@ -1396,9 +1421,13 @@ def create_runtime_manifest(
             ("runner_base_image", runner_base_image),
             ("base_image_receipt_sha256", base_images["sha256"]),
             ("image_scan_receipt_sha256", image_scans["receipt_sha256"]),
-        ],
-        "host_go_receipt_rejected",
-    )
+        ]
+    if activation_verification_receipt is not None:
+        a = _activation_helper()
+        verification = a.read_json(activation_verification_receipt)
+        a.validate_verification(verification, source["source"]["commit"], source["source"]["tree"], source_digest, archive_digest)
+        host_expected.append(("activation_verification_sha256", hashlib.sha256(a.read_bytes(activation_verification_receipt)).hexdigest()))
+    host_go = _decision_receipt(Path(host_go_receipt), host_expected, "host_go_receipt_rejected")
     payload = {
         "schema": RUNTIME_SCHEMA,
         "source": {
@@ -1430,10 +1459,11 @@ def _parse_state(path: Path) -> dict[str, str]:
         if not line or "=" not in line:
             raise ReleaseError("release_state_invalid")
         key, value = line.split("=", 1)
+        value_pattern = SITE_IDENTIFIER if key in {"SITES_VERSION_ID", "SITES_DEPLOYMENT_ID"} else STATE_VALUE
         if (
             not STATE_KEY.fullmatch(key)
             or key in values
-            or not STATE_VALUE.fullmatch(value)
+            or not value_pattern.fullmatch(value)
             or any(word in key for word in ("PASSWORD", "SECRET", "TOKEN", "CREDENTIAL", "REGISTRY_AUTH"))
         ):
             raise ReleaseError("release_state_invalid")
@@ -1482,11 +1512,25 @@ def _identifier(values: dict[str, str], name: str) -> str:
     return value
 
 
+def _site_identifier(values: dict[str, str], name: str) -> str:
+    """Preserve native Sites composite IDs without widening provider IDs."""
+    value = _required_state(values, name)
+    if SITE_IDENTIFIER.fullmatch(value) is None:
+        raise ReleaseError("release_state_invalid")
+    return value
+
+
 def _decimal(values: dict[str, str], name: str) -> int:
     value = _required_state(values, name)
     if DECIMAL.fullmatch(value) is None:
         raise ReleaseError("sites_access_rejected")
     return int(value)
+
+
+def _required_true(values: dict[str, str], name: str) -> bool:
+    if _required_state(values, name) != "true":
+        raise ReleaseError("sites_access_rejected")
+    return True
 
 
 def _runtime_size(value: Any) -> bool:
@@ -1591,6 +1635,59 @@ def _validated_runtime_manifest(runtime: Any) -> dict[str, Any]:
     return runtime
 
 
+def _activation_helper():
+    spec = importlib.util.spec_from_file_location("release_activation", Path(__file__).with_name("lil-tweak-activation-finalizer.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def owner_flow_expected(runtime, runtime_digest, sites, job_digest, deployed_at):
+    return [
+        ("schema", "lil-tweak-owner-flow-receipt-v3"), ("decision", "PASS"),
+        ("runtime_manifest_sha256", runtime_digest), ("source_commit", runtime["source"]["commit"]), ("source_tree", runtime["source"]["tree"]),
+        ("sites_version_id", sites["version_id"]), ("sites_version_number", str(sites["version_number"])),
+        ("sites_deployment_id", sites["deployment_id"]), ("sites_archive_sha256", sites["archive_sha256"]),
+        ("sites_deployed_at", deployed_at), ("owner_flow_job_sha256", job_digest), ("production_url", sites["production_url"]),
+    ]
+
+
+def _owner_job_binding(state):
+    a = _activation_helper()
+    path = Path(_required_state(state, "OWNER_FLOW_JOB"))
+    try:
+        job = a.validate_owner_job(a.read_json(path))
+        deployed_at = _required_state(state, "SITES_DEPLOYED_AT")
+        if not a.timestamp(deployed_at) <= a.timestamp(job["checkedAt"]) <= datetime.now(timezone.utc).timestamp():
+            raise ReleaseError("owner_flow_receipt_rejected")
+        a.fresh(deployed_at); a.fresh(job["checkedAt"])
+    except Exception:
+        raise ReleaseError("owner_flow_receipt_rejected") from None
+    return job, hashlib.sha256(a.read_bytes(path)).hexdigest(), deployed_at
+
+
+def create_owner_flow_receipt(runtime_manifest, release_state, owner_flow_job, output):
+    runtime, digest, _ = load_canonical_manifest(Path(runtime_manifest), RUNTIME_SCHEMA)
+    _validated_runtime_manifest(runtime)
+    state = _parse_state(Path(release_state))
+    if Path(_required_state(state, "OWNER_FLOW_JOB")) != Path(owner_flow_job):
+        raise ReleaseError("owner_flow_receipt_rejected")
+    job, job_digest, deployed_at = _owner_job_binding(state)
+    if (_required_state(state, "RUNTIME_MANIFEST_SHA256") != digest
+        or _required_state(state, "SOURCE_COMMIT") != runtime["source"]["commit"]
+        or _required_state(state, "SOURCE_TREE") != runtime["source"]["tree"]
+        or _required_state(state, "SITES_SOURCE_COMMIT") != runtime["source"]["commit"]):
+        raise ReleaseError("owner_flow_receipt_rejected")
+    sites = {"version_id": _site_identifier(state, "SITES_VERSION_ID"), "version_number": _decimal(state, "SITES_VERSION_NUMBER"),
+        "deployment_id": _site_identifier(state, "SITES_DEPLOYMENT_ID"), "archive_sha256": _required_state(state, "SITES_ARCHIVE_HASH"), "production_url": _https_origin(_required_state(state, "PRODUCTION_URL"))}
+    if not SHA256.fullmatch(sites["archive_sha256"]): raise ReleaseError("owner_flow_receipt_rejected")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    if _activation_helper().timestamp(job["checkedAt"]) > now.timestamp(): raise ReleaseError("owner_flow_receipt_rejected")
+    values = owner_flow_expected(runtime, digest, sites, job_digest, deployed_at) + [
+        ("issued_at", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("expires_at", (now + timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")), ("nonce", secrets.token_hex(16))]
+    return _activation_helper().publish(Path(output), raw="".join(k + "=" + v + "\n" for k, v in values).encode("ascii"))
+
+
 def create_production_manifest(
     runtime_manifest: Path,
     release_state: Path,
@@ -1616,39 +1713,42 @@ def create_production_manifest(
     sites_source = _required_state(state, "SITES_SOURCE_COMMIT")
     if sites_source != source_commit:
         raise ReleaseError("sites_source_mismatch")
-    production_url = _https_origin(_required_state(state, "PRODUCTION_URL"))
-    if _https_origin(_required_state(state, "PUBLIC_ORIGIN")) != production_url:
+    production_url_value = _required_state(state, "PRODUCTION_URL")
+    public_origin_value = _required_state(state, "PUBLIC_ORIGIN")
+    production_url = _https_origin(production_url_value)
+    public_origin = _https_origin(public_origin_value)
+    if production_url_value != production_url or public_origin_value != public_origin or public_origin != production_url:
         raise ReleaseError("production_origin_mismatch")
     core_origin = _https_origin(_required_state(state, "CORE_ORIGIN"))
     access_mode = _required_state(state, "SITES_ACCESS_MODE")
     owner_count = _decimal(state, "SITES_ALLOWED_OWNER_COUNT")
     group_count = _decimal(state, "SITES_ALLOWED_GROUP_COUNT")
     visitor_count = _decimal(state, "SITES_ALLOWED_VISITOR_COUNT")
+    custom_domain_count = _decimal(state, "SITES_CUSTOM_DOMAIN_COUNT")
+    anonymous_denied = _required_true(state, "SITES_ANONYMOUS_DENIED")
+    forged_identity_denied = _required_true(state, "SITES_FORGED_IDENTITY_DENIED")
+    alternate_host_rejected = _required_true(state, "SITES_ALTERNATE_HOST_REJECTED")
+    owner_same_origin_succeeded = _required_true(state, "SITES_OWNER_SAME_ORIGIN_SUCCEEDED")
     version_number = _decimal(state, "SITES_VERSION_NUMBER")
     prior_version = _decimal(state, "PRIOR_SITES_VERSION_NUMBER")
-    if (access_mode, owner_count, group_count, visitor_count) != ("custom", 1, 0, 0):
+    if (access_mode, owner_count, group_count, visitor_count, custom_domain_count) != ("custom", 1, 0, 0, 0):
         raise ReleaseError("sites_access_rejected")
     archive_hash = _required_state(state, "SITES_ARCHIVE_HASH")
     if not SHA256.fullmatch(archive_hash):
         raise ReleaseError("release_state_invalid")
-    sites_version_id = _identifier(state, "SITES_VERSION_ID")
-    sites_deployment_id = _identifier(state, "SITES_DEPLOYMENT_ID")
+    sites_version_id = _site_identifier(state, "SITES_VERSION_ID")
+    sites_deployment_id = _site_identifier(state, "SITES_DEPLOYMENT_ID")
+    job, owner_flow_job_digest, deployed_at = _owner_job_binding(state)
     owner_flow = _decision_receipt(
         Path(owner_flow_receipt),
-        [
-            ("schema", "lil-tweak-owner-flow-receipt-v2"),
-            ("decision", "PASS"),
-            ("runtime_manifest_sha256", runtime_digest),
-            ("source_commit", source_commit),
-            ("source_tree", source_tree),
-            ("sites_version_id", sites_version_id),
-            ("sites_version_number", str(version_number)),
-            ("sites_deployment_id", sites_deployment_id),
-            ("sites_archive_sha256", archive_hash),
-            ("production_url", production_url),
-        ],
+        owner_flow_expected(runtime, runtime_digest, {"version_id": sites_version_id, "version_number": version_number,
+            "deployment_id": sites_deployment_id, "archive_sha256": archive_hash, "production_url": production_url}, owner_flow_job_digest, deployed_at),
         "owner_flow_receipt_rejected",
     )
+    owner_times = dict(line.split("=", 1) for line in _read_secure(Path(owner_flow_receipt), maximum=MAX_RECEIPT_BYTES, required_mode=0o600).decode("ascii").splitlines())
+    a = _activation_helper()
+    if not a.timestamp(deployed_at) <= a.timestamp(job["checkedAt"]) <= a.timestamp(owner_times["issued_at"]):
+        raise ReleaseError("owner_flow_receipt_rejected")
     payload = {
         "schema": PRODUCTION_SCHEMA,
         "runtime": {
@@ -1673,8 +1773,6 @@ def create_production_manifest(
                 "access_application_id": _identifier(state, "ACCESS_APPLICATION_ID"),
                 "access_policy_id": _identifier(state, "ACCESS_POLICY_ID"),
                 "access_policy_revision": _identifier(state, "ACCESS_POLICY_REVISION"),
-                "managed_rule_id": _identifier(state, "MANAGED_INGRESS_RULE_ID"),
-                "managed_rule_revision": _identifier(state, "MANAGED_INGRESS_REVISION"),
             },
         },
         "sites": {
@@ -1690,10 +1788,22 @@ def create_production_manifest(
             "allowed_group_count": group_count,
             "allowed_visitor_count": visitor_count,
             "production_url": production_url,
+            "custom_domain_count": custom_domain_count,
+            "anonymous_denied": anonymous_denied,
+            "forged_identity_denied": forged_identity_denied,
+            "alternate_host_rejected": alternate_host_rejected,
+            "owner_same_origin_succeeded": owner_same_origin_succeeded,
             "prior_version_number": prior_version,
         },
         "owner_flow_receipt": owner_flow,
+        "owner_flow_job_sha256": owner_flow_job_digest,
     }
+    if state.get("ACTIVATION_OBSERVATIONS"):
+        observation_path = Path(state["ACTIVATION_OBSERVATIONS"])
+        observations = a.validate_resource_observations(a.read_json(observation_path))
+        a.exact(observations["sourceHead"], source_commit); a.exact(observations["sourceTree"], source_tree)
+        payload["resource_observations"] = observations
+        a.require(a.read_bytes(observation_path) == a.canonical(observations))
     return write_new_manifest(Path(output), payload)
 
 
@@ -1814,11 +1924,15 @@ def _parser() -> argparse.ArgumentParser:
         runtime.add_argument(f"--{argument}", type=Path, required=True)
     for argument in ("core-image", "runner-image", "postgres-image", "python-base-image", "runner-base-image"):
         runtime.add_argument(f"--{argument}", required=True)
+    runtime.add_argument("--activation-verification-receipt", type=Path)
     production = subcommands.add_parser("production-manifest")
     production.add_argument("--runtime-manifest", type=Path, required=True)
     production.add_argument("--release-state", type=Path, required=True)
     production.add_argument("--owner-flow-receipt", type=Path, required=True)
     production.add_argument("--output", type=Path, required=True)
+    owner_flow = subcommands.add_parser("owner-flow-receipt")
+    for name in ("runtime-manifest", "release-state", "owner-flow-job", "output"):
+        owner_flow.add_argument("--" + name, type=Path, required=True)
     verify_runtime = subcommands.add_parser("verify-runtime-install")
     verify_runtime.add_argument("--runtime-manifest", type=Path, required=True)
     verify_runtime.add_argument("--runtime-manifest-sha256", required=True)
@@ -1858,6 +1972,7 @@ def main(argv: list[str] | None = None) -> int:
                 runner_base_image=arguments.runner_base_image,
                 base_image_receipt=arguments.base_image_receipt,
                 image_scan_hashes=arguments.image_scan_hashes,
+                activation_verification_receipt=arguments.activation_verification_receipt,
                 output=arguments.output,
             )
         elif arguments.command == "production-manifest":
@@ -1867,6 +1982,8 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.owner_flow_receipt,
                 arguments.output,
             )
+        elif arguments.command == "owner-flow-receipt":
+            digest = create_owner_flow_receipt(arguments.runtime_manifest, arguments.release_state, arguments.owner_flow_job, arguments.output)
         else:
             verify_runtime_install(
                 runtime_manifest=arguments.runtime_manifest,

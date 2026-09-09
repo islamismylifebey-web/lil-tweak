@@ -12,7 +12,6 @@ umask 077
 
 TUNNEL_USER="lil-tweak-tunnel"
 CONFIG_DIR="/etc/lil-tweak-cloudflared"
-EXPECTED_HOST="galor-private-cloud-01"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 TEMPLATE="${PROJECT_DIR}/deploy/cloudflared/config.yml.example"
@@ -22,6 +21,7 @@ BINARY_VERIFIER_SOURCE="${PROJECT_DIR}/deploy/cloudflared/verify_binary.py"
 BINARY_VERIFIER_TARGET="/usr/local/libexec/lil-tweak/cloudflared-verify-exec.py"
 ROLLBACK_HELPER="${PROJECT_DIR}/scripts/lil-tweak-rollback.py"
 HOST_IDENTITY_HELPER="${PROJECT_DIR}/scripts/lil-tweak-host-identity.py"
+TARGET_HELPER="${PROJECT_DIR}/scripts/lil-tweak-digitalocean-target.py"
 staging_file=""
 unit_staging_file=""
 credentials_snapshot=""
@@ -93,7 +93,8 @@ offline_check() {
   for required in \
     "${TEMPLATE}" "${UNIT}" "${VALIDATOR}" "${BINARY_VERIFIER_SOURCE}" \
     "${ROLLBACK_HELPER}" \
-    "${HOST_IDENTITY_HELPER}"
+    "${HOST_IDENTITY_HELPER}" \
+    "${TARGET_HELPER}"
   do
     [[ -f "${required}" && ! -L "${required}" ]] || die "missing deployment input: ${required}"
   done
@@ -109,6 +110,9 @@ offline_check() {
   [[ -x "${HOST_IDENTITY_HELPER}" ]] || die 'host identity helper must be executable'
   "${PYTHON}" -I -B "${HOST_IDENTITY_HELPER}" --check >/dev/null \
     || die 'host identity helper check failed'
+  [[ -x "${TARGET_HELPER}" ]] || die 'DigitalOcean target helper must be executable'
+  "${PYTHON}" -I -B "${TARGET_HELPER}" --check >/dev/null \
+    || die 'DigitalOcean target helper check failed'
   "${PYTHON}" -I -B "${BINARY_VERIFIER_SOURCE}" --check >/dev/null \
     || die 'cloudflared binary verifier check failed'
   printf 'install-cloudflare-tunnel check: ok\n'
@@ -129,10 +133,8 @@ else
 fi
 [[ ${EUID} -eq 0 ]] || die 'run the installer as root on the target droplet'
 offline_check >/dev/null
-
-actual_host="$(hostname --short)"
-[[ "${actual_host}" == "${LIL_TWEAK_EXPECTED_HOST:-${EXPECTED_HOST}}" ]] \
-  || die "refusing to install on unexpected host: ${actual_host}"
+"${PYTHON}" -I -B "${TARGET_HELPER}" >/dev/null 2>&1 \
+  || die 'DigitalOcean target verification failed'
 
 tunnel_id="${LIL_TWEAK_TUNNEL_ID:-}"
 core_hostname="${LIL_TWEAK_CORE_HOSTNAME:-}"

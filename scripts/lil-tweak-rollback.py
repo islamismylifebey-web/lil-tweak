@@ -8,6 +8,7 @@ import errno
 import fcntl
 import grp
 import hashlib
+import importlib.util
 import json
 import os
 import pwd
@@ -32,7 +33,7 @@ with warnings.catch_warnings():
     import spwd
 
 
-EXPECTED_HOST = "galor-private-cloud-01"
+EXPECTED_HOST = "galor-tweak-runner-01"
 RECEIPT_ROOT = PurePosixPath("/var/lib/lil-tweak-release-rollback")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -70,6 +71,9 @@ ROOT_COMMAND_ENVIRONMENT = {
 }
 HOST_IDENTITY_HELPER = Path(__file__).resolve().with_name(
     "lil-tweak-host-identity.py"
+)
+TARGET_HELPER = Path(__file__).resolve().with_name(
+    "lil-tweak-digitalocean-target.py"
 )
 
 
@@ -134,6 +138,39 @@ class RollbackError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def _load_target_helper() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        "_lil_tweak_digitalocean_target_for_rollback",
+        TARGET_HELPER,
+    )
+    if spec is None or spec.loader is None:
+        raise RollbackError("target_helper_invalid")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise RollbackError("target_helper_invalid") from error
+    return module
+
+
+_TARGET_HELPER_MODULE = _load_target_helper()
+
+
+def _verify_exact_target() -> None:
+    try:
+        _TARGET_HELPER_MODULE.verify_target()
+    except Exception:
+        raise RollbackError("target_verification_failed") from None
+
+
+def _check_exact_target_helper() -> None:
+    try:
+        _TARGET_HELPER_MODULE.offline_check()
+    except Exception:
+        raise RollbackError("target_helper_check_failed") from None
 
 
 def _valid_image_reference(reference: Any) -> bool:
@@ -1226,6 +1263,7 @@ def capture_receipt(
     hostname_getter: Callable[[], str] = lambda: socket.gethostname().split(".", 1)[0],
     executor: Any | None = None,
 ) -> str:
+    _verify_exact_target()
     output = Path(output)
     root = Path(root).resolve()
     captured_at, captured_iso = _validate_receipt_name(output, source_commit, root)
@@ -1939,6 +1977,7 @@ def lease_exec(
     expected_manifest_sha256: str,
     command: list[str] | tuple[str, ...],
 ) -> int:
+    _verify_exact_target()
     receipt = Path(receipt)
     normalized_command = _validate_lease_command(command)
     with _receipt_lock(receipt) as descriptor:
@@ -2163,6 +2202,7 @@ def authorize_file(
     uid: int,
     gid: int,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     allowed = {path for path, expected_type, _ in MANAGED_PATHS if expected_type == "regular"}
     if logical_path not in allowed or mode < 0 or mode > 0o7777 or uid < 0 or gid < 0:
@@ -2192,6 +2232,7 @@ def authorize_object(
     *,
     executor: Any | None = None,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     allowed = {(object_kind, object_name) for object_kind, object_name in PODMAN_NAMES}
     if (kind, name) not in allowed or kind == "volume":
@@ -2242,6 +2283,7 @@ def finalize_object(
     *,
     executor: Any | None = None,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     allowed = {(object_kind, object_name) for object_kind, object_name in PODMAN_NAMES}
     if (kind, name) not in allowed or kind == "volume":
@@ -2295,6 +2337,7 @@ def authorize_images(
     *,
     executor: Any | None = None,
 ) -> None:
+    _verify_exact_target()
     if (
         not isinstance(references, dict)
         or set(references) != set(IMAGE_ROLES)
@@ -2334,6 +2377,7 @@ def mark_completed(
     receipt: Path,
     expected_manifest_sha256: str,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     with _receipt_lock(receipt):
         digest = verify_receipt(receipt, expected_manifest_sha256)
@@ -2413,6 +2457,7 @@ def verify_fresh_install(
     hostname_getter: Callable[[], str] = lambda: socket.gethostname().split(".", 1)[0],
     executor: Any | None = None,
 ) -> str:
+    _verify_exact_target()
     receipt = Path(receipt)
     root = Path(root).resolve()
     if executor is None:
@@ -2468,6 +2513,7 @@ def acknowledge_quarantine(
     receipt: Path,
     expected_manifest_sha256: str,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     with _receipt_lock(receipt):
         digest = verify_receipt(receipt, expected_manifest_sha256)
@@ -3174,6 +3220,7 @@ def restore_receipt(
     hostname_getter: Callable[[], str] = lambda: socket.gethostname().split(".", 1)[0],
     executor: Any | None = None,
 ) -> None:
+    _verify_exact_target()
     receipt = Path(receipt)
     if executor is None:
         executor = SystemExecutor()
@@ -3518,6 +3565,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
         if arguments.check:
+            _check_exact_target_helper()
             print("lil-tweak-rollback check: ok")
             return 0
         if not arguments.command:

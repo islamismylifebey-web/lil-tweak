@@ -268,7 +268,6 @@ class EngineeringOrchestrator:
         clock: Any = time.time,
         monotonic: Any = time.monotonic,
         job_timeout_seconds: int = 20 * 60,
-        galor: Any = None,
         lease: JobLease | None = None,
         lease_seconds: int = 60,
     ) -> None:
@@ -278,7 +277,6 @@ class EngineeringOrchestrator:
         self.clock = clock
         self.monotonic = monotonic
         self.job_timeout_seconds = job_timeout_seconds
-        self.galor = galor
         self.lease = lease
         self.lease_seconds = lease_seconds
         self.resource_profile = {
@@ -381,23 +379,11 @@ class EngineeringOrchestrator:
                 latest = self.store.get_job(job.id, owner_id)
                 if latest is not None and latest.cancel_requested:
                     return self._move(latest, JobState.CANCELLED)
-            galor_context = None
-            if self.galor is not None:
-                galor_result = self.galor.fetch(dict(job.project_context or {}))
-                galor_context = galor_result.context
-                if galor_result.error:
-                    self.store.append_event(
-                        job.id,
-                        owner_id,
-                        "galor_unavailable",
-                        {"code": "galor_unavailable"},
-                    )
             result: AgentResult = self.agent.run(
                 mode=job.mode,
                 prompt=job.prompt,
                 source_inventory=source_inventory,
                 project_context=job.project_context,
-                galor_context=galor_context,
                 deadline=deadline,
                 monotonic=self.monotonic,
             )

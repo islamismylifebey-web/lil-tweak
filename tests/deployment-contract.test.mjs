@@ -22,14 +22,27 @@ const requiredFiles = [
   "scripts/install-lil-tweak-release.sh",
   "scripts/lil-tweak-secret-snapshot.py",
   "scripts/lil-tweak-host-identity.py",
+  "scripts/lil-tweak-digitalocean-target.py",
   "deploy/cloudflared/validate_credentials.py",
   "deploy/cloudflared/verify_binary.py",
   "scripts/verify-deployment.sh",
+  "scripts/lil-tweak-activation-finalizer.py",
+  "scripts/lil-tweak-independent-review.py",
+  "scripts/lil-tweak-live-evidence.py",
+  "docs/operations/tueiq-runner-activation.md",
   "docs/operations/digitalocean.md",
   "docs/operations/cloudflare-d1.md",
   "deploy/cloudflare/wrangler.d1.example.jsonc",
   "deploy/cloudflare/d1-schema-probe.sql",
 ];
+
+test("activation helper checks are executable offline inventory entries", () => {
+  for (const path of ["scripts/lil-tweak-activation-finalizer.py", "scripts/lil-tweak-independent-review.py", "scripts/lil-tweak-live-evidence.py"]) {
+    const result = spawnSync("python3", [path, "--check"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /CONNECTED|QUALIFIED|READY_TO_WORK/);
+  }
+});
 
 test("ships the complete isolated DigitalOcean deployment surface", () => {
   for (const path of requiredFiles) {
@@ -89,10 +102,12 @@ test("ships a reproducible non-root multi-language sandbox image", () => {
   const runner = read("deploy/Containerfile.runner");
   assert.match(runner, /^ARG RUNNER_BASE_IMAGE$/m);
   assert.match(runner, /^FROM \$\{RUNNER_BASE_IMAGE\}$/m);
-  assert.match(runner, /python3-pytest/);
-  assert.match(runner, /golang-go/);
-  assert.match(runner, /cargo/);
-  assert.match(runner, /default-jdk-headless/);
+  assert.match(runner, /apk add --no-cache/);
+  assert.match(runner, /py3\.14-pytest/);
+  assert.match(runner, /go-1\.26/);
+  assert.match(runner, /rust-1\.97/);
+  assert.match(runner, /openjdk-26-default-jdk/);
+  assert.match(runner, /command -v cargo/);
   assert.match(runner, /\bpatch\b/);
   assert.match(runner, /! command -v git/);
   assert.doesNotMatch(runner, /^\s*git\s*\\?$/m);
@@ -183,6 +198,7 @@ test("scripts support offline checks without contacting the droplet", () => {
   for (const script of [
     "scripts/lil-tweak-secret-snapshot.py",
     "scripts/lil-tweak-host-identity.py",
+    "scripts/lil-tweak-digitalocean-target.py",
   ]) {
     const helperCheck = spawnSync("python3", [script, "--check"], { encoding: "utf8" });
     assert.equal(helperCheck.status, 0, helperCheck.stderr || helperCheck.stdout);
@@ -203,12 +219,37 @@ test("scripts support offline checks without contacting the droplet", () => {
   assert.doesNotMatch(ready, /\["v1",\s*"GET"/);
 });
 
+test("all release mutation paths bind the exact DigitalOcean guest", () => {
+  for (const path of [
+    "scripts/install-digitalocean.sh",
+    "scripts/install-cloudflare-tunnel.sh",
+    "scripts/install-lil-tweak-release.sh",
+    "scripts/lil-tweak-rollback.py",
+  ]) {
+    const source = read(path);
+    assert.match(source, /lil-tweak-digitalocean-target\.py/);
+    assert.doesNotMatch(source, /LIL_TWEAK_EXPECTED_HOST/);
+  }
+
+  for (const path of [
+    "README.md",
+    "docs/operations/digitalocean.md",
+    "docs/operations/cloudflare-private-ingress.md",
+  ]) {
+    const document = read(path);
+    assert.match(document, /DigitalOcean Droplet `597343619`/);
+    assert.match(document, /`galor-tweak-runner-01`/);
+    assert.match(document, /http:\/\/169\.254\.169\.254\/metadata\/v1\/id/);
+    assert.match(document, /scripts\/lil-tweak-digitalocean-target\.py/);
+  }
+});
+
 test("runbook makes Cloudflare the only ingress and documents lifecycle drills", () => {
   const readme = read("README.md");
   const runbook = read("docs/operations/digitalocean.md");
 
   for (const phrase of [
-    "galor-private-cloud-01",
+    "galor-tweak-runner-01",
     "Cloudflare Tunnel",
     "never open port 8017",
     "dedicated `lil-tweak` Unix user",
@@ -217,8 +258,8 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
     "restore",
     "signing-key rotation",
     "rollback",
-    "GALOR Hub",
-    "read-only",
+    "directly owns",
+    "no intermediary runner control plane",
     "/healthz",
     "/readyz",
     "1 GiB",
@@ -229,19 +270,26 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
     assert.ok(runbook.toLowerCase().includes(phrase.toLowerCase()), `missing ${phrase}`);
   }
   for (const phrase of [
-    "galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host.",
-    "GALOR Hub is not installed by this release and LIL_TWEAK_GALOR_READONLY_URL remains unset.",
-    "Four-GiB co-residency remains blocked; a four-GiB dedicated host still requires live headroom qualification.",
+    "galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host.",
+    "GALOR Hub is abandoned and is not a Lil Tweak dependency.",
+    "Four-GiB deployment remains blocked until live headroom qualification",
   ]) {
     for (const document of [readme, runbook]) {
       const normalized = document.replaceAll("`", "");
       assert.ok(normalized.includes(phrase), `missing dedicated-host declaration: ${phrase}`);
     }
   }
-  assert.doesNotMatch(runbook, /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/);
+  const withoutMetadataEndpoint = runbook.replaceAll(
+    "http://169.254.169.254/metadata/v1/id",
+    "",
+  );
+  assert.doesNotMatch(
+    withoutMetadataEndpoint,
+    /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/,
+  );
 });
 
-test("four-GiB GALOR co-residency is formally blocked", () => {
+test("four-GiB standalone deployment stays blocked pending live evidence", () => {
   const readme = read("README.md").toLowerCase();
   const runbook = read("docs/operations/digitalocean.md").toLowerCase();
 

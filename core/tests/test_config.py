@@ -8,7 +8,7 @@ def valid_environment():
     return {
         "LIL_TWEAK_DATABASE_URL": "postgresql://localhost/lil_tweak",
         "LIL_TWEAK_SIGNING_KEYS_JSON": json.dumps({"primary": "s" * 32}),
-        "LIL_TWEAK_CANONICAL_OWNER_ID": "ab43c7488fb38a90c7bb9c4bcc0e23e5",
+        "LIL_TWEAK_CANONICAL_OWNER_ID": "a0885bc0b2c079e996629061a723c74d",
         "OPENAI_API_KEY": "test-only",
         "LIL_TWEAK_OPENAI_MODEL": "gpt-5.6-terra",
         "LIL_TWEAK_RUNNER_IMAGE": "runner@sha256:" + "a" * 64,
@@ -39,32 +39,34 @@ class ConfigTests(unittest.TestCase):
                     Config.from_env(environment)
 
     def test_canonical_owner_is_the_exact_control_plane_scope_shape(self):
-        for owner in ("owner", "A" * 32, "a" * 31, "g" * 32, "0" * 32):
+        config = Config.from_env(valid_environment())
+        self.assertEqual(
+            config.canonical_owner_id, "a0885bc0b2c079e996629061a723c74d"
+        )
+        for owner in (
+            "owner",
+            "A" * 32,
+            "a" * 31,
+            "g" * 32,
+            "0" * 32,
+            "ab43c7488fb38a90c7bb9c4bcc0e23e5",
+        ):
             with self.subTest(owner=owner):
                 environment = valid_environment()
                 environment["LIL_TWEAK_CANONICAL_OWNER_ID"] = owner
                 with self.assertRaises(ValueError):
                     Config.from_env(environment)
 
-    def test_galor_endpoint_requires_exact_credential_free_https_url(self):
-        for url in (
-            "http://galor.internal/context",
-            "https://user:pass@galor.internal/context",
-            "https://galor.internal/context?redirect=other",
-        ):
-            with self.subTest(url=url):
-                environment = valid_environment()
-                environment["LIL_TWEAK_GALOR_READONLY_URL"] = url
-                with self.assertRaises(ValueError):
-                    Config.from_env(environment)
+    def test_retired_galor_hub_setting_is_rejected(self):
         environment = valid_environment()
         environment["LIL_TWEAK_GALOR_READONLY_URL"] = (
             "https://galor-readonly.internal/v1/project-context"
         )
-        self.assertEqual(
-            Config.from_env(environment).galor_readonly_url,
-            environment["LIL_TWEAK_GALOR_READONLY_URL"],
-        )
+        with self.assertRaisesRegex(
+            ValueError, "LIL_TWEAK_GALOR_READONLY_URL is retired"
+        ):
+            Config.from_env(environment)
+        self.assertFalse(hasattr(Config.from_env(valid_environment()), "galor_readonly_url"))
 
     def test_admission_and_job_deadline_are_bounded(self):
         environment = valid_environment()

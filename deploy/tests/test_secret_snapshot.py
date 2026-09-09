@@ -44,7 +44,7 @@ def valid_core_environment() -> bytes:
         f"LIL_TWEAK_DATABASE_URL=postgresql://lil_tweak_app:{APP_PASSWORD}"
         "@lil-tweak-postgres:5432/lil_tweak\n"
         'LIL_TWEAK_SIGNING_KEYS_JSON={"primary":"reviewed-base64url-signing-key-12"}\n'
-        "LIL_TWEAK_CANONICAL_OWNER_ID=ab43c7488fb38a90c7bb9c4bcc0e23e5\n"
+        "LIL_TWEAK_CANONICAL_OWNER_ID=a0885bc0b2c079e996629061a723c74d\n"
         "OPENAI_API_KEY=sk-reviewed-test-value\n"
         "LIL_TWEAK_OPENAI_MODEL=gpt-5.6-terra\n"
         f"LIL_TWEAK_RUNNER_IMAGE={RUNNER_IMAGE}\n"
@@ -113,6 +113,41 @@ class SecretSnapshotTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, b"")
         self.assertEqual(list(fixture.destination.iterdir()), [])
+
+    def test_runtime_parsers_and_checked_in_examples_share_the_exact_owner_scope(self) -> None:
+        from core.lil_tweak.config import CANONICAL_OWNER_SCOPE as CORE_SCOPE, Config
+
+        expected = "a0885bc0b2c079e996629061a723c74d"
+        snapshot = load_snapshot_module()
+        self.assertEqual(CORE_SCOPE, expected)
+        self.assertEqual(snapshot.CANONICAL_OWNER_SCOPE, expected)
+
+        environment = {
+            "LIL_TWEAK_DATABASE_URL": "postgresql://localhost/lil_tweak",
+            "LIL_TWEAK_SIGNING_KEYS_JSON": '{"primary":"' + "s" * 32 + '"}',
+            "LIL_TWEAK_CANONICAL_OWNER_ID": expected,
+            "OPENAI_API_KEY": "test-only",
+            "LIL_TWEAK_OPENAI_MODEL": "gpt-5.6-terra",
+            "LIL_TWEAK_RUNNER_IMAGE": "runner@sha256:" + "a" * 64,
+            "LIL_TWEAK_WORK_ROOT": "/srv/lil-tweak/jobs",
+            "LIL_TWEAK_WORK_ROOT_INODES": "204800",
+            "LIL_TWEAK_EVIDENCE_BUCKET": "evidence",
+            "LIL_TWEAK_EVIDENCE_ENDPOINT": "https://account.r2.cloudflarestorage.com",
+            "LIL_TWEAK_R2_ACCESS_KEY_ID": "access",
+            "LIL_TWEAK_R2_SECRET_ACCESS_KEY": "secret",
+        }
+        self.assertEqual(Config.from_env(environment).canonical_owner_id, expected)
+        self.assertEqual(
+            snapshot._parse_core_environment(valid_core_environment(), APP_PASSWORD),
+            RUNNER_IMAGE,
+        )
+        for example in (ROOT / "core" / ".env.example", ROOT / "deploy" / "core.env.example"):
+            assignments = {
+                line.split("=", 1)[0]: line.split("=", 1)[1]
+                for line in example.read_text(encoding="utf-8").splitlines()
+                if line.startswith("LIL_TWEAK_CANONICAL_OWNER_ID=")
+            }
+            self.assertEqual(assignments, {"LIL_TWEAK_CANONICAL_OWNER_ID": expected})
 
     def test_valid_inputs_are_frozen_as_private_byte_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -241,12 +276,16 @@ class SecretSnapshotTests(unittest.TestCase):
                 APP_PASSWORD.encode("ascii"), b"D" * 32, 1
             ),
             "wrong owner scope": valid.replace(
-                b"ab43c7488fb38a90c7bb9c4bcc0e23e5",
+                b"a0885bc0b2c079e996629061a723c74d",
                 b"0123456789abcdef0123456789abcdef",
             ),
-            "owner uppercase": valid.replace(
+            "login email hash": valid.replace(
+                b"a0885bc0b2c079e996629061a723c74d",
                 b"ab43c7488fb38a90c7bb9c4bcc0e23e5",
-                b"AB43C7488FB38A90C7BB9C4BCC0E23E5",
+            ),
+            "owner uppercase": valid.replace(
+                b"a0885bc0b2c079e996629061a723c74d",
+                b"A0885BC0B2C079E996629061A723C74D",
             ),
             "signing JSON list": valid.replace(
                 b'{"primary":"reviewed-base64url-signing-key-12"}',

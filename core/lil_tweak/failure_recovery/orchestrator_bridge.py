@@ -48,7 +48,6 @@ class RecoveryAwareEngineeringOrchestrator:
         clock: Any = None,
         monotonic: Any = None,
         job_timeout_seconds: int = 20 * 60,
-        galor: Any = None,
         lease: JobLease | None = None,
         lease_seconds: int = 60,
     ) -> None:
@@ -59,7 +58,6 @@ class RecoveryAwareEngineeringOrchestrator:
         self.clock = clock
         self.monotonic = monotonic
         self.job_timeout_seconds = job_timeout_seconds
-        self.galor = galor
         self.lease = lease
         self.lease_seconds = lease_seconds
         self.last_recovery_decision: RecoveryDecision | None = None
@@ -84,7 +82,6 @@ class RecoveryAwareEngineeringOrchestrator:
             "agent": observing_agent,
             "evidence_store": self.evidence_store,
             "job_timeout_seconds": self.job_timeout_seconds,
-            "galor": self.galor,
             "lease": self.lease,
             "lease_seconds": self.lease_seconds,
         }

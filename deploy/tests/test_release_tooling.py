@@ -96,7 +96,7 @@ def write_owner_flow_receipt(
 ) -> None:
     issued_at, expires_at = decision_window(stale=stale)
     values = {
-        "schema": "lil-tweak-owner-flow-receipt-v2",
+        "schema": "lil-tweak-owner-flow-receipt-v3",
         "decision": "PASS",
         "runtime_manifest_sha256": runtime_digest,
         "source_commit": state["SOURCE_COMMIT"],
@@ -105,6 +105,8 @@ def write_owner_flow_receipt(
         "sites_version_number": state["SITES_VERSION_NUMBER"],
         "sites_deployment_id": state["SITES_DEPLOYMENT_ID"],
         "sites_archive_sha256": state["SITES_ARCHIVE_HASH"],
+        "sites_deployed_at": state["SITES_DEPLOYED_AT"],
+        "owner_flow_job_sha256": hashlib.sha256(Path(state["OWNER_FLOW_JOB"]).read_bytes()).hexdigest(),
         "production_url": state["PRODUCTION_URL"],
         "issued_at": issued_at,
         "expires_at": expires_at,
@@ -196,6 +198,38 @@ class ReleaseFixture:
 
 
 class ReleaseToolingTests(unittest.TestCase):
+    def test_native_sites_identifiers_remain_opaque_and_bounded(self) -> None:
+        release = load_release_module()
+        native = "appgprj_6a7c11351b548191a9f9e936ae8ff837~appgver_51bb788eee4481919fa8cb280a126f89"
+        self.assertEqual(release._site_identifier({"SITES_VERSION_ID": native}, "SITES_VERSION_ID"), native)
+        for invalid in (" " + native, native + "\n", "https://site.invalid/id", "x" * 257):
+            with self.subTest(invalid=invalid), self.assertRaises(release.ReleaseError):
+                release._site_identifier({"SITES_VERSION_ID": invalid}, "SITES_VERSION_ID")
+        with self.assertRaises(release.ReleaseError):
+            release._identifier({"RESOURCE_ID": native}, "RESOURCE_ID")
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "release-state.env"
+            state.write_text("SITES_VERSION_ID=" + native + "\nSITES_DEPLOYMENT_ID=" + native + "\n")
+            state.chmod(0o600)
+            self.assertEqual(release._parse_state(state)["SITES_VERSION_ID"], native)
+            state.write_text("RESOURCE_ID=" + native + "\n")
+            with self.assertRaises(release.ReleaseError):
+                release._parse_state(state)
+
+    def test_release_target_gate_has_a_host_safe_offline_check(self) -> None:
+        target = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"
+        result = subprocess.run(
+            [sys.executable, str(target), "--check"],
+            cwd=ROOT,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "DigitalOcean target check: ok\n")
+        self.assertEqual(result.stderr, "")
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.release = load_release_module()
@@ -899,6 +933,17 @@ class ReleaseToolingTests(unittest.TestCase):
             runtime, runtime_payload = self._create_canonical_runtime_manifest(root, fixture)
             runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
             state = root / "release-state.env"
+            from deploy.tests.test_activation_finalizer import load
+            activation = load()
+            q = activation.q
+            job = {"schema": "tueiq-owner-flow-job-v1", "checkedAt": decision_window()[0], "requestId": "00000000-0000-4000-8000-000000000000", "jobId": "job:" + "a" * 32,
+                "ownerScope": q.OWNER_SCOPE, "jobRevision": 3, "mode": "architect", "state": "completed", "gitSource": q.submission("architect")["gitSource"],
+                "sourceDigest": q.BASELINE_TREE_SHA256, "proposalDigest": "b" * 64, "approvalProposal": None, "approvalConsumed": False,
+                "evidence": [{"id": "evidence:" + str(i) * 32, "category": q.CATEGORIES[name], "filename": name, "mediaType": media, "sizeBytes": 0,
+                    "sha256": q.EMPTY_SHA256, "createdAt": decision_window()[0]} for i, (name, media) in enumerate(q.ARTIFACTS.items(), 1)],
+                "baselineTreeSha256": q.BASELINE_TREE_SHA256, "finalTreeSha256": q.BASELINE_TREE_SHA256, "fileSha256": q.SOURCE_SHA256, "commandDigest": "c" * 64, "editJournalDigest": "d" * 64}
+            job_path = root / "owner-job.json"
+            activation.publish(job_path, job)
             values = {
                 "RUNTIME_MANIFEST": str(runtime),
                 "RUNTIME_MANIFEST_SHA256": runtime_digest,
@@ -914,13 +959,11 @@ class ReleaseToolingTests(unittest.TestCase):
                 "ACCESS_APPLICATION_ID": "access-app",
                 "ACCESS_POLICY_ID": "access-policy",
                 "ACCESS_POLICY_REVISION": "access-r1",
-                "MANAGED_INGRESS_RULE_ID": "managed-rule",
-                "MANAGED_INGRESS_REVISION": "managed-r1",
                 "CORE_ORIGIN": "https://core.example.invalid",
                 "SITES_SOURCE_COMMIT": runtime_payload["source"]["commit"],
-                "SITES_VERSION_ID": "site-version",
+                "SITES_VERSION_ID": "site-project~site-version",
                 "SITES_VERSION_NUMBER": "2",
-                "SITES_DEPLOYMENT_ID": "site-deployment",
+                "SITES_DEPLOYMENT_ID": "site-project~site-deployment",
                 "SITES_ARCHIVE_HASH": "c" * 64,
                 "SITES_ENVIRONMENT_REVISION": "env-r1",
                 "SITES_ACCESS_REVISION": "access-r2",
@@ -928,9 +971,16 @@ class ReleaseToolingTests(unittest.TestCase):
                 "SITES_ALLOWED_OWNER_COUNT": "1",
                 "SITES_ALLOWED_GROUP_COUNT": "0",
                 "SITES_ALLOWED_VISITOR_COUNT": "0",
+                "SITES_CUSTOM_DOMAIN_COUNT": "0",
+                "SITES_ANONYMOUS_DENIED": "true",
+                "SITES_FORGED_IDENTITY_DENIED": "true",
+                "SITES_ALTERNATE_HOST_REJECTED": "true",
+                "SITES_OWNER_SAME_ORIGIN_SUCCEEDED": "true",
                 "PRODUCTION_URL": "https://tweak.example.invalid",
                 "PUBLIC_ORIGIN": "https://tweak.example.invalid",
                 "PRIOR_SITES_VERSION_NUMBER": "1",
+                "SITES_DEPLOYED_AT": (datetime.now(timezone.utc) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "OWNER_FLOW_JOB": str(job_path),
             }
             state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
             state.chmod(0o600)
@@ -945,9 +995,19 @@ class ReleaseToolingTests(unittest.TestCase):
             self.assertEqual(manifest["runtime"]["manifest_sha256"], runtime_digest)
             self.assertEqual(manifest["sites"]["access_mode"], "custom")
             self.assertEqual(manifest["sites"]["allowed_owner_count"], 1)
+            self.assertEqual(manifest["sites"]["production_url"], values["PUBLIC_ORIGIN"])
+            self.assertEqual(manifest["sites"]["custom_domain_count"], 0)
+            self.assertEqual(
+                {name: manifest["sites"][name] for name in ("anonymous_denied", "forged_identity_denied", "alternate_host_rejected", "owner_same_origin_succeeded")},
+                dict.fromkeys(("anonymous_denied", "forged_identity_denied", "alternate_host_rejected", "owner_same_origin_succeeded"), True),
+            )
+            self.assertEqual(set(manifest["cloudflare"]["ingress"]), {"core_origin", "tunnel_id", "access_application_id", "access_policy_id", "access_policy_revision"})
 
             for label, options in (
                 ("stale", {"stale": True}),
+                ("old-v2", {"overrides": {"schema": "lil-tweak-owner-flow-receipt-v2"}}),
+                ("before-deployment", {"overrides": {"issued_at": (datetime.now(timezone.utc) - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")}}),
+                ("changed-job", {"overrides": {"owner_flow_job_sha256": "0" * 64}}),
                 (
                     "mismatched-deployment",
                     {"overrides": {"sites_deployment_id": "other-deployment"}},
@@ -1084,6 +1144,20 @@ class ReleaseToolingTests(unittest.TestCase):
                         )
 
             values["SITES_ALLOWED_VISITOR_COUNT"] = "0"
+            for field, replacement in (
+                ("SITES_CUSTOM_DOMAIN_COUNT", "1"),
+                ("SITES_ANONYMOUS_DENIED", "false"),
+                ("SITES_FORGED_IDENTITY_DENIED", "false"),
+                ("SITES_ALTERNATE_HOST_REJECTED", "false"),
+                ("SITES_OWNER_SAME_ORIGIN_SUCCEEDED", "false"),
+            ):
+                original = values[field]
+                values[field] = replacement
+                state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+                with self.subTest(live_site_boundary=field), self.assertRaisesRegex(self.release.ReleaseError, "sites_access_rejected"):
+                    self.release.create_production_manifest(runtime, state, owner, root / f"bad-{field.lower()}.json")
+                values[field] = original
+
             values["RUNTIME_MANIFEST_SHA256"] = "f" * 64
             state.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
             with self.assertRaisesRegex(self.release.ReleaseError, "runtime_manifest_mismatch"):
@@ -1107,7 +1181,7 @@ class ReleaseToolingTests(unittest.TestCase):
             rollback = root / "rollback-manifest.json"
             rollback_payload = {
                 "schema": "lil-tweak-rollback-receipt-v1",
-                "hostname": "galor-private-cloud-01",
+                "hostname": "galor-tweak-runner-01",
                 "captured_at": 1,
                 "captured_at_iso": "2026-08-15T00:00:00Z",
                 "source_commit": runtime_payload["source"]["commit"],

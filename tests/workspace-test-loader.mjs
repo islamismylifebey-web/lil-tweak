@@ -1,6 +1,6 @@
 const repositoryRoot = new URL("../", import.meta.url);
 
-export function resolve(specifier, context, nextResolve) {
+export async function resolve(specifier, context, nextResolve) {
   if (specifier === "cloudflare:workers") {
     return {
       url: "data:text/javascript,export const env=globalThis.__lilTweakWorkspaceTestEnv",
@@ -13,5 +13,16 @@ export function resolve(specifier, context, nextResolve) {
       shortCircuit: true,
     };
   }
-  return nextResolve(specifier, context);
+  try {
+    return await nextResolve(specifier, context);
+  } catch (error) {
+    if (
+      error?.code === "ERR_MODULE_NOT_FOUND" &&
+      specifier.startsWith(".") &&
+      !/\.[A-Za-z0-9]+$/.test(specifier)
+    ) {
+      return nextResolve(`${specifier}.ts`, context);
+    }
+    throw error;
+  }
 }

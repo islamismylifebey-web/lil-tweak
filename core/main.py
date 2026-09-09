@@ -16,7 +16,6 @@ from lil_tweak.archive import ingest_r2_sources
 from lil_tweak.config import Config
 from lil_tweak.evidence import R2EvidenceStore
 from lil_tweak.git_source import ingest_git_source
-from lil_tweak.galor import GalorClient
 from lil_tweak.limits import TRUSTED_WORK_ROOT_BYTES, TRUSTED_WORK_ROOT_INODES
 from lil_tweak.openai_agent import (
     CodeEngineer,
@@ -168,8 +167,6 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
     reviewed_instructions = load_reviewed_instructions(
         Path(__file__).resolve().parent / "prompts" / "code_engineer.md"
     )
-    galor = GalorClient(config.galor_readonly_url) if config.galor_readonly_url else None
-
     work_root = config.work_root.resolve()
     if not is_bounded_work_root(work_root):
         raise RuntimeError("work root must be a dedicated bounded tmpfs")
@@ -299,7 +296,6 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
                 agent=agent,
                 evidence_store=evidence_store,
                 job_timeout_seconds=config.job_timeout_seconds,
-                galor=galor,
                 lease=lease,
                 lease_seconds=lease_seconds,
             ).run_job(

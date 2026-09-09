@@ -1621,13 +1621,13 @@ button:disabled {
   white-space: nowrap;
 }
 
-.connection-pill[data-bridge-state="health_reachable"] {
+.connection-pill[data-connection-state="ready"] {
   color: #235b35;
   border-color: #9acaa8;
 }
 
-.connection-pill[data-bridge-state="health_unreachable"],
-.connection-pill[data-bridge-state="pending_configuration"] {
+.connection-pill[data-connection-state="unreachable"],
+.connection-pill[data-connection-state="pending_configuration"] {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 32%, var(--line));
 }

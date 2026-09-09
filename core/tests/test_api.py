@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import hmac
 import json
 import unittest
 from urllib.parse import urlsplit
@@ -12,7 +13,7 @@ from core.lil_tweak.signing import sign_request
 from core.lil_tweak.store import MemoryJobStore
 
 
-OWNER = "0123456789abcdef0123456789abcdef"
+OWNER = "a0885bc0b2c079e996629061a723c74d"
 
 
 async def asgi_request(app, method, target, body=b"", headers=None, chunks=None):
@@ -74,7 +75,15 @@ class ApiTests(unittest.TestCase):
             store=self.store,
             signing_keys={"primary": self.secret},
             canonical_owner_id=OWNER,
-            readiness=lambda: {"database": True, "runner": True, "evidence": True},
+            readiness=lambda: {
+                "database": True,
+                "runner": True,
+                "git": True,
+                "workspace": True,
+                "evidence": True,
+                "signing": True,
+                "admission": True,
+            },
             clock=lambda: self.now,
         )
         self.nonce = 0
@@ -155,6 +164,56 @@ class ApiTests(unittest.TestCase):
             "/readyz",
             headers=self.signed_headers("GET", "/readyz", idem=None),
         )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload,
+            {
+                "status": "ready",
+                "checks": {
+                    "database": True,
+                    "runner": True,
+                    "git": True,
+                    "workspace": True,
+                    "evidence": True,
+                    "signing": True,
+                    "admission": True,
+                },
+            },
+        )
+
+    def test_ready_accepts_absent_http_idempotency_as_empty_canonical_field(self):
+        nonce = "readiness-empty-idempotency"
+        request_id = "readiness-request"
+        digest = hashlib.sha256(b"").hexdigest()
+        canonical = "\n".join(
+            (
+                "v2",
+                "primary",
+                "GET",
+                "/readyz",
+                str(self.now),
+                nonce,
+                digest,
+                request_id,
+                "",
+                OWNER,
+            )
+        )
+        signature = hmac.new(
+            self.secret, canonical.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        headers = {
+            "X-Lil-Tweak-Key-Id": "primary",
+            "X-Lil-Tweak-Timestamp": str(self.now),
+            "X-Lil-Tweak-Nonce": nonce,
+            "X-Lil-Tweak-Request-Id": request_id,
+            "X-Lil-Tweak-Body-SHA256": digest,
+            "X-Lil-Tweak-Signature": signature,
+            "X-Lil-Tweak-Owner": OWNER,
+        }
+
+        self.assertNotIn("Idempotency-Key", headers)
+        status, payload = self.request("GET", "/readyz", headers=headers)
         self.assertEqual(status, 200)
         self.assertEqual(payload["status"], "ready")
 
@@ -460,6 +519,12 @@ class ApiTests(unittest.TestCase):
         stored = self.store.get_job(created["id"], OWNER)
         self.assertEqual(stored.git_source.commit, "a" * 40)
         self.assertEqual(stored.git_source.repository_url, good["repositoryUrl"])
+        expected_source = {"repositoryUrl": good["repositoryUrl"], "commit": "a" * 40}
+        self.assertEqual(created.get("gitSource"), expected_source)
+        path = f"/v1/jobs/{created['id']}"
+        status, observed = self.request("GET", path, headers=self.signed_headers("GET", path))
+        self.assertEqual(status, 200)
+        self.assertEqual(observed.get("gitSource"), expected_source)
 
         bad = json.dumps(
             {

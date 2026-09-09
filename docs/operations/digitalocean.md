@@ -1,43 +1,49 @@
-# Lil Tweak on `galor-private-cloud-01`
+# Lil Tweak on `galor-tweak-runner-01`
 
-galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and LIL_TWEAK_GALOR_READONLY_URL remains unset. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
+galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path with no intermediary. This runbook does not claim that the runner has passed live connection or qualification gates. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
 
 ## Invariants
 
 - Cloudflare is the sole public ingress. A Cloudflare Tunnel makes an outbound connection to the managed edge and forwards only to `http://127.0.0.1:8017`; never open port 8017 in the DigitalOcean Cloud Firewall, `ufw`, or an external load balancer.
-- The core and PostgreSQL run as the dedicated `lil-tweak` Unix user with rootless Podman. GALOR Hub must use a different Unix user.
+- The core and PostgreSQL run as the dedicated `lil-tweak` Unix user with rootless Podman.
 - The `lil-tweak-private` network, `lil-tweak-data` volume, `lil-tweak-postgres-data` volume, PostgreSQL database, and `lil_tweak_app`/`lil_tweak_migrator` roles belong only to Lil Tweak.
 - Production images are referenced by registry digest. Tags are allowed during a build, never in an installed Quadlet.
 - The trusted core admits one job. Each code job still receives a fresh, network-disabled sandbox with its own resource limits.
 - Trusted Git/R2 intake and snapshot staging live only on an exact 1 GiB, 204,800-inode tmpfs mounted inside the core; there is no writable host-workspace bind. The inode budget is three 65,536-inode tree slots (current proposal, immutable baseline, and mutually exclusive patch-candidate/final staging) plus an 8,192-inode bookkeeping reserve. Each runner receives a separate executable 256 MiB, 65,536-inode tmpfs and no host path.
-- The OpenAI, R2, database, request-signing, Tunnel, and optional GALOR credentials remain outside every sandbox.
-- GALOR Hub is an optional read-only HTTP dependency. Lil Tweak never joins a GALOR network, mounts a GALOR volume, uses a GALOR database role, or blocks engineering when retrieval is unavailable.
+- The OpenAI, R2, database, request-signing, and Tunnel credentials remain outside every sandbox.
+- The trusted Core invokes each fresh, network-disabled Podman sandbox directly. Tueiq has no intermediary runner control plane.
 
 ## Host and image preparation
 
-Confirm the target before doing anything:
+The immutable guest is DigitalOcean Droplet `597343619` with short hostname `galor-tweak-runner-01`. Confirm both identity components before doing anything:
 
 ```bash
-hostname --short
-test "$(hostname --short)" = galor-private-cloud-01
+python3 scripts/lil-tweak-digitalocean-target.py --check
+sudo python3 scripts/lil-tweak-digitalocean-target.py
 ```
+
+The live command reads only the Linux short hostname and `http://169.254.169.254/metadata/v1/id`. It accepts only exact decimal ID `597343619`, rejects redirects, uses a two-second timeout, and reads at most 33 bytes to enforce a 32-byte ceiling. No environment variable or command-line option can replace the expected provider, Droplet ID, hostname, metadata URL, role, timeout, or response limit. A mismatch or metadata failure emits only a generic error. The `--check` command validates the helper and fixed parser fixtures without contacting guest metadata, so it is safe on a development host.
+
+Every mutating core installer, Tunnel installer, combined wrapper path (including its internal lease-held invocation), and rollback API runs this verifier after root/offline validation and before credentials, receipt parents or locks, temporary files, users, directories, systemd, or Podman changes. The legacy word embedded in the immutable provider hostname grants no relationship, credential, transport, process, network, repository, or authority.
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.
 
-Build the core in CI or on a dedicated build host. Pass a Python base image by digest because `Containerfile.core` intentionally has no mutable default:
+Build the core in CI or on a dedicated build host. Pass a current Chainguard Python development image by digest because `Containerfile.core` intentionally has no mutable default. The tracked Python base is used for both the discarded builder stage and the runtime stage, so the release manifest retains its exact five image roles. It must provide a supported Python 3.12 through 3.14 runtime and `apk`. The build reconstructs Podman remote from a SHA-256-verified official source archive and upgrades the explicitly pinned vulnerable Go modules before copying only the static client into the runtime image:
 
 ```bash
 podman build \
   --build-arg PYTHON_BASE_IMAGE='REGISTRY/PYTHON@sha256:64_HEX_DIGEST' \
+  --build-arg PODMAN_SOURCE_URL='HTTPS_SOURCE_ARCHIVE_URL' \
+  --build-arg PODMAN_SOURCE_SHA256='64_HEX_DIGEST' \
   --file deploy/Containerfile.core \
   --tag TEMPORARY_BUILD_TAG .
 ```
 
-Build the disposable runner separately from a digest-pinned Node 22 Debian base. The shipped runner adds Python/pytest, a dedicated patch utility, Make/CMake, Go, Rust, and a headless JDK. It deliberately contains no Git binary, contains no Lil Tweak service credentials, and receives no network at runtime. Git source intake occurs only in the trusted core before files enter the sandbox:
+Build the disposable runner separately from a digest-pinned Wolfi base. The shipped runner installs current Wolfi packages for Node 22/npm, Python/pip/pytest, a dedicated patch utility, Make/CMake, Go, Rust/Cargo, and a JDK. The build verifies every required command and verifies that Git is absent. The image contains no Lil Tweak service credentials and receives no network at runtime. Git source intake occurs only in the trusted core before files enter the sandbox:
 
 ```bash
 podman build \
-  --build-arg RUNNER_BASE_IMAGE='REGISTRY/NODE22-DEBIAN@sha256:64_HEX_DIGEST' \
+  --build-arg RUNNER_BASE_IMAGE='REGISTRY/WOLFI-BASE@sha256:64_HEX_DIGEST' \
   --file deploy/Containerfile.runner \
   --tag TEMPORARY_RUNNER_BUILD_TAG .
 ```
@@ -56,15 +62,15 @@ Create a temporary, root-owned directory on the droplet with mode `0700`. It mus
 
 Every file in that list must be root-owned mode `0600`. Each PostgreSQL password file must contain exactly one independently generated 32–128 character base64url value followed by one final newline. The application password in `LIL_TWEAK_DATABASE_URL` must equal `postgres-app-password`.
 
-Write `core.env` as strict UTF-8 with one final newline. Every physical line must be blank, a column-zero `#` comment, or a column-zero `UPPERCASE_NAME=value` assignment. Names must be unique; values must be nonempty and must not start or end with whitespace. Do not use CRLF, leading indentation, semicolon comments, a quote as the first value character, control characters, backslashes, escapes, or continuations. Use only the required names in `deploy/core.env.example` plus optional `LIL_TWEAK_GIT_ALLOWED_HOSTS`; arbitrary or GALOR assignments are rejected. Compact signing JSON such as `{"primary":"BASE64URL_SECRET"}` is accepted because its quotes occur inside an unquoted value. Each signing-key ID must match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, and each signing secret must contain at least 32 UTF-8 bytes; generate it as base64url so the JSON needs no backslash escapes. The evidence endpoint must be one exact credential-free HTTPS origin with no path, query, or fragment. `core.env` must not contain shell substitutions or either owner email. For this release, set `LIL_TWEAK_CANONICAL_OWNER_ID=ab43c7488fb38a90c7bb9c4bcc0e23e5`; both the installer and core reject every other 32-character value. That exact control-plane owner scope is carried in the signature-bound `X-Lil-Tweak-Owner` header.
+Write `core.env` as strict UTF-8 with one final newline. Every physical line must be blank, a column-zero `#` comment, or a column-zero `UPPERCASE_NAME=value` assignment. Names must be unique; values must be nonempty and must not start or end with whitespace. Do not use CRLF, leading indentation, semicolon comments, a quote as the first value character, control characters, backslashes, escapes, or continuations. Use only the required names in `deploy/core.env.example` plus `LIL_TWEAK_GIT_ALLOWED_HOSTS` when needed; arbitrary assignments are rejected. Compact signing JSON such as `{"primary":"BASE64URL_SECRET"}` is accepted because its quotes occur inside an unquoted value. Each signing-key ID must match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, and each signing secret must contain at least 32 UTF-8 bytes; generate it as base64url so the JSON needs no backslash escapes. The evidence endpoint must be one exact credential-free HTTPS origin with no path, query, or fragment. `core.env` must not contain shell substitutions or either owner email. For this release, set `LIL_TWEAK_CANONICAL_OWNER_ID=a0885bc0b2c079e996629061a723c74d`; both the installer and core reject every other 32-character value. That exact control-plane owner scope is carried in the signature-bound `X-Lil-Tweak-Owner` header.
 
-The request-signing JSON should initially contain one key ID. Store the same key under a Cloudflare Worker secret, never in D1, R2, source code, a browser response, or a log. Set `LIL_TWEAK_RUNNER_IMAGE` to a digest-pinned sandbox image. For this release, `LIL_TWEAK_GALOR_READONLY_URL` must remain unset. Future enablement would require one exact HTTPS endpoint whose gateway is separately authenticated, bounded, read-only, proxy-independent, and redirect-free, without joining a GALOR network. Container loopback (`127.0.0.1`) is the Lil Tweak core itself and must not be used for GALOR.
+The request-signing JSON should initially contain one key ID. Store the same key under a Cloudflare Worker secret, never in D1, R2, source code, a browser response, or a log. Set `LIL_TWEAK_RUNNER_IMAGE` to a digest-pinned sandbox image. Container loopback (`127.0.0.1`) is reserved for the Lil Tweak Core.
 
 After a successful install, securely remove the staging copy according to the host's secret-handling policy. Podman's admin-password secret and the installed `core.env` remain under the dedicated account. Do not copy them into backup logs or support bundles.
 
 ## Install and migration
 
-The following first performs an offline contract check. `--check` does not contact the droplet network, start services, or consume credentials.
+The following first performs an offline contract check. `--check` validates the exact-target helper without contacting guest metadata or any other droplet network endpoint, starting services, or consuming credentials.
 
 ```bash
 scripts/install-lil-tweak-release.sh --check
@@ -124,7 +130,7 @@ The source and runtime manifests must be the root-owned, single-link, mode-`0444
 
 The fresh-host installer:
 
-1. refuses the wrong hostname, mutable images, missing configuration, symlinks, weak database passwords, and placeholder values;
+1. refuses any hostname or metadata Droplet-ID mismatch, mutable images, missing configuration, symlinks, weak database passwords, and placeholder values;
 2. after verifying the rollback receipt and before mutating the host, validates and freezes the four fixed secret inputs in a new root-owned mode-`0700` directory containing mode-`0600` snapshots; all later reads use only those snapshots;
 3. creates or validates the dedicated account and enables lingering;
 4. stages private-registry authentication only in the service runtime, pulls and verifies all three immutable images, and removes the temporary authentication before any application unit can start;
@@ -142,7 +148,7 @@ The installer accepts only schema versions zero, one, two, or three and advances
 
 Keep `lil-tweak-core` bound to `127.0.0.1:8017`. Configure a named Cloudflare Tunnel under its own constrained service identity to forward one private hostname to that loopback origin. Protect the hostname with a Cloudflare Access service policy limited to the Worker, and keep the Lil Tweak HMAC protocol enabled behind Access. The Worker must validate the owner and same-origin browser mutation before signing a core request.
 
-The Tunnel needs outbound HTTPS only. Deny inbound TCP 8017 in both the DigitalOcean Cloud Firewall and the host firewall. Do not add a public `PublishPort`, a GALOR proxy route, or a direct DNS record for the origin. A direct-origin test from a separate host must time out; a valid Worker request through Cloudflare should succeed.
+The Tunnel needs outbound HTTPS only. Deny inbound TCP 8017 in both the DigitalOcean Cloud Firewall and the host firewall. Do not add a public `PublishPort`, an intermediary proxy route, or a direct DNS record for the origin. A direct-origin test from a separate host must time out; a valid Worker request through Cloudflare should succeed.
 
 ## Verification and health
 
@@ -188,7 +194,7 @@ At least monthly, verify a random evidence object's digest and run the restore d
 
 Never overwrite the only production copy during a drill.
 
-1. Create an isolated restore account, network, volume, and database name with no Tunnel route and no GALOR access.
+1. Create an isolated restore account, network, volume, and database name with no Tunnel route or external service access.
 2. Restore the PostgreSQL custom dump into the alternate database; apply no new migration yet. Point the isolated restore verification console at that restored `lil-tweak-postgres` container, then run `bash scripts/verify-data-integrity.sh --compare /ABSOLUTE/ENCRYPTED/MANIFEST`. This checks ownership links, required digests/object keys, and a SHA-256 fingerprint of every normalized job/source/evidence field without writing database rows or exposing row contents.
 3. Restore a dated R2 snapshot into an alternate prefix or bucket and compare object digests with the database evidence manifest.
 4. Restore the matching D1 export into a non-production D1 database.
@@ -211,7 +217,7 @@ Never reuse a key ID for different bytes. Replay nonces remain keyed by key ID a
 
 ### Other credentials
 
-Rotate the application database password using the admin console, update `core.env`, restart, and verify before retiring the old credential. Rotate PostgreSQL admin/migrator, R2, OpenAI, Tunnel, and GALOR read-only credentials independently. A rootless Podman secret is immutable; stop PostgreSQL, remove and recreate only the named Lil Tweak admin secret, then start and verify. Never touch a GALOR secret during a Lil Tweak rotation.
+Rotate the application database password using the admin console, update `core.env`, restart, and verify before retiring the old credential. Rotate PostgreSQL admin/migrator, R2, OpenAI, and Tunnel credentials independently. A rootless Podman secret is immutable; stop PostgreSQL, remove and recreate only the named Lil Tweak admin secret, then start and verify. Never touch another product's secret during a Lil Tweak rotation.
 
 ## Upgrade, rollback, and capacity
 
@@ -219,4 +225,4 @@ Before an upgrade, record running image digests, take PostgreSQL/D1 backups, con
 
 For code-only rollback, restore the previous core digest and restart. Database migrations are forward-only: if the previous binary is incompatible with the new schema, keep the new schema-compatible binary or restore all planes into alternate resources from the pre-upgrade backup. Do not run ad-hoc reverse SQL against production.
 
-Four-GiB co-residency remains blocked; a four-GiB dedicated host still requires live headroom qualification. Keep one Lil Tweak execution at a time. The installed hard limits permit roughly 1.5 GiB for the core (including its 1 GiB staging tmpfs), 1 GiB for the transient runner, and 512 MiB for PostgreSQL. A co-resident GALOR Hub therefore requires at least an eight-GiB droplet plus monitored host headroom; on a four-GiB droplet, move Lil Tweak or GALOR to another host before production qualification. Reject or queue new work when admission is occupied. Add capacity by moving Lil Tweak to a separate host before raising concurrency; sharing more GALOR resources is not a scaling plan.
+Four-GiB deployment remains blocked until live headroom qualification. Keep one Lil Tweak execution at a time. The installed hard limits permit roughly 1.5 GiB for the core (including its 1 GiB staging tmpfs), 1 GiB for the transient runner, and 512 MiB for PostgreSQL. Use at least the eight-GiB plan class until live evidence supports otherwise. Reject or queue new work when admission is occupied. Add capacity by moving Lil Tweak to a larger dedicated host before raising concurrency.

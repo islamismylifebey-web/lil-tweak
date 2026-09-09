@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import socket
 import subprocess
 import tempfile
+import textwrap
 import unittest
 import uuid
 from pathlib import Path
@@ -15,6 +18,134 @@ SERVICE_FILES = ROOT / "scripts" / "lil-tweak-service-files.py"
 
 
 class InstallTransactionTests(unittest.TestCase):
+    def test_exact_target_precedes_every_installer_release_mutation(self) -> None:
+        for relative in (
+            "scripts/install-digitalocean.sh",
+            "scripts/install-cloudflare-tunnel.sh",
+            "scripts/install-lil-tweak-release.sh",
+        ):
+            with self.subTest(relative=relative):
+                source = (ROOT / relative).read_text()
+                target = source.index(
+                    '"${PYTHON}" -I -B "${TARGET_HELPER}" >/dev/null 2>&1'
+                )
+                self.assertNotIn("LIL_TWEAK_EXPECTED_HOST", source)
+                for marker in (
+                    'exec "${PYTHON}" -I -B "${ROLLBACK_HELPER}" lease-exec',
+                    '"${PYTHON}" -I -B "${ROLLBACK_HELPER}" lease-exec',
+                    "mutation_started=1",
+                    "transaction_started=1",
+                    'secret_snapshot_dir="$(mktemp',
+                    'credentials_snapshot="$(mktemp',
+                    "useradd ",
+                    "systemctl ",
+                    "podman ",
+                ):
+                    position = source.find(marker, target)
+                    if position >= 0:
+                        self.assertLess(target, position, marker)
+
+    def test_child_installers_stop_on_target_failure_before_release_state(self) -> None:
+        for relative, temporary_prefixes, error_prefix in (
+            (
+                "scripts/install-digitalocean.sh",
+                (
+                    "lil-tweak-secrets.*",
+                    "lil-tweak-registry-auth.*",
+                    "lil-tweak-install.*",
+                ),
+                "install-digitalocean",
+            ),
+            (
+                "scripts/install-cloudflare-tunnel.sh",
+                (
+                    "lil-tweak-tunnel-credentials.*",
+                    "lil-tweak-cloudflared.*",
+                    "lil-tweak-cloudflared-unit.*",
+                ),
+                "install-cloudflare-tunnel",
+            ),
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                fixture = Path(temporary) / "release"
+                for directory in ("scripts", "deploy", "core"):
+                    shutil.copytree(
+                        ROOT / directory,
+                        fixture / directory,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                    )
+                script = fixture / relative
+                script.write_text(
+                    script.read_text().replace(
+                        "[[ ${EUID} -eq 0 ]]",
+                        "[[ 0 -eq 0 ]]",
+                    )
+                )
+                script.chmod(0o755)
+                event_log = Path(temporary) / "target-events.log"
+                target = fixture / "scripts" / "lil-tweak-digitalocean-target.py"
+                target.write_text(
+                    textwrap.dedent(
+                        """\
+                        #!/usr/bin/python3
+                        from __future__ import annotations
+                        import os
+                        from pathlib import Path
+                        import sys
+
+                        class TargetVerificationError(RuntimeError):
+                            pass
+
+                        def offline_check():
+                            return None
+
+                        def verify_target():
+                            raise TargetVerificationError("DigitalOcean target verification failed")
+
+                        if __name__ == "__main__":
+                            if sys.argv[1:] == ["--check"]:
+                                raise SystemExit(0)
+                            with Path(os.environ["TARGET_EVENT_LOG"]).open("a", encoding="utf-8") as stream:
+                                stream.write("target\\n")
+                            print("DigitalOcean target verification failed", file=sys.stderr)
+                            raise SystemExit(51)
+                        """
+                    )
+                )
+                target.chmod(0o755)
+                before = {
+                    pattern: {str(path) for path in Path("/tmp").glob(pattern)}
+                    for pattern in temporary_prefixes
+                }
+                environment = dict(os.environ)
+                environment.update(
+                    {
+                        "TARGET_EVENT_LOG": str(event_log),
+                        "LIL_TWEAK_EXPECTED_HOST": socket.gethostname().split(".", 1)[0],
+                    }
+                )
+                result = subprocess.run(
+                    [str(script), "--install"],
+                    cwd=fixture,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    timeout=15,
+                    check=False,
+                )
+                after = {
+                    pattern: {str(path) for path in Path("/tmp").glob(pattern)}
+                    for pattern in temporary_prefixes
+                }
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(event_log.read_text().splitlines(), ["target"])
+                self.assertEqual(after, before)
+                self.assertEqual(
+                    result.stderr,
+                    f"{error_prefix}: DigitalOcean target verification failed\n",
+                )
+
     def test_service_file_controller_is_checked_and_used_for_both_service_roots(self) -> None:
         check = subprocess.run(
             [str(SERVICE_FILES), "--check"],

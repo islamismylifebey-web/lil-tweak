@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import os
+import re
+import shutil
 import stat
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -23,8 +27,97 @@ def text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
+class QualificationInventoryTests(unittest.TestCase):
+    def test_activation_runbook_has_exact_order_and_five_key_contract(self):
+        document = text("docs/operations/tueiq-runner-activation.md")
+        order = ("Provider preflight and witness", "Approved guest entry", "Exact source and images", "Pre-mutation inventory", "New credentials and protected staging", "Combined installation", "DNS and private Site deployment", "Second provider witness", "Primary Site collection", "Independent cross-checks", "Post-deployment owner flow", "Local qualification", "Candidate replay", "Independent candidate review", "Reviewed finalization", "Independent final verification", "Redaction and rollback decision")
+        positions = [document.index("## " + item) for item in order]
+        self.assertEqual(positions, sorted(positions))
+        match = re.search(r"<!-- exact-site-additions -->\n```text\n(.*?)\n```", document, re.S)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1).splitlines(), ["CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET"])
+        absent = re.search(r"<!-- exact-site-managed-absence -->\n```text\n(.*?)\n```", document, re.S)
+        self.assertIsNotNone(absent)
+        self.assertEqual(absent.group(1).splitlines(), ["CORE_ORIGIN", "CORE_ACCESS_CLIENT_ID", "CORE_ACCESS_CLIENT_SECRET", "CORE_SIGNING_KEY_ID", "CORE_SIGNING_SECRET", "CUSTOMER_HTTP_LIL_TWEAK_CORE"])
+        self.assertIn("CUSTOMER_HTTP_LIL_TWEAK_CORE", document)
+        self.assertIn("OPENAI_API_KEY", document)
+        self.assertIn("scripts/install-lil-tweak-release.sh --install", document)
+        self.assertNotRegex(document, r"install-(?:digitalocean|cloudflare-tunnel)\.sh --install")
+        self.assertIn("A local receipt is insufficient", document)
+
+    def test_deployment_check_executes_qualification_and_cannot_contact_live_services(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("scripts", "deploy", "core"):
+                shutil.copytree(ROOT / name, root / name, ignore=shutil.ignore_patterns("__pycache__", "tests"))
+            guards = root / "guards"
+            guards.mkdir()
+            for command in ("curl", "git", "podman", "docker", "runuser", "ssh", "wget", "aws", "rclone"):
+                guard = guards / command
+                guard.write_text("#!/bin/sh\necho 'forbidden live operation' >&2\nexit 91\n")
+                guard.chmod(0o755)
+            (guards / "sitecustomize.py").write_text(
+                "import sys\n"
+                "def forbid(event, args):\n"
+                "    if event.startswith('socket.') or event in ('subprocess.Popen', 'os.system'):\n"
+                "        raise RuntimeError('offline path attempted live operation')\n"
+                "sys.addaudithook(forbid)\n"
+            )
+            environment = {**os.environ, "PATH": str(guards) + os.pathsep + os.environ["PATH"], "PYTHONPATH": str(guards)}
+
+            def check():
+                return subprocess.run(["bash", "scripts/verify-deployment.sh", "--check"], cwd=root,
+                                      env=environment, capture_output=True, text=True, check=False, timeout=30)
+
+            success = check()
+            self.assertEqual((success.returncode, success.stdout, success.stderr), (0, "verify-deployment check: ok\n", ""))
+            helper = root / "scripts/lil-tweak-qualification.py"
+            helper.unlink()
+            missing = check()
+            self.assertNotEqual(missing.returncode, 0, "missing harness must fail inventory")
+            helper.write_text("raise SystemExit(77)\n")
+            failed_helper = check()
+            self.assertEqual(failed_helper.returncode, 77, "offline inventory must execute the harness check")
+
+
 class TunnelContractTests(unittest.TestCase):
-    def test_tunnel_access_and_managed_ingress_artifacts_are_concrete(self) -> None:
+    def test_every_mutation_gate_requires_the_exact_guest_identity(self) -> None:
+        helper = ROOT / "scripts" / "lil-tweak-digitalocean-target.py"
+        checked = subprocess.run(
+            [str(helper), "--check"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertEqual(checked.stdout, "DigitalOcean target check: ok\n")
+
+        for relative in (
+            "scripts/install-digitalocean.sh",
+            "scripts/install-cloudflare-tunnel.sh",
+            "scripts/install-lil-tweak-release.sh",
+            "scripts/lil-tweak-rollback.py",
+        ):
+            source = text(relative)
+            self.assertIn("lil-tweak-digitalocean-target.py", source)
+            self.assertNotIn("LIL_TWEAK_EXPECTED_HOST", source)
+
+        for relative in (
+            "README.md",
+            "docs/operations/digitalocean.md",
+            "docs/operations/cloudflare-private-ingress.md",
+        ):
+            document = text(relative)
+            for phrase in (
+                "DigitalOcean Droplet `597343619`",
+                "`galor-tweak-runner-01`",
+                "http://169.254.169.254/metadata/v1/id",
+                "scripts/lil-tweak-digitalocean-target.py",
+            ):
+                self.assertIn(phrase, document)
+
+    def test_tunnel_access_and_private_site_artifacts_are_concrete(self) -> None:
         required = (
             "deploy/cloudflare/access-application.json",
             "deploy/cloudflare/access-policy.json",
@@ -44,6 +137,9 @@ class TunnelContractTests(unittest.TestCase):
         self.assertNotRegex(config, r"(?i)galor[-_.]?(network|volume|database)")
 
         policy = json.loads(text("deploy/cloudflare/access-policy.json"))
+        application = json.loads(text("deploy/cloudflare/access-application.json"))
+        self.assertEqual(application["name"], "Lil Tweak private core")
+        self.assertEqual(policy["name"], "Lil Tweak Worker service token only")
         self.assertEqual(policy["decision"], "non_identity")
         self.assertEqual(policy["include"], [{"service_token": {"token_id": "__SERVICE_TOKEN_ID__"}}])
         self.assertNotIn("everyone", json.dumps(policy).lower())
@@ -54,7 +150,6 @@ class TunnelContractTests(unittest.TestCase):
         for name in (
             "LIL_TWEAK_ENVIRONMENT",
             "PUBLIC_ORIGIN",
-            "MANAGED_INGRESS_SECRET",
             "CORE_ORIGIN",
             "CORE_ACCESS_CLIENT_ID",
             "CORE_ACCESS_CLIENT_SECRET",
@@ -62,21 +157,32 @@ class TunnelContractTests(unittest.TestCase):
             "CORE_SIGNING_SECRET",
         ):
             self.assertRegex(env_contract, rf"(?m)^{name}=")
+        self.assertNotIn("MANAGED_INGRESS_SECRET", env_contract)
+        self.assertNotIn("X-Lil-Tweak-Managed-Ingress", env_contract)
 
         runbook = text("docs/operations/cloudflare-private-ingress.md")
         for phrase in (
             "CF-Access-Client-Id",
             "CF-Access-Client-Secret",
-            "X-Lil-Tweak-Managed-Ingress",
             "PUBLIC_ORIGIN",
             "workers.dev",
             "never open port 8017",
-            "GALOR Hub",
+            "owned only by Lil Tweak",
             "missing LIL_TWEAK_ENVIRONMENT fails closed",
+            "private Sites custom access",
+            "dispatch-owned SIWC",
+            "one owner, zero groups, and zero visitors",
+            "zero custom domains",
+            "anonymous request",
+            "forged identity",
+            "alternate hostname",
+            "owner same-origin flow",
             "at least 32 UTF-8 bytes",
             "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
         ):
             self.assertIn(phrase.lower(), runbook.lower())
+        for retired in ("MANAGED_INGRESS_SECRET", "X-Lil-Tweak-Managed-Ingress", "managed_rule"):
+            self.assertNotIn(retired, runbook)
 
     def test_cloudflared_unit_and_installer_are_separate_and_hardened(self) -> None:
         unit = text("deploy/cloudflared/lil-tweak-cloudflared.service")
@@ -100,7 +206,10 @@ class TunnelContractTests(unittest.TestCase):
 
         installer = text("scripts/install-cloudflare-tunnel.sh")
         self.assertIn('TUNNEL_USER="lil-tweak-tunnel"', installer)
-        self.assertIn('EXPECTED_HOST="galor-private-cloud-01"', installer)
+        self.assertIn(
+            'TARGET_HELPER="${PROJECT_DIR}/scripts/lil-tweak-digitalocean-target.py"',
+            installer,
+        )
         self.assertIn("--user-group", installer)
         self.assertIn("deploy/cloudflared/verify_binary.py", installer)
         self.assertIn("--expected-sha256", installer)
@@ -238,11 +347,17 @@ class RuntimeAndBackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "core.env"
-            path.write_text("A=one\nB=two\n", encoding="utf-8")
+            path.write_text(
+                "LIL_TWEAK_OPENAI_MODEL=one\nLIL_TWEAK_EVIDENCE_BUCKET=two\n",
+                encoding="utf-8",
+            )
             path.chmod(0o600)
             self.assertEqual(
                 verify_runtime.load_environment(path),
-                {"A": "one", "B": "two"},
+                {
+                    "LIL_TWEAK_OPENAI_MODEL": "one",
+                    "LIL_TWEAK_EVIDENCE_BUCKET": "two",
+                },
             )
 
             path.chmod(0o644)
@@ -261,7 +376,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
             with self.assertRaises(verify_runtime.ProbeError):
                 verify_runtime.load_environment(alias)
 
-            path.write_bytes(b"A=" + b"x" * (64 * 1024))
+            path.write_bytes(b"LIL_TWEAK_OPENAI_MODEL=" + b"x" * (64 * 1024))
             with self.assertRaises(verify_runtime.ProbeError):
                 verify_runtime.load_environment(path)
 
@@ -489,6 +604,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                 )
                 environment_path.chmod(0o600)
                 with (
+                    redirect_stderr(io.StringIO()) as errors,
                     patch.dict(
                         verify_runtime.os.environ,
                         {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
@@ -501,6 +617,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                     patch.object(verify_runtime, "probe_installed_runtime"),
                 ):
                     self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+                self.assertEqual(errors.getvalue(), "runtime probe failed\n")
 
     def test_main_rejects_any_effective_galor_configuration_before_live_probes(self) -> None:
         base = (
@@ -519,6 +636,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
                     environment_path.write_text(base + galor_line, encoding="utf-8")
                     environment_path.chmod(0o600)
                     with (
+                        redirect_stderr(io.StringIO()) as errors,
                         patch.dict(
                             verify_runtime.os.environ,
                             {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
@@ -531,7 +649,39 @@ class RuntimeAndBackupTests(unittest.TestCase):
                         patch.object(verify_runtime, "probe_installed_runtime"),
                     ):
                         self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+                    self.assertEqual(errors.getvalue(), "runtime probe failed\n")
                     socket_probe.assert_not_called()
+
+    def test_main_rejects_an_unapproved_environment_name_before_runtime_probes(self) -> None:
+        environment = {
+            "LIL_TWEAK_RUNNER_IMAGE": "runner@sha256:" + "a" * 64,
+            "LIL_TWEAK_WORK_ROOT": "/var/lib/lil-tweak/work",
+            "LIL_TWEAK_WORK_ROOT_INODES": "204800",
+            "UNAPPROVED_SETTING": "stale",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            environment_path = Path(directory) / "core.env"
+            environment_path.write_text(
+                "".join(f"{name}={value}\n" for name, value in environment.items()),
+                encoding="utf-8",
+            )
+            environment_path.chmod(0o600)
+            with (
+                redirect_stderr(io.StringIO()) as errors,
+                patch.dict(
+                    verify_runtime.os.environ,
+                    {"XDG_RUNTIME_DIR": f"/run/user/{verify_runtime.os.getuid()}"},
+                    clear=False,
+                ),
+                patch.object(verify_runtime, "probe_socket") as socket_probe,
+                patch.object(verify_runtime, "probe_image"),
+                patch.object(verify_runtime, "probe_core_work_root"),
+                patch.object(verify_runtime, "probe_service_swap"),
+                patch.object(verify_runtime, "probe_installed_runtime"),
+            ):
+                self.assertEqual(verify_runtime.main([str(environment_path)]), 1)
+            self.assertEqual(errors.getvalue(), "runtime probe failed\n")
+            socket_probe.assert_not_called()
 
     def test_r2_probe_is_read_only(self) -> None:
         probe = text("deploy/verify_r2.py")

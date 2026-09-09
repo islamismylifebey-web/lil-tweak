@@ -4,23 +4,31 @@ FROM ${RUNNER_BASE_IMAGE}
 LABEL org.opencontainers.image.title="Lil Tweak sandbox runner" \
       org.opencontainers.image.description="Credential-free, network-disabled code execution toolchain"
 
-RUN apt-get update \
-    && apt-get purge --yes git git-man \
-    && apt-get install --yes --no-install-recommends \
-        cargo \
+RUN apk add --no-cache \
         cmake \
-        default-jdk-headless \
-        golang-go \
+        go-1.26 \
         make \
+        nodejs-22 \
+        npm \
+        openjdk-26-default-jdk \
         patch \
-        python3 \
-        python3-pip \
-        python3-pytest \
-        python3-venv \
-        rustc \
-    && rm -rf /var/lib/apt/lists/* \
+        py3.14-pytest \
+        py3.14-pip \
+        python-3.14 \
+        rust-1.97 \
     && ! command -v git \
-    && command -v patch
+    && command -v patch \
+    && command -v node \
+    && command -v npm \
+    && command -v python3 \
+    && command -v pytest \
+    && command -v go \
+    && command -v rustc \
+    && command -v cargo \
+    && command -v cmake \
+    && command -v make \
+    && command -v java \
+    && command -v javac
 
 ENV HOME=/tmp \
     NPM_CONFIG_CACHE=/tmp/npm-cache \
