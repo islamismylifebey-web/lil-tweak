@@ -1,6 +1,6 @@
 # Lil Tweak on `galor-tweak-runner-01`
 
-galor-tweak-runner-01 is being qualified as a dedicated Tueiq host. Tueiq directly owns the signed Core-to-local-Podman runner path with no intermediary. This runbook does not claim that the runner has passed live connection or qualification gates. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
+galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is abandoned and is not a Lil Tweak dependency. Lil Tweak directly owns the signed Core-to-Podman runner path with no intermediary. This runbook does not claim that the runner has passed live connection or qualification gates. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
 
 ## Invariants
 

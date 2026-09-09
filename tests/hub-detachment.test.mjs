@@ -44,9 +44,13 @@ test("browser connection contract has no Hub status surface", async () => {
   const client = await source("app/engineering-client.ts");
 
   assert.doesNotMatch(client, /\bgalorHub\b|^\s*galor:\s*\{/m);
-  assert.match(client, /owner:\s*"lil-tweak"/);
-  assert.match(client, /route:\s*"direct_core_to_podman"/);
+  assert.match(client, /owner:\s*"tueiq"/);
+  assert.match(client, /provider:\s*"digitalocean"/);
+  assert.match(client, /dropletId:\s*"597343619"/);
+  assert.match(client, /host:\s*"galor-tweak-runner-01"/);
+  assert.match(client, /role:\s*"role-tweak-runner"/);
+  assert.match(client, /route:\s*"direct_core_to_local_podman"/);
   assert.match(client, /intermediary:\s*"none"/);
-  assert.match(client, /connection:\s*"not_reported"/);
+  assert.match(client, /connection:\s*runner\.connection/);
   assert.match(client, /qualification:\s*"not_reported"/);
 });

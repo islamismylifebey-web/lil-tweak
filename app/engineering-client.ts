@@ -78,20 +78,17 @@ export interface EngineeringConnectionStatus {
     access: "configured" | "missing" | "not_required";
     missing: string[];
   };
-  github: {
-    lilTweak: {
-      repository: "islamismylifebey-web/lil-tweak";
-      branch: "main";
-    };
-  };
   runner: {
-    owner: "lil-tweak";
-    route: "direct_core_to_podman";
+    owner: "tueiq";
+    provider: "digitalocean";
+    dropletId: "597343619";
+    host: "galor-tweak-runner-01";
+    role: "role-tweak-runner";
+    route: "direct_core_to_local_podman";
     intermediary: "none";
     imagePolicy: "digest_pinned";
     connection: EngineeringConnectionState;
     qualification: "not_reported";
-    label: "Lil Tweak direct Podman runner";
   };
 }
 
