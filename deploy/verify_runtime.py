@@ -17,6 +17,25 @@ from typing import Any, Callable
 
 PINNED_IMAGE = re.compile(r"^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$")
 ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+ALLOWED_CORE_ENVIRONMENT_NAMES = frozenset(
+    {
+        "LIL_TWEAK_DATABASE_URL",
+        "LIL_TWEAK_SIGNING_KEYS_JSON",
+        "LIL_TWEAK_CANONICAL_OWNER_ID",
+        "OPENAI_API_KEY",
+        "LIL_TWEAK_OPENAI_MODEL",
+        "LIL_TWEAK_RUNNER_IMAGE",
+        "LIL_TWEAK_WORK_ROOT",
+        "LIL_TWEAK_WORK_ROOT_INODES",
+        "LIL_TWEAK_MAX_ADMITTED_JOBS",
+        "LIL_TWEAK_JOB_TIMEOUT_SECONDS",
+        "LIL_TWEAK_EVIDENCE_BUCKET",
+        "LIL_TWEAK_EVIDENCE_ENDPOINT",
+        "LIL_TWEAK_R2_ACCESS_KEY_ID",
+        "LIL_TWEAK_R2_SECRET_ACCESS_KEY",
+        "LIL_TWEAK_GIT_ALLOWED_HOSTS",
+    }
+)
 EXPECTED_WORK_ROOT = Path("/var/lib/lil-tweak/work")
 PODMAN_SOCKET_SUFFIX = "/podman/podman.sock"
 CORE_WORK_ROOT_BYTES = 1024 * 1024 * 1024
@@ -107,7 +126,11 @@ def load_environment(path: Path) -> dict[str, str]:
             raise ProbeError("invalid core environment file")
         name, value = logical.split("=", 1)
         name = name.rstrip()
-        if not ENVIRONMENT_NAME.fullmatch(name) or name in values:
+        if (
+            not ENVIRONMENT_NAME.fullmatch(name)
+            or name not in ALLOWED_CORE_ENVIRONMENT_NAMES
+            or name in values
+        ):
             raise ProbeError("invalid core environment file")
         values[name] = value
     return values

@@ -347,11 +347,17 @@ class RuntimeAndBackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "core.env"
-            path.write_text("A=one\nB=two\n", encoding="utf-8")
+            path.write_text(
+                "LIL_TWEAK_OPENAI_MODEL=one\nLIL_TWEAK_EVIDENCE_BUCKET=two\n",
+                encoding="utf-8",
+            )
             path.chmod(0o600)
             self.assertEqual(
                 verify_runtime.load_environment(path),
-                {"A": "one", "B": "two"},
+                {
+                    "LIL_TWEAK_OPENAI_MODEL": "one",
+                    "LIL_TWEAK_EVIDENCE_BUCKET": "two",
+                },
             )
 
             path.chmod(0o644)
@@ -370,7 +376,7 @@ class RuntimeAndBackupTests(unittest.TestCase):
             with self.assertRaises(verify_runtime.ProbeError):
                 verify_runtime.load_environment(alias)
 
-            path.write_bytes(b"A=" + b"x" * (64 * 1024))
+            path.write_bytes(b"LIL_TWEAK_OPENAI_MODEL=" + b"x" * (64 * 1024))
             with self.assertRaises(verify_runtime.ProbeError):
                 verify_runtime.load_environment(path)
 
