@@ -457,6 +457,15 @@ class ActivationFinalizerTests(unittest.TestCase):
                 with self.assertRaises(Exception): f.a.validate_release(f.primary, f.runtime, f.head, f.tree, time.time())
             finally: f.close()
 
+    def test_package_names_accept_bounded_module_segments_and_reject_paths(self):
+        a = load()
+        for value in ("dario.cat/mergo", "github.com/containers/image/v5", "@scope/package", "libstdc++6"):
+            with self.subTest(value=value):
+                a.package_name(value)
+        for value in ("/absolute", "relative/", "a//b", "a/../b", "a/./b", "a\\b", "space name", "é", "a" * 129):
+            with self.subTest(value=value), self.assertRaises(Exception):
+                a.package_name(value)
+
     def test_resource_creation_order_requires_service_token_before_policy(self):
         a = load()
         self.assertEqual(a.RESOURCE_KINDS, ("tunnel", "access_application", "service_token", "access_policy", "secret_directory", "dns"))

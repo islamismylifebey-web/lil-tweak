@@ -71,6 +71,21 @@ def identifier(value):
     require(type(value) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", value) is not None)
 
 
+def package_name(value):
+    require(type(value) is str)
+    try:
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError:
+        require(False)
+    require(
+        1 <= len(encoded) <= 128
+        and re.fullmatch(
+            r"(?:@[a-z0-9._-]+/)?[A-Za-z0-9][A-Za-z0-9+._-]*(?:/[A-Za-z0-9][A-Za-z0-9+._-]*)*",
+            value,
+        ) is not None
+    )
+
+
 def site_identifier(value):
     require(type(value) is str)
     return release._site_identifier({"SITES_ID": value}, "SITES_ID")
@@ -504,7 +519,7 @@ def validate_release(root, runtime, head, tree, now, *, snapshots=None):
                     require(entry["severity"] in {"Negligible", "Low", "Medium"})
                 else:
                     fields(entry, ("id", "name", "version")); identifier(entry["id"])
-                    require(type(entry["name"]) is str and re.fullmatch(r"(?:@[a-z0-9._-]+/)?[A-Za-z0-9][A-Za-z0-9+._-]{0,127}", entry["name"]) is not None)
+                    package_name(entry["name"])
                     require(type(entry["version"]) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+:~_-]{0,255}", entry["version"]) is not None)
     images = runtime["images"]
     exact(runtime["receipts"]["base_images"], release._base_image_receipt(root / "base-images.txt", [images[k]["reference"] for k in ("python_base", "runner_base", "postgres")], snapshot=snapshots.read_bytes(root / "base-images.txt")))
