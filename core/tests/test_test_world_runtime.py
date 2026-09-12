@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.lil_tweak.openai_agent import AgentResult
+from core.lil_tweak.git_source import GitIntakeResult
 from core.lil_tweak.sandbox import CommandResult, SandboxLimits, build_podman_argv
 from core.lil_tweak.test_world import MemoryTestWorldStore, TestCheck
 from core.lil_tweak.test_world_api import _attempt_json, _world_json
@@ -97,7 +98,7 @@ class TestWorldRuntimeTests(unittest.TestCase):
             def ingest(source, destination, *, allowed_hosts):
                 calls["ingest"].append((source.repository_url, source.commit, Path(destination), tuple(allowed_hosts)))
                 Path(destination, "app.py").write_text("print('safe')\n")
-                return ["app.py"]
+                return GitIntakeResult(("app.py",), "b" * 40, "c" * 40)
 
             def capture(path):
                 calls["capture"].append(Path(path))
@@ -174,7 +175,7 @@ class TestWorldRuntimeTests(unittest.TestCase):
             def ingest(_source, destination, *, allowed_hosts):
                 self.assertEqual(tuple(allowed_hosts), ("github.com",))
                 Path(destination, "safe.txt").write_text("safe\n")
-                return ["safe.txt"]
+                return GitIntakeResult(("safe.txt",), "d" * 40, "e" * 40)
 
             snapshots = iter((FakeSnapshot("baseline"), FakeSnapshot("final")))
 

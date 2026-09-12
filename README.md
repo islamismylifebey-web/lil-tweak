@@ -13,11 +13,20 @@ This repository contains the application, execution core, migrations, tests, and
 - R2: private request, source, and verified evidence objects.
 - `core/`: signed trusted-core API, PostgreSQL state, OpenAI Responses loop, source intake, evidence production, and approval enforcement.
 - Rootless Podman: one fresh, network-disabled, resource-capped sandbox per job.
-- Optional GitHub Actions verification: an exact Tueiq patch can be replayed on the
-  ephemeral `ubuntu-24.04` runner through `.github/workflows/tueiq-runner.yml`.
-  Dispatch is enabled only when `LIL_TWEAK_EXECUTION_BACKEND=github_actions` and
-  server-only GitHub credentials are configured. The returned receipt is bound to
-  the job, source commit/tree, authority digest, ordered actions, and manifest digest.
+- `local_podman` is the shipped default execution backend. Optional GitHub Actions
+  verification requires all three reviewed settings:
+  `LIL_TWEAK_EXECUTION_BACKEND=github_actions`,
+  `LIL_TWEAK_GITHUB_REPOSITORY=OWNER/REPOSITORY`, and a server-only
+  `LIL_TWEAK_GITHUB_TOKEN`. Invalid or partial settings, including dormant GitHub
+  credentials in local mode, fail before mutation. GitHub-source jobs also require
+  `LIL_TWEAK_GIT_ALLOWED_HOSTS=github.com`.
+- The GitHub token must be repository-scoped, expiring, and limited to
+  least-privilege Actions read/write access. Keep it server-only and include it in
+  the credential rotation runbook. Readiness does not contact GitHub; activation
+  requires one controlled dispatch/receipt after Linux verification. The workflow
+  uses a GitHub-hosted `ubuntu-24.04` runner; no self-hosted personal workstation is
+  part of the runner execution boundary. The returned receipt is bound to the job,
+  source commit/tree, authority digest, ordered actions, and manifest digest.
 - `deploy/` and `scripts/`: digest-pinned Quadlets and checked DigitalOcean install/verification tooling.
 - `deploy/Containerfile.runner`: credential-free Node/Python/Go/Rust/Java sandbox toolchain built from an operator-supplied base digest.
 
@@ -50,13 +59,14 @@ scripts/install-lil-tweak-release.sh --check
 bash scripts/verify-deployment.sh --check
 ```
 
-`npm run verify` performs TypeScript checking, linting, a production build, all JavaScript contract tests, and all Python core tests. Local tests use fakes; they do not make a paid OpenAI request or deploy infrastructure.
+`npm run verify` performs TypeScript checking, linting, a production build, all JavaScript contract tests, all Python core tests, and the POSIX deployment security tests. This canonical gate is authoritative on Ubuntu; a Windows adaptation is not a substitute. Local tests use fakes; they do not make a paid OpenAI request or deploy infrastructure.
 
 ## Configuration
 
 - Cloudflare binds D1 as `DB` and R2 as `FILES` through `.openai/hosting.json`.
 - Configure core origin, signing key ID, and signing secret as Worker secrets/bindings; never expose them to the browser or store them in D1.
 - Configure the core using `deploy/core.env.example`. Keep the OpenAI key, R2 credentials, database URL, signing keys, and optional GALOR credential outside source control and outside every sandbox.
+- Keep `LIL_TWEAK_EXECUTION_BACKEND=local_podman` unless explicitly activating GitHub Actions with both reviewed GitHub settings described above.
 - The model is operator-configurable; the example uses `gpt-5.6-terra`.
 
 ## Deployment

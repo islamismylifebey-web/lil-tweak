@@ -14,8 +14,22 @@ from .limits import TRUSTED_WORK_ROOT_INODES
 
 
 _SIGNING_KEY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-_GITHUB_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_GITHUB_REPOSITORY_COMPONENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 CANONICAL_OWNER_SCOPE = "ab43c7488fb38a90c7bb9c4bcc0e23e5"
+
+
+def _valid_github_repository(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    components = value.split("/")
+    return (
+        len(components) == 2
+        and all(component not in {".", ".."} for component in components)
+        and all(
+            _GITHUB_REPOSITORY_COMPONENT.fullmatch(component)
+            for component in components
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +143,11 @@ class Config:
             github_token is None
             or len(github_token.encode("utf-8")) < 32
             or github_repository is None
-            or _GITHUB_REPOSITORY.fullmatch(github_repository) is None
+            or not _valid_github_repository(github_repository)
+        ):
+            raise ValueError("invalid GitHub runner configuration")
+        if execution_backend != "github_actions" and (
+            github_token is not None or github_repository is not None
         ):
             raise ValueError("invalid GitHub runner configuration")
         return cls(

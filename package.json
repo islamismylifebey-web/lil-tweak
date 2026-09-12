@@ -11,8 +11,9 @@
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:core": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s core/tests -p 'test_*.py'",
+    "test:deploy": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/tests -p 'test_*.py'",
     "typecheck": "tsc --noEmit --pretty false",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run test:core",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:core && npm run test:deploy",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

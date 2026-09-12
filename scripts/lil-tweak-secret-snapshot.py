@@ -34,6 +34,7 @@ REQUIRED_CORE_KEYS = frozenset(
         "OPENAI_API_KEY",
         "LIL_TWEAK_OPENAI_MODEL",
         "LIL_TWEAK_RUNNER_IMAGE",
+        "LIL_TWEAK_EXECUTION_BACKEND",
         "LIL_TWEAK_WORK_ROOT",
         "LIL_TWEAK_WORK_ROOT_INODES",
         "LIL_TWEAK_MAX_ADMITTED_JOBS",
@@ -44,7 +45,13 @@ REQUIRED_CORE_KEYS = frozenset(
         "LIL_TWEAK_R2_SECRET_ACCESS_KEY",
     }
 )
-OPTIONAL_CORE_KEYS = frozenset({"LIL_TWEAK_GIT_ALLOWED_HOSTS"})
+OPTIONAL_CORE_KEYS = frozenset(
+    {
+        "LIL_TWEAK_GIT_ALLOWED_HOSTS",
+        "LIL_TWEAK_GITHUB_REPOSITORY",
+        "LIL_TWEAK_GITHUB_TOKEN",
+    }
+)
 ALLOWED_CORE_KEYS = REQUIRED_CORE_KEYS | OPTIONAL_CORE_KEYS
 CANONICAL_OWNER_SCOPE = "ab43c7488fb38a90c7bb9c4bcc0e23e5"
 IMAGE_PATTERN = re.compile(
@@ -61,6 +68,7 @@ DATABASE_PATTERN = re.compile(
 PASSWORD_PATTERN = re.compile(rb"[A-Za-z0-9_-]{32,128}\n\Z")
 ASSIGNMENT_PATTERN = re.compile(r"([A-Z][A-Z0-9_]*)=(.+)\Z")
 SIGNING_KEY_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+GITHUB_REPOSITORY_COMPONENT_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\Z")
 STABLE_FIELDS = (
     "st_dev",
     "st_ino",
@@ -257,6 +265,19 @@ def _parse_core_environment(data: bytes, app_password: str) -> str:
         values["LIL_TWEAK_GIT_ALLOWED_HOSTS"]
     ):
         raise SnapshotError
+    backend = values["LIL_TWEAK_EXECUTION_BACKEND"]
+    repository = values.get("LIL_TWEAK_GITHUB_REPOSITORY")
+    token = values.get("LIL_TWEAK_GITHUB_TOKEN")
+    if backend == "github_actions":
+        if (
+            repository is None
+            or not _valid_github_repository(repository)
+            or token is None
+            or len(token.encode("utf-8")) < 32
+        ):
+            raise SnapshotError
+    elif backend != "local_podman" or repository is not None or token is not None:
+        raise SnapshotError
     database = DATABASE_PATTERN.fullmatch(values["LIL_TWEAK_DATABASE_URL"])
     if database is None or database.group(1) != app_password:
         raise SnapshotError
@@ -336,6 +357,18 @@ def _valid_git_hosts(value: str) -> bool:
         and not host.startswith(".")
         and not host.endswith(".")
         for host in hosts
+    )
+
+
+def _valid_github_repository(value: str) -> bool:
+    components = value.split("/")
+    return (
+        len(components) == 2
+        and all(component not in {".", ".."} for component in components)
+        and all(
+            GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(component)
+            for component in components
+        )
     )
 
 
