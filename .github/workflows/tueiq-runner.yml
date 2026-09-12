@@ -52,9 +52,6 @@ jobs:
       CONTROL_DIR: ${{ github.workspace }}/control
       SOURCE_DIR: ${{ github.workspace }}/source
       PYTHONPATH: ${{ github.workspace }}/control
-      TMPDIR: ${{ runner.temp }}/lil-tweak-runner
-      TMP: ${{ runner.temp }}/lil-tweak-runner
-      TEMP: ${{ runner.temp }}/lil-tweak-runner
     steps:
       - name: Checkout trusted control
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -86,8 +83,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          mkdir -p -- "$TMPDIR"
-          chmod 0700 -- "$TMPDIR"
+          runner_tmp="$RUNNER_TEMP/lil-tweak-runner"
+          mkdir -p -- "$runner_tmp"
+          chmod 0700 -- "$runner_tmp"
+          printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$runner_tmp" "$runner_tmp" "$runner_tmp" >> "$GITHUB_ENV"
       - name: Prepare exact manifest
         env:
           MANIFEST_BASE64: ${{ inputs.manifest_base64 }}

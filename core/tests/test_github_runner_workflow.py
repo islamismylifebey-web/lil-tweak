@@ -37,15 +37,16 @@ class GitHubRunnerWorkflowTests(unittest.TestCase):
         for action in re.findall(r"(?m)^\s+uses:\s*(\S+)\s*$", self.workflow):
             self.assertRegex(action, r"^[^@\s]+@[0-9a-f]{40}$")
 
-    def test_job_uses_one_private_runner_owned_temporary_root(self):
+    def test_job_environment_does_not_use_step_only_runner_context(self):
         environment = re.search(
             r"(?ms)^    env:\n(?P<body>.*?)(?=^    steps:)", self.workflow
         )
         self.assertIsNotNone(environment)
+        self.assertNotRegex(environment.group("body"), r"\$\{\{\s*runner\.")
         for variable in ("TMPDIR", "TMP", "TEMP"):
-            self.assertRegex(
+            self.assertNotRegex(
                 environment.group("body"),
-                rf"(?m)^      {variable}: \$\{{\{{ runner\.temp \}}\}}/lil-tweak-runner$",
+                rf"(?m)^      {variable}:",
             )
 
     def test_private_temporary_root_is_created_before_manifest_and_execution(self):
@@ -54,8 +55,18 @@ class GitHubRunnerWorkflowTests(unittest.TestCase):
         self.assertRegex(
             setup, r"(?m)^        working-directory: \$\{\{ runner\.temp \}\}$"
         )
-        self.assertIn('          mkdir -p -- "$TMPDIR"\n', setup)
-        self.assertIn('          chmod 0700 -- "$TMPDIR"\n', setup)
+        self.assertIn('          umask 077\n', setup)
+        self.assertIn('          runner_tmp="$RUNNER_TEMP/lil-tweak-runner"\n', setup)
+        create = '          mkdir -p -- "$runner_tmp"\n'
+        restrict = '          chmod 0700 -- "$runner_tmp"\n'
+        publish = (
+            '          printf \'TMPDIR=%s\\nTMP=%s\\nTEMP=%s\\n\' '
+            '"$runner_tmp" "$runner_tmp" "$runner_tmp" >> "$GITHUB_ENV"\n'
+        )
+        for command in (create, restrict, publish):
+            self.assertIn(command, setup)
+        self.assertLess(setup.index(create), setup.index(restrict))
+        self.assertLess(setup.index(restrict), setup.index(publish))
         for name in ("Prepare exact manifest", "Execute bounded Tueiq job"):
             self.assertLess(
                 self.workflow.index("- name: Prepare private temporary root"),
