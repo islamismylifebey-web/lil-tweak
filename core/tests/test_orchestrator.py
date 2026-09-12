@@ -21,7 +21,7 @@ from core.lil_tweak.orchestrator import (
     DurableJobScheduler,
     EngineeringOrchestrator,
 )
-from core.lil_tweak.store import Job, JobLease, MemoryJobStore
+from core.lil_tweak.store import GitSourceSpec, Job, JobLease, MemoryJobStore
 
 
 def stored_evidence(store, job, name):
@@ -340,6 +340,59 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(manifest["run"]["edit_journal_count"], 1)
         self.assertRegex(manifest["run"]["edit_journal_digest"], r"^[0-9a-f]{64}$")
         self.assertFalse(snapshot_root.exists())
+
+    def test_git_job_requires_and_records_remote_runner_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "proposal"
+            root.mkdir()
+            (root / "app.py").write_text("value = 1\n")
+            store = MemoryJobStore()
+            job = store.create_job(
+                "owner",
+                "github-runner",
+                JobMode.BUILD,
+                "Edit",
+                git_source=GitSourceSpec(
+                    "https://github.com/islamismylifebey-web/lil-tweak.git",
+                    "1" * 40,
+                ),
+            )
+
+            class Sandbox:
+                def stage_patch_candidate(self, patch_file, candidate):
+                    shutil.copytree(root, candidate, dirs_exist_ok=True)
+                    (Path(candidate) / "app.py").write_text("value = 2\n")
+                    return CommandResult(0, "applied", "")
+
+            tools = WorkspaceTools(root, Sandbox())
+
+            def mutate():
+                tools.execute(
+                    "apply_patch",
+                    {"patch": "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-value = 1\n+value = 2\n"},
+                )
+
+            class Verifier:
+                def __init__(self):
+                    self.calls = []
+
+                def verify(self, **kwargs):
+                    self.calls.append(kwargs)
+                    return {"receiptDigest": "9" * 64, "outcome": "succeeded"}
+
+            verifier = Verifier()
+            completed = EngineeringOrchestrator(
+                store=store,
+                agent=FakeAgent(AgentResult("Plan", "Done", "", ""), on_run=mutate, tools=tools),
+                evidence_store=self.evidence,
+                runner_verifier=verifier,
+            ).run_job(job.id, "owner", workspace=root)
+
+            self.assertEqual(len(verifier.calls), 1)
+            self.assertEqual(verifier.calls[0]["job"].id, job.id)
+            self.assertIn(b"+value = 2", verifier.calls[0]["patch"])
+            manifest = json.loads(stored_evidence(self.evidence, completed, "manifest.json"))
+            self.assertEqual(manifest["run"]["github_runner"]["receiptDigest"], "9" * 64)
 
     def test_all_editing_modes_evidence_excludes_disposable_build_artifacts(self):
         for mode in (

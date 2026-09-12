@@ -269,6 +269,7 @@ class EngineeringOrchestrator:
         monotonic: Any = time.monotonic,
         job_timeout_seconds: int = 20 * 60,
         galor: Any = None,
+        runner_verifier: Any = None,
         lease: JobLease | None = None,
         lease_seconds: int = 60,
     ) -> None:
@@ -279,6 +280,7 @@ class EngineeringOrchestrator:
         self.monotonic = monotonic
         self.job_timeout_seconds = job_timeout_seconds
         self.galor = galor
+        self.runner_verifier = runner_verifier
         self.lease = lease
         self.lease_seconds = lease_seconds
         self.resource_profile = {
@@ -417,6 +419,17 @@ class EngineeringOrchestrator:
             else:
                 final = baseline
             patch = build_workspace_patch(baseline, final)
+            runner_receipt = None
+            if self.runner_verifier is not None and job.mode is not JobMode.CHAT:
+                if job.git_source is None or workspace is None:
+                    raise ValueError("GitHub runner requires an exact Git source")
+                runner_receipt = self.runner_verifier.verify(
+                    job=job,
+                    workspace=Path(workspace).resolve(),
+                    patch=patch,
+                    baseline_digest=baseline.source_digest,
+                    final_digest=final.source_digest,
+                )
             observations = tuple(
                 getattr(getattr(self.agent, "tools", None), "command_observations", ())
             )
@@ -467,6 +480,7 @@ class EngineeringOrchestrator:
                         "output_tokens": result.output_tokens,
                         "total_tokens": result.total_tokens,
                     },
+                    "github_runner": runner_receipt,
                 },
             )
             owner_prefix = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()

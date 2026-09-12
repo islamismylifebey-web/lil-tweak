@@ -494,7 +494,7 @@ test("uses Lil Tueeq visuals with one stable owner composer and viewport scrolli
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.lil-tueeq-signal\s*\{[^}]*width:\s*60px[^}]*height:\s*40px/s);
 });
 
-test("leaves authentication, API, model, runner, and approval contracts untouched", async () => {
+test("keeps authentication, disabled-model, runner, and approval contracts intact", async () => {
   const [auth, chatRoute, engineeringRoute, decisionRoute] = await Promise.all([
     readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/chat/route.ts", import.meta.url), "utf8"),
@@ -504,7 +504,8 @@ test("leaves authentication, API, model, runner, and approval contracts untouche
 
   assert.match(auth, /if \(!userId \|\| !email\) return null/);
   assert.match(chatRoute, /ownerFor\(request\)/);
-  assert.match(chatRoute, /OPENAI_API_KEY/);
+  assert.match(chatRoute, /MODEL_CALLS_DISABLED/);
+  assert.doesNotMatch(chatRoute, /OPENAI_API_KEY/);
   assert.match(engineeringRoute, /createCoreJob/);
   assert.match(engineeringRoute, /reserveDispatch/);
   assert.match(decisionRoute, /recordDecisionIntent/);

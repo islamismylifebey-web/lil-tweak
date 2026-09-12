@@ -13,6 +13,11 @@ This repository contains the application, execution core, migrations, tests, and
 - R2: private request, source, and verified evidence objects.
 - `core/`: signed trusted-core API, PostgreSQL state, OpenAI Responses loop, source intake, evidence production, and approval enforcement.
 - Rootless Podman: one fresh, network-disabled, resource-capped sandbox per job.
+- Optional GitHub Actions verification: an exact Tueiq patch can be replayed on the
+  ephemeral `ubuntu-24.04` runner through `.github/workflows/tueiq-runner.yml`.
+  Dispatch is enabled only when `LIL_TWEAK_EXECUTION_BACKEND=github_actions` and
+  server-only GitHub credentials are configured. The returned receipt is bound to
+  the job, source commit/tree, authority digest, ordered actions, and manifest digest.
 - `deploy/` and `scripts/`: digest-pinned Quadlets and checked DigitalOcean install/verification tooling.
 - `deploy/Containerfile.runner`: credential-free Node/Python/Go/Rust/Java sandbox toolchain built from an operator-supplied base digest.
 
