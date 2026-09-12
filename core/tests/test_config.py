@@ -22,6 +22,30 @@ def valid_environment():
 
 
 class ConfigTests(unittest.TestCase):
+    def test_github_runner_is_explicit_and_requires_server_credentials(self):
+        local = Config.from_env(valid_environment())
+        self.assertEqual(getattr(local, "execution_backend", None), "local_podman")
+        self.assertIsNone(getattr(local, "github_token", None))
+
+        environment = valid_environment()
+        environment.update(
+            {
+                "LIL_TWEAK_EXECUTION_BACKEND": "github_actions",
+                "LIL_TWEAK_GITHUB_TOKEN": "g" * 40,
+                "LIL_TWEAK_GITHUB_REPOSITORY": "islamismylifebey-web/lil-tweak",
+            }
+        )
+        remote = Config.from_env(environment)
+        self.assertEqual(remote.execution_backend, "github_actions")
+        self.assertEqual(remote.github_repository, "islamismylifebey-web/lil-tweak")
+
+        for missing in ("LIL_TWEAK_GITHUB_TOKEN", "LIL_TWEAK_GITHUB_REPOSITORY"):
+            with self.subTest(missing=missing):
+                invalid = dict(environment)
+                del invalid[missing]
+                with self.assertRaisesRegex(ValueError, "GitHub runner configuration"):
+                    Config.from_env(invalid)
+
     def test_trusted_work_root_inode_capacity_is_exact_and_required(self):
         config = Config.from_env(valid_environment())
         self.assertEqual(getattr(config, "work_root_inodes", None), 204_800)

@@ -14,6 +14,7 @@ from .limits import TRUSTED_WORK_ROOT_INODES
 
 
 _SIGNING_KEY_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_GITHUB_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 CANONICAL_OWNER_SCOPE = "ab43c7488fb38a90c7bb9c4bcc0e23e5"
 
 
@@ -35,6 +36,9 @@ class Config:
     galor_readonly_url: str | None = None
     max_admitted_jobs: int = 1
     job_timeout_seconds: int = 20 * 60
+    execution_backend: str = "local_podman"
+    github_token: str | None = None
+    github_repository: str | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Config":
@@ -112,6 +116,22 @@ class Config:
         canonical_owner_id = required("LIL_TWEAK_CANONICAL_OWNER_ID")
         if canonical_owner_id != CANONICAL_OWNER_SCOPE:
             raise ValueError("invalid canonical owner scope")
+        execution_backend = values.get(
+            "LIL_TWEAK_EXECUTION_BACKEND", "local_podman"
+        ).strip()
+        if execution_backend not in {"local_podman", "github_actions"}:
+            raise ValueError("invalid execution backend")
+        github_token = values.get("LIL_TWEAK_GITHUB_TOKEN", "").strip() or None
+        github_repository = (
+            values.get("LIL_TWEAK_GITHUB_REPOSITORY", "").strip() or None
+        )
+        if execution_backend == "github_actions" and (
+            github_token is None
+            or len(github_token.encode("utf-8")) < 32
+            or github_repository is None
+            or _GITHUB_REPOSITORY.fullmatch(github_repository) is None
+        ):
+            raise ValueError("invalid GitHub runner configuration")
         return cls(
             database_url=required("LIL_TWEAK_DATABASE_URL"),
             signing_keys={key: value.encode("utf-8") for key, value in raw_keys.items()},
@@ -129,4 +149,7 @@ class Config:
             galor_readonly_url=galor,
             max_admitted_jobs=max_admitted_jobs,
             job_timeout_seconds=job_timeout_seconds,
+            execution_backend=execution_backend,
+            github_token=github_token,
+            github_repository=github_repository,
         )

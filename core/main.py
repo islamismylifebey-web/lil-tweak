@@ -16,6 +16,7 @@ from lil_tweak.archive import ingest_r2_sources
 from lil_tweak.config import Config
 from lil_tweak.evidence import R2EvidenceStore
 from lil_tweak.git_source import ingest_git_source
+from lil_tweak.github_runner import GitHubActionsRunner, GitHubPatchVerifier
 from lil_tweak.galor import GalorClient
 from lil_tweak.limits import TRUSTED_WORK_ROOT_BYTES, TRUSTED_WORK_ROOT_INODES
 from lil_tweak.openai_agent import (
@@ -40,6 +41,16 @@ from lil_tweak.test_world_postgres import PostgresTestWorldStore
 from lil_tweak.test_world_runner import TestWorldAttemptRunner
 from lil_tweak.test_world_runtime import TestWorldRuntime
 from lil_tweak.test_world_scheduler import TestWorldScheduler
+
+
+def _build_github_runner_verifier(config: Any) -> Any:
+    if getattr(config, "execution_backend", "local_podman") != "github_actions":
+        return None
+    runner = GitHubActionsRunner(
+        token=config.github_token,
+        repository=config.github_repository,
+    )
+    return GitHubPatchVerifier(runner)
 
 
 def _mount_field(value: str) -> str:
@@ -143,6 +154,7 @@ def _build_test_world_app(
 
 def build_app(environ: dict[str, str] | None = None) -> Any:
     config = Config.from_env(environ)
+    runner_verifier = _build_github_runner_verifier(config)
     import psycopg
     import boto3
     from botocore.config import Config as BotoConfig
@@ -300,6 +312,7 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
                 evidence_store=evidence_store,
                 job_timeout_seconds=config.job_timeout_seconds,
                 galor=galor,
+                runner_verifier=runner_verifier,
                 lease=lease,
                 lease_seconds=lease_seconds,
             ).run_job(
