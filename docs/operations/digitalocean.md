@@ -150,6 +150,8 @@ The Tunnel needs outbound HTTPS only. Deny inbound TCP 8017 in both the DigitalO
 
 Before activation, run `npm ci` and `npm run verify` on Ubuntu. The canonical `npm run verify` gate includes the POSIX deployment security tests and is authoritative on Ubuntu; a Windows adaptation is not a substitute.
 
+Those deployment tests require root-owned fixtures and process-inspection permissions. The hosted Ubuntu workflows opt in with `LIL_TWEAK_DEPLOY_TEST_AS_ROOT=1`; a test-only wrapper checks the hosted Linux context, elevates only this suite, and creates and removes its own private root-owned temporary directory. Default local invocation does not elevate. Use a disposable Linux test environment for the privileged suite, and require a successful hosted run before activation.
+
 Run locally as root or `lil-tweak`:
 
 ```bash

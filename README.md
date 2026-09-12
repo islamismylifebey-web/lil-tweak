@@ -61,6 +61,8 @@ bash scripts/verify-deployment.sh --check
 
 `npm run verify` performs TypeScript checking, linting, a production build, all JavaScript contract tests, all Python core tests, and the POSIX deployment security tests. This canonical gate is authoritative on Ubuntu; a Windows adaptation is not a substitute. Local tests use fakes; they do not make a paid OpenAI request or deploy infrastructure.
 
+The deployment tests exercise real root ownership and process-lease permissions. The hosted runner and activation-check workflows explicitly set `LIL_TWEAK_DEPLOY_TEST_AS_ROOT=1`; the test wrapper verifies the hosted Linux context and uses noninteractive sudo only for that suite, with a fresh root-owned private temporary directory. Other checks run as the ordinary runner user. The default local test command does not elevate; complete deployment verification requires a disposable Linux environment with root and process-inspection permissions. Hosted execution must pass before runner activation.
+
 ## Configuration
 
 - Cloudflare binds D1 as `DB` and R2 as `FILES` through `.openai/hosting.json`.

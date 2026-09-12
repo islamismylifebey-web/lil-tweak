@@ -283,9 +283,17 @@ test("package verification includes POSIX deployment tests", () => {
   const packageDocument = JSON.parse(read("package.json"));
   assert.equal(
     packageDocument.scripts["test:deploy"],
-    "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/tests -p 'test_*.py'",
+    "python3 -B scripts/run-deploy-tests.py",
   );
   assert.match(packageDocument.scripts.verify, /(?:^|&&\s*)npm run test:deploy(?:\s*&&|$)/);
+});
+
+test("hosted verification opts into privileged deployment fixtures only", () => {
+  for (const workflow of ["tueiq-test-world-ci", "failure-recovery-ci", "tueiq-runner"]) {
+    const source = read(`.github/workflows/${workflow}.yml`);
+    assert.match(source, /LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"/);
+    assert.doesNotMatch(source, /sudo[^\n]*npm/);
+  }
 });
 
 test("four-GiB GALOR co-residency is formally blocked", () => {

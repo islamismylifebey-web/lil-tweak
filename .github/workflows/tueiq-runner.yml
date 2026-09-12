@@ -47,6 +47,7 @@ jobs:
     env:
       OPENAI_API_KEY: ""
       LIL_TWEAK_LIVE_MODEL_ENABLED: "false"
+      LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
       GIT_TERMINAL_PROMPT: "0"
       PYTHONDONTWRITEBYTECODE: "1"
       CONTROL_DIR: ${{ github.workspace }}/control
