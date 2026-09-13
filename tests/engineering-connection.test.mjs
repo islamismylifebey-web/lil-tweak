@@ -56,7 +56,7 @@ test("engineering connection status exposes merged provenance without leaking se
   assert.equal(status.github.lilTweak.pr6Merge, "08e3705227ec428d0b6ce6bc6d58dca3657b2683");
   assert.equal(status.github.galorHub.pr28Merge, "ac15ba6cf794375339528fe7c7e5b21a81bf34f0");
   assert.equal(status.galor.version, "1.0.0");
-  assert.equal(status.galor.executionHost, "galor-private-cloud-01");
+  assert.equal(status.galor.executionHost, "galor-tweak-runner-01");
   assert.deepEqual(calls, [{ url: "https://core.example/healthz", headers: { Accept: "application/json" } }]);
   assert.doesNotMatch(JSON.stringify(status), new RegExp(secret));
 });

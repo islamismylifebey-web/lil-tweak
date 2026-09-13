@@ -32,7 +32,7 @@ with warnings.catch_warnings():
     import spwd
 
 
-EXPECTED_HOST = "galor-private-cloud-01"
+EXPECTED_HOST = "galor-tweak-runner-01"
 RECEIPT_ROOT = PurePosixPath("/var/lib/lil-tweak-release-rollback")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")

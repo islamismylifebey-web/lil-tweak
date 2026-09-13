@@ -1,6 +1,8 @@
-# Lil Tweak on `galor-private-cloud-01`
+# Lil Tweak on `galor-tweak-runner-01`
 
-galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and LIL_TWEAK_GALOR_READONLY_URL remains unset. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
+galor-tweak-runner-01 is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and LIL_TWEAK_GALOR_READONLY_URL remains unset. This is an operations guide, not an automatic remote deployment: run every mutating command from an audited console on the intended droplet.
+
+The owner selected DigitalOcean droplet `597343619` (8 GiB) as the trusted Core host on 2026-09-13. Its prior engineering-execution-only designation is superseded for this deployment. ChatGPT Sites remains the owner-facing application, and GitHub-hosted Actions remains the optional verification backend. Hermes belongs on the separate droplet `589528579`, observed as `galor-hermes-private-cloud-01`; do not install or move Hermes onto this host. Any unexpected Hermes installation here requires reconciliation before qualification, not automatic deletion. This release does not modify the Hermes host.
 
 ## Invariants
 
@@ -15,12 +17,14 @@ galor-private-cloud-01 is being qualified as a dedicated Lil Tweak host. GALOR H
 
 ## Host and image preparation
 
-Confirm the target before doing anything:
+Confirm the provider dashboard identifies droplet `597343619`, then confirm the operating-system hostname before doing anything:
 
 ```bash
 hostname --short
-test "$(hostname --short)" = galor-private-cloud-01
+test "$(hostname --short)" = galor-tweak-runner-01
 ```
+
+Require both the operating-system hostname and provider identity to match. Do not rename a different machine or set `LIL_TWEAK_EXPECTED_HOST` to bypass the production target. Capture a new release-bound rollback receipt on this host; receipts from the former target are not valid for this release. The 8 GiB plan does not waive fresh-host, resource-headroom, Podman, ingress, or live owner-flow qualification.
 
 Install supported host packages from the operating-system repository: rootless Podman with Quadlet support, `uidmap`, `slirp4netns` or `pasta`, `curl`, `iproute2`, and a current `cloudflared`. Do not use a download piped into a shell. Keep the host and container runtime patched.
 

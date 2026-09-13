@@ -12,7 +12,7 @@ umask 077
 
 TUNNEL_USER="lil-tweak-tunnel"
 CONFIG_DIR="/etc/lil-tweak-cloudflared"
-EXPECTED_HOST="galor-private-cloud-01"
+EXPECTED_HOST="galor-tweak-runner-01"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 TEMPLATE="${PROJECT_DIR}/deploy/cloudflared/config.yml.example"

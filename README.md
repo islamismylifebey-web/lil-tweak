@@ -1,8 +1,10 @@
 # Lil'Tweak.AI
 
-Lil Tweak is an owner-only, approval-gated code engineer. Its public control plane runs on Cloudflare; its trusted execution core runs in an isolated rootless Podman service on `galor-private-cloud-01`.
+Lil Tweak is an owner-only, approval-gated code engineer. Its owner-facing application is hosted on ChatGPT Sites; its trusted execution core is intended to run in an isolated rootless Podman service on `galor-tweak-runner-01`.
 
-`galor-private-cloud-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and `LIL_TWEAK_GALOR_READONLY_URL` remains unset.
+`galor-tweak-runner-01` is being qualified as a dedicated Lil Tweak host. GALOR Hub is not installed by this release and `LIL_TWEAK_GALOR_READONLY_URL` remains unset.
+
+The owner approved DigitalOcean droplet `597343619` (8 GiB) as the dedicated trusted Core host on 2026-09-13, superseding its earlier engineering-execution-only designation. Hermes stays separate on droplet `589528579`, whose observed operating-system hostname is `galor-hermes-private-cloud-01`. This release does not install, move, remove, or manage Hermes. Host selection is not proof of deployment or runner readiness.
 
 This repository contains the application, execution core, migrations, tests, and deployment assets. It has not been deployed from this workspace. Production still requires a live Podman/Quadlet qualification on the target droplet and real integration checks against PostgreSQL, R2, Cloudflare Tunnel, and the OpenAI API. Four-GiB co-residency remains blocked; a four-GiB dedicated host still requires live headroom qualification. Four-GiB GALOR co-residency is blocked: production requires at least the eight-GiB plan class with monitored headroom, or a dedicated host/move for Lil Tweak or GALOR before qualification.
 
