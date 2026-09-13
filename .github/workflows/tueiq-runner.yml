@@ -47,15 +47,30 @@ jobs:
     env:
       OPENAI_API_KEY: ""
       LIL_TWEAK_LIVE_MODEL_ENABLED: "false"
+      LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
       GIT_TERMINAL_PROMPT: "0"
       PYTHONDONTWRITEBYTECODE: "1"
+      CONTROL_DIR: ${{ github.workspace }}/control
+      SOURCE_DIR: ${{ github.workspace }}/source
+      PYTHONPATH: ${{ github.workspace }}/control
     steps:
+      - name: Checkout trusted control
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.workflow_sha }}
+          path: control
+          clean: true
+          lfs: false
+          submodules: false
       - name: Checkout exact source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
           fetch-depth: 1
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_commit || github.event.pull_request.head.sha }}
+          path: source
           clean: true
           lfs: false
           submodules: false
@@ -63,6 +78,16 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
+      - name: Prepare private temporary root
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          runner_tmp="$RUNNER_TEMP/lil-tweak-runner"
+          mkdir -p -- "$runner_tmp"
+          chmod 0700 -- "$runner_tmp"
+          printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$runner_tmp" "$runner_tmp" "$runner_tmp" >> "$GITHUB_ENV"
       - name: Prepare exact manifest
         env:
           MANIFEST_BASE64: ${{ inputs.manifest_base64 }}
@@ -83,8 +108,8 @@ jobs:
           from pathlib import Path
           from core.lil_tweak.github_runner import RunnerManifest
 
-          commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-          tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+          commit = subprocess.check_output(["git", "-C", os.environ["SOURCE_DIR"], "rev-parse", "HEAD"], text=True).strip()
+          tree = subprocess.check_output(["git", "-C", os.environ["SOURCE_DIR"], "rev-parse", "HEAD^{tree}"], text=True).strip()
           canary_path = ".tueiq-runner-canary.txt"
           patch = (
               f"--- /dev/null\n+++ b/{canary_path}\n@@ -0,0 +1 @@\n"
@@ -128,12 +153,16 @@ jobs:
           Path(os.environ["RUNNER_TEMP"], "tueiq-manifest.json").write_bytes(raw)
           PY
           fi
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
       - name: Execute bounded Tueiq job
         run: |
           set -Eeuo pipefail
-          python3 scripts/tueiq_github_runner.py \
+          python3 "$CONTROL_DIR/scripts/tueiq_github_runner.py" \
             --manifest "$RUNNER_TEMP/tueiq-manifest.json" \
-            --workspace "$GITHUB_WORKSPACE" \
+            --workspace "$SOURCE_DIR" \
             --output "$RUNNER_TEMP/tueiq-runner-output"
       - name: Upload receipt
         if: always()

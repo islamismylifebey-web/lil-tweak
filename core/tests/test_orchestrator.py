@@ -386,13 +386,60 @@ class OrchestratorTests(unittest.TestCase):
                 agent=FakeAgent(AgentResult("Plan", "Done", "", ""), on_run=mutate, tools=tools),
                 evidence_store=self.evidence,
                 runner_verifier=verifier,
-            ).run_job(job.id, "owner", workspace=root)
+            ).run_job(
+                job.id,
+                "owner",
+                workspace=root,
+                source_commit="1" * 40,
+                source_tree="2" * 40,
+            )
 
             self.assertEqual(len(verifier.calls), 1)
             self.assertEqual(verifier.calls[0]["job"].id, job.id)
             self.assertIn(b"+value = 2", verifier.calls[0]["patch"])
+            self.assertEqual(verifier.calls[0]["source_commit"], "1" * 40)
+            self.assertEqual(verifier.calls[0]["source_tree"], "2" * 40)
+            self.assertNotIn("workspace", verifier.calls[0])
             manifest = json.loads(stored_evidence(self.evidence, completed, "manifest.json"))
             self.assertEqual(manifest["run"]["github_runner"]["receiptDigest"], "9" * 64)
+
+    def test_git_runner_requires_complete_verified_source_identity(self):
+        commit = "1" * 40
+        tree = "2" * 40
+        for source_commit, source_tree in ((None, None), (commit, None), (None, tree)):
+            with self.subTest(source_commit=source_commit, source_tree=source_tree):
+                store = MemoryJobStore()
+                job = store.create_job(
+                    "owner",
+                    f"missing-{source_commit}-{source_tree}",
+                    JobMode.BUILD,
+                    "Edit",
+                    git_source=GitSourceSpec(
+                        "https://github.com/islamismylifebey-web/lil-tweak.git",
+                        commit,
+                    ),
+                )
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    tools = WorkspaceTools(root, None)
+                    orchestrator = EngineeringOrchestrator(
+                        store=store,
+                        agent=FakeAgent(
+                            AgentResult("Plan", "Done", "", ""), tools=tools
+                        ),
+                        evidence_store=self.evidence,
+                        runner_verifier=object(),
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError, "verified Git source identity"
+                    ):
+                        orchestrator.run_job(
+                            job.id,
+                            "owner",
+                            workspace=root,
+                            source_commit=source_commit,
+                            source_tree=source_tree,
+                        )
 
     def test_all_editing_modes_evidence_excludes_disposable_build_artifacts(self):
         for mode in (

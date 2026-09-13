@@ -329,6 +329,8 @@ class EngineeringOrchestrator:
         *,
         source_inventory: Sequence[str] = (),
         workspace: str | Path | None = None,
+        source_commit: str | None = None,
+        source_tree: str | None = None,
     ) -> Job:
         job = self.store.get_job(job_id, owner_id)
         if job is None:
@@ -337,6 +339,13 @@ class EngineeringOrchestrator:
             return job
         if job.cancel_requested:
             return self._move(job, JobState.CANCELLED)
+        if self.runner_verifier is not None and job.mode is not JobMode.CHAT and (
+            job.git_source is None
+            or workspace is None
+            or source_commit is None
+            or source_tree is None
+        ):
+            raise ValueError("GitHub runner requires verified Git source identity")
         started_at = self.clock()
         deadline = self.monotonic() + self.job_timeout_seconds
         snapshot_roots: list[Path] = []
@@ -421,14 +430,13 @@ class EngineeringOrchestrator:
             patch = build_workspace_patch(baseline, final)
             runner_receipt = None
             if self.runner_verifier is not None and job.mode is not JobMode.CHAT:
-                if job.git_source is None or workspace is None:
-                    raise ValueError("GitHub runner requires an exact Git source")
                 runner_receipt = self.runner_verifier.verify(
                     job=job,
-                    workspace=Path(workspace).resolve(),
                     patch=patch,
                     baseline_digest=baseline.source_digest,
                     final_digest=final.source_digest,
+                    source_commit=source_commit,
+                    source_tree=source_tree,
                 )
             observations = tuple(
                 getattr(getattr(self.agent, "tools", None), "command_observations", ())

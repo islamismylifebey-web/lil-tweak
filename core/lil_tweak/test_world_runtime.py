@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from .contracts import JobMode
 from .evidence import build_workspace_patch, capture_workspace
-from .git_source import ingest_git_source
+from .git_source import GitIntakeResult, ingest_git_source
 from .openai_agent import CodeEngineer, WorkspaceTools
 from .sandbox import PodmanSandbox, SandboxLimits
 from .store import GitSourceSpec
@@ -43,7 +43,7 @@ class TestWorldRuntime:
         model: str,
         instructions: str,
         job_timeout_seconds: int,
-        ingest_git: Callable[..., list[str]] = ingest_git_source,
+        ingest_git: Callable[..., GitIntakeResult] = ingest_git_source,
         capture_workspace: Callable[..., Any] = capture_workspace,
         build_workspace_patch: Callable[..., bytes] = build_workspace_patch,
         sandbox_factory: Callable[..., Any] = PodmanSandbox,
@@ -95,7 +95,7 @@ class TestWorldRuntime:
             pass
         workspace.mkdir(parents=True, exist_ok=False, mode=0o700)
         try:
-            inventory = self._ingest_git(
+            intake = self._ingest_git(
                 GitSourceSpec(world.repository_url, world.commit),
                 workspace,
                 allowed_hosts=self.git_allowed_hosts,
@@ -113,7 +113,7 @@ class TestWorldRuntime:
             tools = self._tools_factory(workspace, sandbox)
             self._sessions[workspace] = _Session(
                 workspace=workspace,
-                inventory=list(inventory),
+                inventory=list(intake.inventory),
                 baseline=baseline,
                 sandbox=sandbox,
                 tools=tools,

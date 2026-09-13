@@ -12,15 +12,17 @@ import time
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from http.client import InvalidURL
 from typing import Any, Callable, Mapping
-from urllib.parse import quote
-from urllib.request import Request, build_opener
+from urllib.error import HTTPError
+from urllib.parse import quote, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 _HEX_40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
-_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_REPOSITORY_COMPONENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 _WORKFLOW = re.compile(r"^[A-Za-z0-9_.-]+\.ya?ml$")
 _PATH = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 _ACTIONS = frozenset({"inspect_source", "apply_patch", "compile_python", "npm_verify", "git_diff"})
@@ -33,8 +35,52 @@ class GitHubRunnerError(RuntimeError):
     """A public, stable failure from the GitHub runner boundary."""
 
 
+class _GitHubRedirectHandler(HTTPRedirectHandler):
+    def http_error_302(self, req, fp, code, msg, headers):
+        try:
+            return super().http_error_302(req, fp, code, msg, headers)
+        except (HTTPError, InvalidURL, ValueError):
+            raise GitHubRunnerError("GitHub runner redirect rejected") from None
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            target = urlsplit(newurl)
+            port = target.port
+        except (TypeError, ValueError):
+            raise GitHubRunnerError("GitHub runner redirect rejected") from None
+        if (
+            target.scheme != "https"
+            or not target.hostname
+            or target.username is not None
+            or target.password is not None
+            or port == 0
+            or target.netloc.endswith(":")
+            # urllib decodes escapes in the authority before HTTP transport.
+            or "%" in target.netloc
+            or "\\" in target.netloc
+            or any(ord(character) <= 32 or ord(character) >= 127 for character in target.netloc)
+        ):
+            raise GitHubRunnerError("GitHub runner redirect rejected")
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        redirected.remove_header("Authorization")
+        return redirected
+
+
 def _canonical(value: Mapping[str, Any]) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def _valid_github_repository(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    components = value.split("/")
+    return (
+        len(components) == 2
+        and all(component not in {".", ".."} for component in components)
+        and all(_REPOSITORY_COMPONENT.fullmatch(component) for component in components)
+    )
 
 
 def _patch_paths(patch: str) -> tuple[str, ...]:
@@ -97,7 +143,7 @@ class RunnerManifest:
     ) -> "RunnerManifest":
         if (
             not _SAFE_ID.fullmatch(execution_id)
-            or not _REPOSITORY.fullmatch(repository)
+            or not _valid_github_repository(repository)
             or not _HEX_40.fullmatch(source_commit)
             or not _HEX_40.fullmatch(source_tree)
             or not _HEX_64.fullmatch(authority_digest)
@@ -175,11 +221,21 @@ class RunnerManifest:
             "patch", "authorizedPaths", "actions", "issuedAt", "expiresAt",
             "authorityDigest", "manifestDigest",
         }
-        if set(value) != expected_keys or value.get("schemaVersion") != "lil-tweak-github-runner-manifest-v1":
+        scalar_keys = expected_keys - {"authorizedPaths", "actions"}
+        if (
+            not isinstance(value, Mapping)
+            or set(value) != expected_keys
+            or any(not isinstance(value[key], str) for key in scalar_keys)
+            or not isinstance(value["authorizedPaths"], list)
+            or not all(isinstance(path, str) for path in value["authorizedPaths"])
+            or not isinstance(value["actions"], list)
+            or not all(isinstance(action, str) for action in value["actions"])
+            or value["schemaVersion"] != "lil-tweak-github-runner-manifest-v1"
+        ):
             raise GitHubRunnerError("invalid runner manifest")
         try:
-            issued = datetime.fromisoformat(str(value["issuedAt"]).replace("Z", "+00:00"))
-            expires = datetime.fromisoformat(str(value["expiresAt"]).replace("Z", "+00:00"))
+            issued = datetime.fromisoformat(value["issuedAt"].replace("Z", "+00:00"))
+            expires = datetime.fromisoformat(value["expiresAt"].replace("Z", "+00:00"))
             parsed = cls.issue(
                 execution_id=value["executionId"],
                 repository=value["repository"],
@@ -194,7 +250,7 @@ class RunnerManifest:
             )
         except (KeyError, TypeError, ValueError):
             raise GitHubRunnerError("invalid runner manifest") from None
-        if not isinstance(value["manifestDigest"], str) or not secrets.compare_digest(
+        if not _HEX_64.fullmatch(value["manifestDigest"]) or not secrets.compare_digest(
             parsed.manifest_digest, value["manifestDigest"]
         ):
             raise GitHubRunnerError("runner manifest digest mismatch")
@@ -202,10 +258,26 @@ class RunnerManifest:
 
 
 def verify_receipt(value: Mapping[str, Any], manifest: RunnerManifest) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise GitHubRunnerError("runner receipt binding failed")
     receipt = dict(value)
     digest = receipt.pop("receiptDigest", None)
-    expected = hashlib.sha256(_canonical(receipt)).hexdigest()
     steps = receipt.get("steps")
+    if (
+        not isinstance(digest, str)
+        or not _HEX_64.fullmatch(digest)
+        or type(receipt.get("workspaceChanged")) is not bool
+        or not isinstance(steps, list)
+        or not all(
+            isinstance(step, Mapping)
+            and set(step) == {"action", "exitCode"}
+            and isinstance(step["action"], str)
+            and type(step["exitCode"]) is int
+            for step in steps
+        )
+    ):
+        raise GitHubRunnerError("runner receipt binding failed")
+    expected = hashlib.sha256(_canonical(receipt)).hexdigest()
     bindings = (
         receipt.get("schemaVersion") == "lil-tweak-github-runner-receipt-v1"
         and receipt.get("executionId") == manifest.execution_id
@@ -217,10 +289,9 @@ def verify_receipt(value: Mapping[str, Any], manifest: RunnerManifest) -> dict[s
         and receipt.get("outcome") == "succeeded"
         and receipt.get("workspaceChanged") == bool(manifest.authorized_paths)
         and receipt.get("changedPaths") == sorted(manifest.authorized_paths)
-        and isinstance(steps, list)
         and [step.get("action") for step in steps] == list(manifest.actions)
         and all(step.get("exitCode") == 0 for step in steps)
-        and secrets.compare_digest(str(digest), expected)
+        and secrets.compare_digest(digest, expected)
     )
     if not bindings:
         raise GitHubRunnerError("runner receipt binding failed")
@@ -238,12 +309,16 @@ class GitHubActionsRunner:
         sleeper: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        if len(token.encode()) < 32 or not _REPOSITORY.fullmatch(repository) or not _WORKFLOW.fullmatch(workflow):
+        if (
+            len(token.encode()) < 32
+            or not _valid_github_repository(repository)
+            or not _WORKFLOW.fullmatch(workflow)
+        ):
             raise ValueError("invalid GitHub runner configuration")
         self._token = token
         self.repository = repository
         self.workflow = workflow
-        self._opener = opener or build_opener()
+        self._opener = opener or build_opener(_GitHubRedirectHandler())
         self._sleep = sleeper
         self._now = now
 
@@ -255,11 +330,11 @@ class GitHubActionsRunner:
             data=data,
             headers={
                 "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self._token}",
                 "X-GitHub-Api-Version": "2022-11-28",
                 **({"Content-Type": "application/json"} if data is not None else {}),
             },
         )
+        request.add_unredirected_header("Authorization", f"Bearer {self._token}")
         return self._opener.open(request, timeout=5)
 
     @staticmethod
@@ -281,6 +356,7 @@ class GitHubActionsRunner:
             f"/actions/workflows/{quote(self.workflow, safe='')}/dispatches",
             {
                 "ref": "main",
+                "return_run_details": True,
                 "inputs": {
                     "execution_id": manifest.execution_id,
                     "expected_commit": manifest.source_commit,
@@ -290,48 +366,74 @@ class GitHubActionsRunner:
                 },
             },
         ) as response:
-            if response.status != 204:
+            if response.status != 200:
                 raise GitHubRunnerError("GitHub runner dispatch failed")
+            try:
+                dispatch = self._json(response)
+            except GitHubRunnerError:
+                raise GitHubRunnerError("GitHub runner dispatch failed") from None
+        if not isinstance(dispatch, Mapping):
+            raise GitHubRunnerError("GitHub runner dispatch failed")
+        run_id = dispatch.get("workflow_run_id")
+        if type(run_id) is not int or run_id <= 0:
+            raise GitHubRunnerError("GitHub runner dispatch failed")
 
-        run_id = self._wait_for_run(manifest)
+        self._wait_for_run(run_id, manifest)
         return self._collect(run_id, manifest)
 
-    def _wait_for_run(self, manifest: RunnerManifest) -> int:
+    def _wait_for_run(self, run_id: int, manifest: RunnerManifest) -> None:
         title = f"Tueiq Runner {manifest.execution_id}"
-        for _ in range(60):
-            with self._request(
-                "GET",
-                f"/actions/workflows/{quote(self.workflow, safe='')}/runs?event=workflow_dispatch&per_page=20",
-            ) as response:
+        for _ in range(360):
+            with self._request("GET", f"/actions/runs/{run_id}") as response:
                 if response.status != 200:
                     raise GitHubRunnerError("GitHub runner status failed")
-                runs = self._json(response).get("workflow_runs", [])
-            for run in runs:
-                if run.get("display_title") != title:
-                    continue
-                if run.get("status") != "completed":
-                    break
+                run = self._json(response)
+            if (
+                not isinstance(run, Mapping)
+                or type(run.get("id")) is not int
+                or run["id"] != run_id
+                or run.get("event") != "workflow_dispatch"
+                or run.get("display_title") != title
+            ):
+                raise GitHubRunnerError("GitHub runner status failed")
+            if run.get("status") == "completed":
                 if run.get("conclusion") != "success":
                     raise GitHubRunnerError("GitHub runner execution failed")
-                return int(run["id"])
+                return
             self._sleep(5)
+        try:
+            with self._request("POST", f"/actions/runs/{run_id}/cancel"):
+                pass
+        except Exception:
+            pass
         raise GitHubRunnerError("GitHub runner timed out")
 
     def _collect(self, run_id: int, manifest: RunnerManifest) -> dict[str, Any]:
         with self._request("GET", f"/actions/runs/{run_id}/artifacts") as response:
             if response.status != 200:
                 raise GitHubRunnerError("GitHub runner evidence unavailable")
-            artifacts = self._json(response).get("artifacts", [])
-        expected_name = f"tueiq-runner-evidence-{run_id}"
-        artifact = next((item for item in artifacts if item.get("name") == expected_name), None)
-        if (
-            artifact is None
-            or artifact.get("expired") is not False
-            or not isinstance(artifact.get("size_in_bytes"), int)
-            or artifact["size_in_bytes"] > _MAX_ARTIFACT_BYTES
+            payload = self._json(response)
+        if not isinstance(payload, Mapping):
+            raise GitHubRunnerError("GitHub runner evidence unavailable")
+        artifacts = payload.get("artifacts")
+        if not isinstance(artifacts, list) or not all(
+            isinstance(item, Mapping) for item in artifacts
         ):
             raise GitHubRunnerError("GitHub runner evidence unavailable")
-        with self._request("GET", f"/actions/artifacts/{int(artifact['id'])}/zip") as response:
+        expected_name = f"tueiq-runner-evidence-{run_id}"
+        matches = [item for item in artifacts if item.get("name") == expected_name]
+        if len(matches) != 1:
+            raise GitHubRunnerError("GitHub runner evidence unavailable")
+        artifact = matches[0]
+        if (
+            artifact.get("expired") is not False
+            or type(artifact.get("id")) is not int
+            or artifact["id"] <= 0
+            or type(artifact.get("size_in_bytes")) is not int
+            or not 0 <= artifact["size_in_bytes"] <= _MAX_ARTIFACT_BYTES
+        ):
+            raise GitHubRunnerError("GitHub runner evidence unavailable")
+        with self._request("GET", f"/actions/artifacts/{artifact['id']}/zip") as response:
             archive_bytes = response.read(_MAX_ARTIFACT_BYTES + 1)
         if len(archive_bytes) > _MAX_ARTIFACT_BYTES:
             raise GitHubRunnerError("GitHub runner evidence too large")
@@ -367,35 +469,62 @@ class GitHubPatchVerifier:
         self,
         *,
         job: Any,
-        workspace: Any,
         patch: bytes,
         baseline_digest: str,
         final_digest: str,
-        source_tree: str | None = None,
+        source_commit: str,
+        source_tree: str,
     ) -> dict[str, Any]:
         source = getattr(job, "git_source", None)
+        if source_commit != getattr(source, "commit", None):
+            raise GitHubRunnerError("verified source commit does not match job")
         url = getattr(source, "repository_url", "")
-        prefix = "https://github.com/"
-        if not url.startswith(prefix) or not url.endswith(".git"):
+        if (
+            not isinstance(url, str)
+            or "?" in url
+            or "#" in url
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in url)
+        ):
             raise GitHubRunnerError("unsupported GitHub source")
-        repository = url[len(prefix) : -4]
-        if repository != self._runner.repository:
+        try:
+            parsed = urlsplit(url)
+            port = parsed.port
+        except (TypeError, ValueError):
+            raise GitHubRunnerError("unsupported GitHub source") from None
+        path = parsed.path
+        if path.endswith("/"):
+            path = path[:-1]
+        if path.casefold().endswith(".git"):
+            path = path[:-4]
+        repository = path[1:] if path.startswith("/") else ""
+        if (
+            parsed.scheme.casefold() != "https"
+            or parsed.netloc.casefold() not in {"github.com", "github.com:443"}
+            or parsed.hostname is None
+            or parsed.hostname.casefold() != "github.com"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or port not in {None, 443}
+            or not _valid_github_repository(repository)
+        ):
+            raise GitHubRunnerError("unsupported GitHub source")
+        if repository.casefold() != self._runner.repository.casefold():
             raise GitHubRunnerError("GitHub source does not match runner")
         try:
             patch_text = patch.decode("utf-8", "strict")
         except UnicodeDecodeError:
             raise GitHubRunnerError("runner patch must be UTF-8") from None
         paths = _patch_paths(patch_text)
-        if source_tree is None:
-            completed = subprocess_run_git(workspace, "rev-parse", "HEAD^{tree}")
-            source_tree = completed
         authority = hashlib.sha256(
             _canonical(
                 {
                     "schemaVersion": "lil-tweak-github-authority-v1",
                     "jobId": job.id,
                     "revision": job.revision,
-                    "sourceCommit": source.commit,
+                    "sourceCommit": source_commit,
+                    "sourceTree": source_tree,
                     "sourceDigest": baseline_digest,
                     "resultDigest": final_digest,
                     "patchDigest": hashlib.sha256(patch).hexdigest(),
@@ -410,8 +539,8 @@ class GitHubPatchVerifier:
         actions.extend(("compile_python", "npm_verify", "git_diff"))
         manifest = RunnerManifest.issue(
             execution_id=f"{job.id}-{job.revision}"[-80:],
-            repository=repository,
-            source_commit=source.commit,
+            repository=self._runner.repository,
+            source_commit=source_commit,
             source_tree=source_tree,
             patch=patch_text,
             authorized_paths=paths,
@@ -421,20 +550,3 @@ class GitHubPatchVerifier:
             authority_digest=authority,
         )
         return self._runner.execute(manifest)
-
-
-def subprocess_run_git(workspace: Any, *args: str) -> str:
-    """Read one exact Git identity without invoking a shell."""
-    import subprocess
-
-    result = subprocess.run(
-        ("git", "-C", str(workspace), *args),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    value = result.stdout.strip()
-    if result.returncode != 0 or not _HEX_40.fullmatch(value):
-        raise GitHubRunnerError("unable to bind Git source tree")
-    return value

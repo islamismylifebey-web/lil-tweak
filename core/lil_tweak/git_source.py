@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import shutil
 import socket
 import subprocess
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -22,6 +24,20 @@ class GitIntakeError(RuntimeError):
     code = "git_source_intake_failed"
 
 
+@dataclass(frozen=True, slots=True)
+class GitIntakeResult:
+    inventory: tuple[str, ...]
+    source_commit: str
+    source_tree: str
+
+
+def _object_id(value: str) -> str:
+    normalized = value.strip()
+    if re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", normalized) is None:
+        raise GitIntakeError("git_identity_invalid")
+    return normalized
+
+
 def ingest_git_source(
     source: GitSourceSpec,
     destination: str | os.PathLike[str],
@@ -33,7 +49,7 @@ def ingest_git_source(
     max_files: int = 20_000,
     max_file_bytes: int = 25 * 1024 * 1024,
     max_total_bytes: int = MAX_EXPANDED_SOURCE_BYTES,
-) -> list[str]:
+) -> GitIntakeResult:
     parsed = urlsplit(source.repository_url)
     host = (parsed.hostname or "").lower()
     if (
@@ -120,15 +136,24 @@ def ingest_git_source(
         )
         _bounded_disk_usage(root, max_total_bytes=max_total_bytes)
         run(["checkout", "--detach", "FETCH_HEAD"])
-        resolved = run(["rev-parse", "HEAD"]).strip().lower()
-        if resolved != source.commit:
+        resolved_commit = _object_id(run(["rev-parse", "HEAD"]))
+        resolved_tree = _object_id(run(["rev-parse", "HEAD^{tree}"]))
+        if resolved_commit != source.commit:
             raise GitIntakeError("git_commit_mismatch")
+        if len(resolved_commit) != len(resolved_tree):
+            raise GitIntakeError("git_identity_invalid")
         shutil.rmtree(root / ".git", ignore_errors=True)
-        return _bounded_inventory(
-            root,
-            max_files=max_files,
-            max_file_bytes=max_file_bytes,
-            max_total_bytes=max_total_bytes,
+        return GitIntakeResult(
+            tuple(
+                _bounded_inventory(
+                    root,
+                    max_files=max_files,
+                    max_file_bytes=max_file_bytes,
+                    max_total_bytes=max_total_bytes,
+                )
+            ),
+            resolved_commit,
+            resolved_tree,
         )
     except GitIntakeError:
         shutil.rmtree(root, ignore_errors=True)

@@ -1,7 +1,7 @@
 import sys
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import ANY, Mock, patch
@@ -12,7 +12,8 @@ try:
     import main as core_main
     from lil_tweak import limits as runtime_limits
     from lil_tweak.contracts import JobMode, JobState
-    from lil_tweak.store import MemoryJobStore
+    from lil_tweak.git_source import GitIntakeResult
+    from lil_tweak.store import GitSourceSpec, MemoryJobStore
 finally:
     sys.path.pop(0)
 
@@ -840,6 +841,74 @@ class MainWiringTests(unittest.TestCase):
 
                     self.assertTrue(workspace.exists())
                     self.assertFalse(guard())
+
+    def test_git_identity_is_forwarded_from_intake_to_orchestrator(self):
+        boto3 = Mock()
+        psycopg = Mock()
+        store = MemoryJobStore()
+        commit = "a" * 40
+        tree = "b" * 40
+        job = store.create_job(
+            "owner",
+            "git-identity",
+            JobMode.BUILD,
+            "Build",
+            git_source=GitSourceSpec("https://github.com/example/project.git", commit),
+        )
+        store.update_job(
+            job.id, owner_id="owner", expected_revision=0, state=JobState.QUEUED
+        )
+        intake_result = GitIntakeResult(("README.md",), commit, tree)
+
+        class Sandbox:
+            lifecycle_failed = False
+
+            @classmethod
+            def cleanup_stale(cls):
+                return None
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def teardown(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = make_config(directory)
+            config.git_allowed_hosts = ("github.com",)
+            runner = Mock()
+            with (
+                patch.dict(sys.modules, sdk_modules(boto3, psycopg)),
+                patch.object(core_main.Config, "from_env", return_value=config),
+                patch.object(core_main, "PostgresJobStore", return_value=store),
+                patch.object(core_main, "R2EvidenceStore"),
+                patch.object(core_main, "ResponsesClient"),
+                patch.object(core_main, "is_bounded_work_root", return_value=True),
+                patch.object(
+                    core_main, "runtime_execution_lock", return_value=nullcontext()
+                ),
+                patch.object(core_main, "reconcile_promotion_markers", return_value=()),
+                patch.object(core_main, "cleanup_patch_remnants", return_value=()),
+                patch.object(core_main, "PodmanSandbox", Sandbox),
+                patch.object(core_main, "ingest_git_source", return_value=intake_result),
+                patch.object(core_main, "BackgroundJobRunner", runner),
+                patch.object(core_main, "DurableJobScheduler"),
+                patch.object(core_main, "create_app", return_value=object()),
+            ):
+                core_main.build_app({})
+                prepare_sources = runner.call_args.kwargs["source_intake"]
+                execute_job = runner.call_args.args[0]
+                result = prepare_sources(job.id, "owner")
+                with patch.object(
+                    core_main.EngineeringOrchestrator,
+                    "run_job",
+                    return_value=object(),
+                ) as run_job:
+                    execute_job(job.id, "owner", result)
+
+        self.assertEqual(run_job.call_args.kwargs["source_inventory"], ("README.md",))
+        self.assertEqual(run_job.call_args.kwargs["source_commit"], commit)
+        self.assertEqual(run_job.call_args.kwargs["source_tree"], tree)
 
     def test_source_intake_runs_while_job_is_ingesting(self):
         boto3 = Mock()

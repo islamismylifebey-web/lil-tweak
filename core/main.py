@@ -15,7 +15,7 @@ from lil_tweak.api import create_app
 from lil_tweak.archive import ingest_r2_sources
 from lil_tweak.config import Config
 from lil_tweak.evidence import R2EvidenceStore
-from lil_tweak.git_source import ingest_git_source
+from lil_tweak.git_source import GitIntakeResult, ingest_git_source
 from lil_tweak.github_runner import GitHubActionsRunner, GitHubPatchVerifier
 from lil_tweak.galor import GalorClient
 from lil_tweak.limits import TRUSTED_WORK_ROOT_BYTES, TRUSTED_WORK_ROOT_INODES
@@ -220,7 +220,9 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             recovery_latched["value"] = True
             raise PromotionRecoveryRequired("patch_cleanup_failed") from None
 
-    def prepare_sources(job_id: str, owner_id: str, lease: Any = None) -> list[str]:
+    def prepare_sources(
+        job_id: str, owner_id: str, lease: Any = None
+    ) -> GitIntakeResult | list[str]:
         if recovery_latched["value"]:
             raise PromotionRecoveryRequired("patch_reconciliation_required")
         job = store.get_job(job_id, owner_id)
@@ -283,9 +285,17 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
     def execute_job(
         job_id: str,
         owner_id: str,
-        source_inventory: list[str],
+        source_inventory: GitIntakeResult | list[str],
         lease: Any = None,
     ) -> Any:
+        source_commit = None
+        source_tree = None
+        if isinstance(source_inventory, GitIntakeResult):
+            source_commit = source_inventory.source_commit
+            source_tree = source_inventory.source_tree
+            inventory = source_inventory.inventory
+        else:
+            inventory = source_inventory
         workspace = workspace_for(job_id)
         sandbox = PodmanSandbox(
             image=config.runner_image,
@@ -318,7 +328,9 @@ def build_app(environ: dict[str, str] | None = None) -> Any:
             ).run_job(
                 job_id,
                 owner_id,
-                source_inventory=source_inventory,
+                source_inventory=inventory,
+                source_commit=source_commit,
+                source_tree=source_tree,
                 workspace=workspace,
             )
         except PromotionRecoveryRequired:

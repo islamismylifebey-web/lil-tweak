@@ -90,6 +90,7 @@ jobs:
       - run: npm ci
       - name: Full repository verification
         env:
+          LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
           PYTHONDONTWRITEBYTECODE: "1"
           TMPDIR: ${{ runner.temp }}/lil-tweak-recovery
           TMP: ${{ runner.temp }}/lil-tweak-recovery

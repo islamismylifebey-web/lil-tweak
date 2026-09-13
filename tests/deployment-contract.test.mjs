@@ -241,6 +241,61 @@ test("runbook makes Cloudflare the only ingress and documents lifecycle drills",
   assert.doesNotMatch(runbook, /https?:\/\/(?!127\.0\.0\.1)(?:\d{1,3}\.){3}\d{1,3}/);
 });
 
+test("GitHub Actions production activation is explicit and conditional", () => {
+  const example = read("deploy/core.env.example");
+  const readme = read("README.md");
+  const runbook = read("docs/operations/digitalocean.md");
+
+  assert.match(example, /^LIL_TWEAK_EXECUTION_BACKEND=local_podman$/m);
+  assert.doesNotMatch(example, /^LIL_TWEAK_GITHUB_(?:REPOSITORY|TOKEN)=/m);
+  assert.match(
+    example,
+    /^# github_actions only: change the backend above and uncomment both reviewed values\.$/m,
+  );
+  assert.match(example, /^# LIL_TWEAK_GITHUB_REPOSITORY=OWNER\/REPOSITORY$/m);
+  assert.match(example, /^# LIL_TWEAK_GITHUB_TOKEN=REPLACE$/m);
+
+  for (const document of [readme, runbook]) {
+    for (const setting of [
+      "LIL_TWEAK_EXECUTION_BACKEND",
+      "LIL_TWEAK_GITHUB_REPOSITORY",
+      "LIL_TWEAK_GITHUB_TOKEN",
+      "LIL_TWEAK_GIT_ALLOWED_HOSTS=github.com",
+    ]) {
+      assert.ok(document.includes(setting), `missing activation setting: ${setting}`);
+    }
+    assert.match(document, /local_podman[^.]*default/i);
+    assert.match(document, /invalid|partial/i);
+    assert.match(document, /dormant GitHub\s+credentials/i);
+    assert.match(document, /repository-scoped/i);
+    assert.match(document, /expir(?:ing|ation)/i);
+    assert.match(document, /least-privilege Actions read\/write/i);
+    assert.match(document, /server-only/i);
+    assert.match(document, /rotation/i);
+    assert.match(document, /readiness does not contact GitHub/i);
+    assert.match(document, /controlled dispatch\/receipt/i);
+    assert.match(document, /GitHub-hosted `?ubuntu-24\.04`?/i);
+    assert.match(document, /no self-hosted personal workstation/i);
+  }
+});
+
+test("package verification includes POSIX deployment tests", () => {
+  const packageDocument = JSON.parse(read("package.json"));
+  assert.equal(
+    packageDocument.scripts["test:deploy"],
+    "python3 -B scripts/run-deploy-tests.py",
+  );
+  assert.match(packageDocument.scripts.verify, /(?:^|&&\s*)npm run test:deploy(?:\s*&&|$)/);
+});
+
+test("hosted verification opts into privileged deployment fixtures only", () => {
+  for (const workflow of ["tueiq-test-world-ci", "failure-recovery-ci", "tueiq-runner"]) {
+    const source = read(`.github/workflows/${workflow}.yml`);
+    assert.match(source, /LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"/);
+    assert.doesNotMatch(source, /sudo[^\n]*npm/);
+  }
+});
+
 test("four-GiB GALOR co-residency is formally blocked", () => {
   const readme = read("README.md").toLowerCase();
   const runbook = read("docs/operations/digitalocean.md").toLowerCase();

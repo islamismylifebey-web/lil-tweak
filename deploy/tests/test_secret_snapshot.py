@@ -20,6 +20,8 @@ RUNNER_IMAGE = (
 ADMIN_PASSWORD = "B" * 32
 APP_PASSWORD = "A" * 32
 MIGRATOR_PASSWORD = "C" * 32
+GITHUB_REPOSITORY = "islamismylifebey-web/lil-tweak"
+GITHUB_TOKEN = "g" * 40
 SECRET_NAMES = (
     "core.env",
     "postgres-admin-password",
@@ -48,6 +50,7 @@ def valid_core_environment() -> bytes:
         "OPENAI_API_KEY=sk-reviewed-test-value\n"
         "LIL_TWEAK_OPENAI_MODEL=gpt-5.6-terra\n"
         f"LIL_TWEAK_RUNNER_IMAGE={RUNNER_IMAGE}\n"
+        "LIL_TWEAK_EXECUTION_BACKEND=local_podman\n"
         "LIL_TWEAK_WORK_ROOT=/var/lib/lil-tweak/work\n"
         "LIL_TWEAK_WORK_ROOT_INODES=204800\n"
         "LIL_TWEAK_MAX_ADMITTED_JOBS=1\n"
@@ -113,6 +116,10 @@ class SecretSnapshotTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, b"")
         self.assertEqual(list(fixture.destination.iterdir()), [])
+        for line in fixture.contents["core.env"].splitlines():
+            if line.startswith(b"LIL_TWEAK_GITHUB_TOKEN="):
+                token = line.removeprefix(b"LIL_TWEAK_GITHUB_TOKEN=")
+                self.assertNotIn(token, result.stderr)
 
     def test_valid_inputs_are_frozen_as_private_byte_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -134,6 +141,112 @@ class SecretSnapshotTests(unittest.TestCase):
                 self.assertEqual(metadata.st_uid, os.geteuid(), name)
                 self.assertEqual(metadata.st_nlink, 1, name)
                 self.assertEqual(path.read_bytes(), fixture.contents[name], name)
+
+    def test_github_actions_inputs_are_frozen_byte_identically(self) -> None:
+        for label, token in (
+            ("ASCII token", GITHUB_TOKEN),
+            ("exactly 32 UTF-8 bytes", "é" * 16),
+        ):
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as temporary:
+                fixture = SecretFixture(Path(temporary))
+                fixture.replace(
+                    "core.env",
+                    fixture.contents["core.env"].replace(
+                        b"LIL_TWEAK_EXECUTION_BACKEND=local_podman\n",
+                        (
+                            "LIL_TWEAK_EXECUTION_BACKEND=github_actions\n"
+                            f"LIL_TWEAK_GITHUB_REPOSITORY={GITHUB_REPOSITORY}\n"
+                            f"LIL_TWEAK_GITHUB_TOKEN={token}\n"
+                        ).encode("utf-8"),
+                    ),
+                )
+                result = fixture.run()
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, (RUNNER_IMAGE + "\n").encode("ascii"))
+                self.assertEqual(result.stderr, b"")
+                self.assertEqual(
+                    (fixture.destination / "core.env").read_bytes(),
+                    fixture.contents["core.env"],
+                )
+
+    def test_execution_backend_and_github_credentials_fail_closed(self) -> None:
+        valid = valid_core_environment()
+        remote = valid.replace(
+            b"LIL_TWEAK_EXECUTION_BACKEND=local_podman\n",
+            (
+                "LIL_TWEAK_EXECUTION_BACKEND=github_actions\n"
+                f"LIL_TWEAK_GITHUB_REPOSITORY={GITHUB_REPOSITORY}\n"
+                f"LIL_TWEAK_GITHUB_TOKEN={GITHUB_TOKEN}\n"
+            ).encode("ascii"),
+        )
+        rejected = {
+            "missing backend": valid.replace(
+                b"LIL_TWEAK_EXECUTION_BACKEND=local_podman\n", b""
+            ),
+            "unknown backend": valid.replace(b"local_podman", b"remote"),
+            "case-mismatched backend": valid.replace(b"local_podman", b"LOCAL_PODMAN"),
+            "missing GitHub repository": remote.replace(
+                f"LIL_TWEAK_GITHUB_REPOSITORY={GITHUB_REPOSITORY}\n".encode("ascii"), b""
+            ),
+            "missing GitHub token": remote.replace(
+                f"LIL_TWEAK_GITHUB_TOKEN={GITHUB_TOKEN}\n".encode("ascii"), b""
+            ),
+            "short UTF-8 GitHub token": remote.replace(
+                GITHUB_TOKEN.encode("ascii"), ("é" * 15).encode("utf-8")
+            ),
+        }
+        for label, contents in rejected.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                fixture = SecretFixture(Path(temporary))
+                fixture.replace("core.env", contents)
+                self.assert_rejected(fixture)
+
+    def test_github_repository_requires_exactly_two_safe_non_dot_components(self) -> None:
+        valid = valid_core_environment()
+        for repository in (
+            "owner",
+            "owner/repository/extra",
+            "/repository",
+            "owner/",
+            "owner name/repository",
+            "owner/repository?ref=main",
+            "./repository",
+            "../repository",
+            "owner/.",
+            "owner/..",
+        ):
+            with self.subTest(repository=repository), tempfile.TemporaryDirectory() as temporary:
+                fixture = SecretFixture(Path(temporary))
+                fixture.replace(
+                    "core.env",
+                    valid.replace(
+                        b"LIL_TWEAK_EXECUTION_BACKEND=local_podman\n",
+                        (
+                            "LIL_TWEAK_EXECUTION_BACKEND=github_actions\n"
+                            f"LIL_TWEAK_GITHUB_REPOSITORY={repository}\n"
+                            f"LIL_TWEAK_GITHUB_TOKEN={GITHUB_TOKEN}\n"
+                        ).encode("utf-8"),
+                    ),
+                )
+                self.assert_rejected(fixture)
+
+    def test_local_podman_rejects_any_dormant_github_credential(self) -> None:
+        additions = (
+            f"LIL_TWEAK_GITHUB_REPOSITORY={GITHUB_REPOSITORY}\n",
+            f"LIL_TWEAK_GITHUB_TOKEN={GITHUB_TOKEN}\n",
+            (
+                f"LIL_TWEAK_GITHUB_REPOSITORY={GITHUB_REPOSITORY}\n"
+                f"LIL_TWEAK_GITHUB_TOKEN={GITHUB_TOKEN}\n"
+            ),
+        )
+        for addition in additions:
+            with self.subTest(addition=addition), tempfile.TemporaryDirectory() as temporary:
+                fixture = SecretFixture(Path(temporary))
+                fixture.replace(
+                    "core.env", fixture.contents["core.env"] + addition.encode("ascii")
+                )
+                self.assert_rejected(fixture)
 
     def test_separate_registry_auth_input_may_share_the_source_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -46,6 +46,35 @@ class ConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "GitHub runner configuration"):
                     Config.from_env(invalid)
 
+    def test_github_runner_rejects_dot_alias_repositories(self):
+        for repository in ("./repository", "../repository", "owner/.", "owner/.."):
+            with self.subTest(repository=repository):
+                environment = valid_environment()
+                environment.update(
+                    {
+                        "LIL_TWEAK_EXECUTION_BACKEND": "github_actions",
+                        "LIL_TWEAK_GITHUB_TOKEN": "g" * 40,
+                        "LIL_TWEAK_GITHUB_REPOSITORY": repository,
+                    }
+                )
+                with self.assertRaisesRegex(ValueError, "GitHub runner configuration"):
+                    Config.from_env(environment)
+
+    def test_local_runner_rejects_dormant_github_credentials(self):
+        for github_values in (
+            {"LIL_TWEAK_GITHUB_TOKEN": "g" * 40},
+            {"LIL_TWEAK_GITHUB_REPOSITORY": "owner/repository"},
+            {
+                "LIL_TWEAK_GITHUB_TOKEN": "g" * 40,
+                "LIL_TWEAK_GITHUB_REPOSITORY": "owner/repository",
+            },
+        ):
+            with self.subTest(github_values=github_values):
+                environment = valid_environment()
+                environment.update(github_values)
+                with self.assertRaisesRegex(ValueError, "GitHub runner configuration"):
+                    Config.from_env(environment)
+
     def test_trusted_work_root_inode_capacity_is_exact_and_required(self):
         config = Config.from_env(valid_environment())
         self.assertEqual(getattr(config, "work_root_inodes", None), 204_800)
