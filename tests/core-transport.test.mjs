@@ -63,9 +63,10 @@ test("maps only safe core failure semantics to the owner", () => {
   assert.deepEqual(publicCoreFailure(418), { status: 503, message: "The private engineering core is unavailable." });
 });
 
-test("managed production ingress rejects direct hosts and honors optional assertions", async () => {
+test("managed assertion ingress requires a valid assertion and rejects direct hosts", async () => {
   const config = {
     environment: "production",
+    ingressMode: "managed_assertion",
     publicOrigin: "https://lil-tweak.example",
     managedIngressSecret: "a-long-random-managed-ingress-secret",
   };
@@ -78,15 +79,12 @@ test("managed production ingress rejects direct hosts and honors optional assert
   assert.equal(await enforceManagedIngress(new Request("https://lil-tweak.example/"), config), false);
   const publicConfig = {
     environment: "production",
+    ingressMode: "managed_assertion",
     publicOrigin: "https://lil-tweak.example",
   };
-  assert.equal(
-    await enforceManagedIngress(new Request("https://lil-tweak.example/"), publicConfig),
-    true,
-  );
-  assert.equal(
-    await enforceManagedIngress(new Request("https://direct.workers.dev/"), publicConfig),
-    false,
+  await assert.rejects(
+    enforceManagedIngress(new Request("https://lil-tweak.example/"), publicConfig),
+    /configuration/i,
   );
   await assert.rejects(
     enforceManagedIngress(new Request("https://lil-tweak.example/"), {
@@ -99,6 +97,67 @@ test("managed production ingress rejects direct hosts and honors optional assert
     enforceManagedIngress(new Request("https://lil-tweak.example/"), { environment: "production" }),
     /configuration/i,
   );
+});
+
+const nativeOrigin = "https://lil-tweak.owner.chatgpt.site";
+const nativeConfig = {
+  environment: "production",
+  ingressMode: "sites_native",
+  publicOrigin: nativeOrigin,
+};
+const nativeIdentity = {
+  "oai-authenticated-user-id": "site-scoped-user-fixture",
+  "oai-authenticated-user-email": "owner@example.invalid",
+};
+
+test("production ingress never infers its trust mode from a missing secret", async () => {
+  for (const ingressMode of [undefined, "", " ", "unknown", "SITES_NATIVE"]) {
+    await assert.rejects(enforceManagedIngress(new Request(nativeOrigin, {
+      headers: nativeIdentity,
+    }), { ...nativeConfig, ingressMode }), /configuration/i);
+  }
+});
+
+test("native Sites ingress requires both nonempty platform identity headers", async () => {
+  assert.equal(await enforceManagedIngress(new Request(nativeOrigin, {
+    headers: nativeIdentity,
+  }), nativeConfig), true);
+  for (const headers of [
+    {},
+    { "oai-authenticated-user-id": "id" },
+    { "oai-authenticated-user-email": "owner@example.invalid" },
+    { ...nativeIdentity, "oai-authenticated-user-id": " " },
+    { ...nativeIdentity, "oai-authenticated-user-email": " " },
+  ]) {
+    assert.equal(await enforceManagedIngress(new Request(nativeOrigin, { headers }), nativeConfig), false);
+  }
+});
+
+test("native Sites ingress cannot authorize an alternate or non-Sites origin", async () => {
+  for (const origin of [
+    "https://alternate.owner.chatgpt.site", "https://direct.workers.dev",
+    "http://lil-tweak.owner.chatgpt.site", `${nativeOrigin}:8443`,
+  ]) {
+    assert.equal(await enforceManagedIngress(new Request(origin, {
+      headers: nativeIdentity,
+    }), nativeConfig), false);
+  }
+  for (const publicOrigin of [
+    "https://not-sites.example", "https://chatgpt.site", "https://owner.chatgpt.site.evil.example",
+    `${nativeOrigin}:8443`, `http://lil-tweak.owner.chatgpt.site`, `${nativeOrigin}/extra`,
+  ]) {
+    await assert.rejects(enforceManagedIngress(new Request(publicOrigin, {
+      headers: nativeIdentity,
+    }), { ...nativeConfig, publicOrigin }), /configuration/i);
+  }
+});
+
+test("native Sites ingress rejects contradictory assertion configuration", async () => {
+  for (const managedIngressSecret of ["", " ", "short", "x".repeat(32)]) {
+    await assert.rejects(enforceManagedIngress(new Request(nativeOrigin, {
+      headers: nativeIdentity,
+    }), { ...nativeConfig, managedIngressSecret }), /configuration/i);
+  }
 });
 
 test("managed ingress fails closed when its environment is omitted", async () => {

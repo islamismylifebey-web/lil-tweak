@@ -1,6 +1,18 @@
 # Cloudflare D1 migration and cutover
 
-This is a blocking production gate. Run it from an authenticated administration workstation in the exact reviewed release checkout. It changes D1 only when the explicit `migrations apply` command is run; none of the repository verification commands change Cloudflare resources.
+This is a blocking production gate. First identify who owns the storage; do not use provider-management commands against an unresolved platform binding.
+
+## Sites-managed storage
+
+For ChatGPT Sites, `.openai/hosting.json` declares logical `DB` and `FILES` bindings. Sites owns the physical resources and applies the source archive's generated Drizzle migrations before Worker upload. Use the native Sites deployment and database-inspection tools. Do not invent physical database IDs, reuse a similarly named user-account database, or request an API token to administer Sites-owned storage. The standalone Wrangler procedure below is not the Sites deployment path.
+
+Preserve applied SQL and migration metadata, compare the frozen source's migration assets with the preceding deployed version, and retain the actual project, source, archive, deployment, access and environment revisions. Verify the live logical binding and structural schema through supported platform observations; a table-name list alone is not complete schema evidence. Do not assume Sites uses Wrangler's `d1_migrations` history table. Where a necessary check is unavailable, record it as unverified rather than manufacturing a successful receipt. A code-only rollback must use the preceding schema-compatible Site version and preserve the forward schema.
+
+Native ingress uses explicit `LIL_TWEAK_INGRESS_MODE=sites_native`, documented Sites authentication, exact origin, two identity headers and the independent server-side owner allowlist. Keep the Site owner-private. No custom managed assertion is required or configured in this mode. Retain actual owner sign-in and anonymous forged-header rejection evidence; do not confuse a bypass bearer or local identity fixture with a real signed-in session.
+
+## Operator-managed D1 only
+
+The remaining Wrangler procedure is for a separately provisioned operator-owned database whose exact identity and administration authority have been established. Run it from an authenticated administration workstation in the reviewed release checkout. It changes D1 only when the explicit `migrations apply` command is run; repository verification commands do not change Cloudflare resources.
 
 Lil Tweak uses Wrangler-managed, forward-only migrations from `drizzle/`. The checked example configuration exists only to select that directory. It is not a deploy configuration and its placeholder database identity must never be used.
 
@@ -73,7 +85,7 @@ Only after the schema gate passes may the matching Worker/Sites release be selec
 - the managed Sites hostname is the only public origin;
 - direct Worker and service origins are unreachable;
 - caller-supplied `oai-authenticated-user-id`, `oai-authenticated-user-email`, and `oai-authenticated-user-name` are stripped and replaced by the trusted managed ingress;
-- requests without the private managed-ingress assertion fail closed;
+- requests without the private managed-ingress assertion fail closed when the explicitly selected mode is `managed_assertion`; native Sites mode instead requires platform authentication and the complete identity-header pair;
 - D1 is bound as `DB`, R2 is bound as `FILES`, and an authenticated owner can perform a read-only project/job lookup;
 - a non-owner identity and a forged identity-header request cannot read that owner data.
 

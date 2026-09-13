@@ -11,17 +11,22 @@ Configure these Worker bindings. Values marked secret belong in the platform sec
 | Binding | Kind | Contract |
 |---|---|---|
 | `LIL_TWEAK_ENVIRONMENT` | variable | Exact value `production`; a missing value fails closed, and only an explicit `development` or `test` value is permitted in a local preview |
+| `LIL_TWEAK_INGRESS_MODE` | variable | Explicit `sites_native` for owner-private ChatGPT Sites, or `managed_assertion` for a separately provisioned trusted gateway; no implicit fallback |
 | `PUBLIC_ORIGIN` | variable | Exact `https://host` owner-facing Sites origin; no trailing slash, path, query, fragment, or `workers.dev` alias |
-| `MANAGED_INGRESS_SECRET` | secret | At least 32 UTF-8 bytes; stripped from client requests and injected by managed Sites ingress as `X-Lil-Tweak-Managed-Ingress` |
+| `MANAGED_INGRESS_SECRET` | secret | Only for `managed_assertion`: at least 32 UTF-8 bytes, stripped from client requests and injected by that trusted gateway as `X-Lil-Tweak-Managed-Ingress`. Must be absent in `sites_native` |
 | `CORE_ORIGIN` | variable | Exact `https://host` Access-protected Tunnel origin |
 | `CORE_ACCESS_CLIENT_ID` | secret | Service-token client ID |
 | `CORE_ACCESS_CLIENT_SECRET` | secret | Service-token client secret |
 | `CORE_SIGNING_KEY_ID` | variable | Active Lil Tweak HMAC key ID matching `[A-Za-z0-9][A-Za-z0-9._-]{0,63}` |
 | `CORE_SIGNING_SECRET` | secret | Active Lil Tweak HMAC secret containing at least 32 UTF-8 bytes |
 
-`deploy/cloudflare/worker.production.env.example` is the complete name contract and explicitly sets `LIL_TWEAK_ENVIRONMENT=production`. Missing LIL_TWEAK_ENVIRONMENT fails closed as a production misconfiguration; it never silently selects development behavior. An explicit `development` or `test` value is for local preview only. Production must also fail closed if `PUBLIC_ORIGIN` or `MANAGED_INGRESS_SECRET` is absent, if exactly one Access credential is configured, or if any request origin differs from `PUBLIC_ORIGIN`.
+`deploy/cloudflare/worker.production.env.example` selects production `sites_native`. Missing environment, mode, or public origin fails closed; configuration never silently selects development or infers trust from a missing secret. An explicit `development` or `test` environment is for local preview only. Core transport separately rejects incomplete Access credentials. Both modes reject a request origin different from `PUBLIC_ORIGIN`.
 
-The managed host must remove every client-supplied `X-Lil-Tweak-Managed-Ingress`, `oai-authenticated-user-id`, and `oai-authenticated-user-email` header, then inject its authenticated identity headers and the secret ingress header. The Worker compares the ingress secret in constant time. If the Sites hosting layer cannot provide this overwrite guarantee, the production deployment is blocked; accepting raw identity headers is not a fallback.
+For `sites_native`, use the documented Sites dispatcher authentication and retain exactly one allowed owner, no groups and no external visitors. `PUBLIC_ORIGIN` must be the selected HTTPS `*.chatgpt.site` origin with no non-default port. The Worker requires both nonempty `oai-authenticated-user-id` and `oai-authenticated-user-email`; application routes independently enforce the owner allowlist, same-origin mutations and stable owner storage partition. These headers are trusted only behind Sites authentication, never as credentials for an independently exposed Worker. Do not configure a custom assertion secret or invent a rule ID: Sites does not expose that custom injection setting in the supported hosting workflow.
+
+For `managed_assertion`, the separately provisioned gateway must remove client identity/assertion headers, authenticate the session, and inject trusted identity plus `X-Lil-Tweak-Managed-Ingress`. Its mandatory secret is compared in constant time. Do not select this mode unless that gateway and its overwrite behavior have actually been provisioned and verified.
+
+Before activation, retain mode-specific live evidence: owner sign-in, anonymous forged-header denial, owner-only access metadata and alternate-origin denial. Exercise signed-in header precedence when a supported test surface is available; an owner bypass bearer is not proof of a browser session's identity, and test fixtures are not platform observations. A contradictory live identity result blocks cutover. The production receipt tooling must describe the selected platform ownership and mode; never insert fabricated provider identifiers into a legacy receipt to make it pass.
 
 ## Named Tunnel and Access
 
@@ -72,7 +77,7 @@ Run these from an external trusted workstation without printing secrets:
 2. Request it with the service-token headers but without Lil Tweak HMAC headers. The core must return the generic authentication failure.
 3. Send a correctly signed readiness request through the Worker path. It must pass Access and HMAC and return ready.
 4. Request the owner application through its `workers.dev` or any alternate hostname. The Worker must reject it because it differs from `PUBLIC_ORIGIN`.
-5. Send a public request with a forged `X-Lil-Tweak-Managed-Ingress` and forged `oai-*` identity headers. Managed ingress must overwrite/remove them, and the Worker must reject a value that does not match `MANAGED_INGRESS_SECRET`.
+5. Send an unauthenticated request with forged `oai-*` identity headers: it must not access owner data. Confirm real owner sign-in and the exact owner-private Sites policy. For native mode, the dispatcher is the authentication boundary and the app still rejects missing identity and non-owner identities. For assertion mode, additionally require rejection of missing/wrong assertions and verify the trusted gateway overwrites caller identity and assertion headers.
 6. Scan the droplet externally. TCP 8017 must be unreachable. Locally, `ss -lnt` must show only `127.0.0.1:8017`.
 7. Stop `lil-tweak-cloudflared.service`. The core hostname must become unavailable while GALOR Hub remains unaffected. Restart it and confirm the inverse isolation as well.
 

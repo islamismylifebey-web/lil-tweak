@@ -14,6 +14,7 @@ interface Env {
   CORE_ACCESS_CLIENT_ID?: string;
   CORE_ACCESS_CLIENT_SECRET?: string;
   LIL_TWEAK_ENVIRONMENT?: string;
+  LIL_TWEAK_INGRESS_MODE?: string;
   PUBLIC_ORIGIN?: string;
   MANAGED_INGRESS_SECRET?: string;
   IMAGES: {
@@ -41,6 +42,7 @@ const worker = {
     try {
       const allowed = await enforceManagedIngress(request, {
         environment: env.LIL_TWEAK_ENVIRONMENT,
+        ingressMode: env.LIL_TWEAK_INGRESS_MODE,
         publicOrigin: env.PUBLIC_ORIGIN,
         managedIngressSecret: env.MANAGED_INGRESS_SECRET,
       });
