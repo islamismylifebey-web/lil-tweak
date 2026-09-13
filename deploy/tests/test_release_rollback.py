@@ -176,7 +176,7 @@ class RollbackFixture:
             output=self.receipt,
             source_commit=self.commit,
             root=self.root,
-            hostname_getter=lambda: "galor-private-cloud-01",
+            hostname_getter=lambda: "galor-tweak-runner-01",
             executor=self.executor,
         )
 
@@ -249,6 +249,22 @@ class ReleaseRollbackTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.rollback = load_rollback_module()
 
+    def test_capture_rejects_former_target_and_hermes_before_creating_receipt(self) -> None:
+        for hostname in ("galor-private-cloud-01", "galor-hermes-private-cloud-01"):
+            with self.subTest(hostname=hostname), tempfile.TemporaryDirectory() as temporary:
+                fixture = RollbackFixture(Path(temporary), self.rollback)
+                self.assertFalse(fixture.receipt.parent.exists())
+                with self.assertRaisesRegex(self.rollback.RollbackError, "hostname_mismatch"):
+                    self.rollback.capture_receipt(
+                        output=fixture.receipt,
+                        source_commit=fixture.commit,
+                        root=fixture.root,
+                        hostname_getter=lambda: hostname,
+                        executor=fixture.executor,
+                    )
+                self.assertFalse(fixture.receipt.parent.exists())
+                self.assertEqual(fixture.executor.actions, [])
+
     def test_capture_is_canonical_bounded_and_keeps_secret_bytes_only_in_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = RollbackFixture(Path(temporary), self.rollback)
@@ -262,7 +278,7 @@ class ReleaseRollbackTests(unittest.TestCase):
             self.assertNotIn(b"canary-not-in-manifest", manifest_bytes)
             manifest = json.loads(manifest_bytes)
             self.assertEqual(manifest["schema"], "lil-tweak-rollback-receipt-v1")
-            self.assertEqual(manifest["hostname"], "galor-private-cloud-01")
+            self.assertEqual(manifest["hostname"], "galor-tweak-runner-01")
             forward = json.loads(
                 (fixture.receipt / "forward-state.json").read_text()
             )
@@ -377,7 +393,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 ),
             )
@@ -392,7 +408,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
             self.assertIn("verify:restored", fixture.executor.actions)
@@ -455,7 +471,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                         fixture.receipt,
                         digest,
                         root=fixture.root,
-                        hostname_getter=lambda: "galor-private-cloud-01",
+                        hostname_getter=lambda: "galor-tweak-runner-01",
                         executor=fixture.executor,
                     ),
                     digest,
@@ -512,7 +528,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                             fixture.receipt,
                             digest,
                             root=fixture.root,
-                            hostname_getter=lambda: "galor-private-cloud-01",
+                            hostname_getter=lambda: "galor-tweak-runner-01",
                             executor=fixture.executor,
                         )
                 self.assertEqual(fixture.executor.actions, [])
@@ -594,7 +610,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                             fixture.receipt,
                             digest,
                             root=fixture.root,
-                            hostname_getter=lambda: "galor-private-cloud-01",
+                            hostname_getter=lambda: "galor-tweak-runner-01",
                             executor=fixture.executor,
                         )
                 self.assertEqual(fixture.executor.actions, [])
@@ -628,7 +644,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     output=receipt,
                     source_commit="a" * 40,
                     root=root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=FakeExecutor(),
                 )
             self.assertFalse(receipt.exists())
@@ -647,7 +663,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     output=receipt,
                     source_commit="a" * 40,
                     root=root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=FakeExecutor(),
                 )
             self.assertFalse(receipt.exists())
@@ -717,7 +733,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
 
@@ -729,7 +745,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
             self.assertIn(b"canary-not-in-manifest", fixture.core_env.read_bytes())
@@ -760,7 +776,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
 
@@ -789,7 +805,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
 
@@ -806,7 +822,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
             self.assertEqual(len(list((fixture.receipt / "quarantine").glob("*"))), 1)
@@ -842,7 +858,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
             replacement = fixture.root / "etc/lil-tweak-cloudflared/tunnel.json"
@@ -856,7 +872,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
             requarantined = json.loads(
@@ -1114,7 +1130,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
 
@@ -1140,7 +1156,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
 
@@ -1298,7 +1314,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                         fixture.receipt,
                         digest,
                         root=fixture.root,
-                        hostname_getter=lambda: "galor-private-cloud-01",
+                        hostname_getter=lambda: "galor-tweak-runner-01",
                         executor=fixture.executor,
                     )
                     self.assertEqual(
@@ -1315,7 +1331,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                         fixture.receipt,
                         digest,
                         root=fixture.root,
-                        hostname_getter=lambda: "galor-private-cloud-01",
+                        hostname_getter=lambda: "galor-tweak-runner-01",
                         executor=fixture.executor,
                     )
                 self.assertEqual(fixture.executor.actions, [])
@@ -1408,7 +1424,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
 
@@ -1445,7 +1461,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
             self.assertEqual(
@@ -1495,7 +1511,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                             fixture.receipt,
                             digest,
                             root=fixture.root,
-                            hostname_getter=lambda: "galor-private-cloud-01",
+                            hostname_getter=lambda: "galor-tweak-runner-01",
                             executor=fixture.executor,
                         )
                     self.assertEqual(fixture.executor.actions, [])
@@ -1591,7 +1607,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
 
@@ -1721,7 +1737,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
 
@@ -1767,7 +1783,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                     fixture.receipt,
                     digest,
                     root=fixture.root,
-                    hostname_getter=lambda: "galor-private-cloud-01",
+                    hostname_getter=lambda: "galor-tweak-runner-01",
                     executor=fixture.executor,
                 )
             self.assertEqual(fixture.executor.images[runner]["state"], "present")
@@ -2061,7 +2077,7 @@ class ReleaseRollbackTests(unittest.TestCase):
                 fixture.receipt,
                 digest,
                 root=fixture.root,
-                hostname_getter=lambda: "galor-private-cloud-01",
+                hostname_getter=lambda: "galor-tweak-runner-01",
                 executor=fixture.executor,
             )
 
@@ -2457,7 +2473,7 @@ try:
         output=pathlib.Path(sys.argv[2]),
         source_commit="b" * 40,
         root=pathlib.Path(sys.argv[3]),
-        hostname_getter=lambda: "galor-private-cloud-01",
+        hostname_getter=lambda: "galor-tweak-runner-01",
         executor=MarkerExecutor(),
     )
 except Exception:

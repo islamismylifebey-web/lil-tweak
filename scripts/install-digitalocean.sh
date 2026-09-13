@@ -12,7 +12,7 @@ umask 077
 
 SERVICE_USER="lil-tweak"
 SERVICE_HOME="/var/lib/lil-tweak"
-EXPECTED_HOST="galor-private-cloud-01"
+EXPECTED_HOST="galor-tweak-runner-01"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 QUADLET_SOURCE="${PROJECT_DIR}/deploy/quadlet"

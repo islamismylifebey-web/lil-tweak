@@ -1107,7 +1107,7 @@ class ReleaseToolingTests(unittest.TestCase):
             rollback = root / "rollback-manifest.json"
             rollback_payload = {
                 "schema": "lil-tweak-rollback-receipt-v1",
-                "hostname": "galor-private-cloud-01",
+                "hostname": "galor-tweak-runner-01",
                 "captured_at": 1,
                 "captured_at_iso": "2026-08-15T00:00:00Z",
                 "source_commit": runtime_payload["source"]["commit"],
