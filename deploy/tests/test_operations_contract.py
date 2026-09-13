@@ -51,10 +51,11 @@ class TunnelContractTests(unittest.TestCase):
 
         env_contract = text("deploy/cloudflare/worker.production.env.example")
         self.assertRegex(env_contract, r"(?m)^LIL_TWEAK_ENVIRONMENT=production$")
+        self.assertRegex(env_contract, r"(?m)^LIL_TWEAK_INGRESS_MODE=sites_native$")
+        self.assertNotRegex(env_contract, r"(?m)^MANAGED_INGRESS_SECRET=")
         for name in (
             "LIL_TWEAK_ENVIRONMENT",
             "PUBLIC_ORIGIN",
-            "MANAGED_INGRESS_SECRET",
             "CORE_ORIGIN",
             "CORE_ACCESS_CLIENT_ID",
             "CORE_ACCESS_CLIENT_SECRET",
@@ -72,7 +73,9 @@ class TunnelContractTests(unittest.TestCase):
             "workers.dev",
             "never open port 8017",
             "GALOR Hub",
-            "missing LIL_TWEAK_ENVIRONMENT fails closed",
+            "Missing environment, mode, or public origin fails closed",
+            "Only for `managed_assertion`",
+            "Must be absent in `sites_native`",
             "at least 32 UTF-8 bytes",
             "[A-Za-z0-9][A-Za-z0-9._-]{0,63}",
         ):

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
+import { register } from "node:module";
 import test from "node:test";
 
 async function render(path = "/", headers = {}, init = {}) {
@@ -39,6 +40,69 @@ function renderedElement(html, className) {
   }
   assert.fail(`Rendered element with class ${className} was not closed`);
 }
+
+test("built production Worker rejects invalid ingress and non-owner requests before storage", async () => {
+  // Instrument the actual external binding imported by application routes, not
+  // just the separate env argument passed to worker.fetch.
+  const bindingModule = `data:text/javascript,${encodeURIComponent(`
+    let reads = 0;
+    export function bindingReads() { return reads; }
+    export const env = new Proxy(Object.freeze({}), {
+      get() { reads += 1; throw new Error("Unexpected runtime binding access"); }
+    });
+  `)}`;
+  register(`data:text/javascript,${encodeURIComponent(`
+    export async function resolve(specifier, context, nextResolve) {
+      if (specifier === "cloudflare:workers") {
+        return { url: ${JSON.stringify(bindingModule)}, shortCircuit: true };
+      }
+      return nextResolve(specifier, context);
+    }
+  `)}`, import.meta.url);
+  const { bindingReads } = await import(bindingModule);
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("production-gate", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const origin = "https://lil-tweak.owner.chatgpt.site";
+  const owner = {
+    "oai-authenticated-user-id": "owner-fixture",
+    "oai-authenticated-user-email": "islamismylifebey@gmail.com",
+  };
+  let storageReads = 0;
+  const env = {
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    DB: { prepare() { storageReads += 1; throw new Error("Unexpected storage access"); } },
+    FILES: { get() { storageReads += 1; throw new Error("Unexpected storage access"); } },
+    LIL_TWEAK_ENVIRONMENT: "production",
+    LIL_TWEAK_INGRESS_MODE: "sites_native",
+    PUBLIC_ORIGIN: origin,
+  };
+  const jobPath = `/api/engineering/jobs/job:${"a".repeat(32)}`;
+  for (const fixture of [
+    { mode: undefined, headers: owner, want: 503 },
+    { headers: {}, want: 404 },
+    { headers: owner, origin: "https://direct.workers.dev", want: 404 },
+    { headers: { ...owner, "oai-authenticated-user-email": "not-owner@example.invalid" }, want: 401 },
+    { method: "POST", headers: owner, want: 403 },
+    { method: "POST", headers: { ...owner, Origin: "https://wrong.example" }, want: 403 },
+    { method: "POST", headers: { ...owner, Origin: origin, "sec-fetch-site": "cross-site" }, want: 403 },
+    ...[jobPath, `${jobPath}/decision`].flatMap((path) => [
+      { path, method: "POST", headers: { ...owner, Origin: origin, "oai-authenticated-user-email": "not-owner@example.invalid" }, want: 401 },
+      { path, method: "POST", headers: owner, want: 403 },
+      { path, method: "POST", headers: { ...owner, Origin: "https://wrong.example" }, want: 403 },
+      { path, method: "POST", headers: { ...owner, Origin: origin, "sec-fetch-site": "cross-site" }, want: 403 },
+    ]),
+  ]) {
+    const response = await worker.fetch(new Request(`${fixture.origin ?? origin}${fixture.path ?? "/api/engineering/jobs"}`, {
+      method: fixture.method ?? "GET", headers: fixture.headers,
+    }), { ...env, LIL_TWEAK_INGRESS_MODE: "mode" in fixture ? fixture.mode : env.LIL_TWEAK_INGRESS_MODE }, {
+      waitUntil() {}, passThroughOnException() {},
+    });
+    assert.equal(response.status, fixture.want, `${fixture.method ?? "GET"} ${fixture.path ?? "/api/engineering/jobs"}`);
+    assert.equal(storageReads, 0);
+    assert.equal(bindingReads(), 0);
+  }
+});
 
 test("official branding and two-header authentication stay release-bound", async () => {
   const [layout, auth, page, workbench, vite] = await Promise.all([

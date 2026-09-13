@@ -1,5 +1,6 @@
 export interface ManagedIngressConfig {
   environment?: string;
+  ingressMode?: string;
   publicOrigin?: string;
   managedIngressSecret?: string;
 }
@@ -43,15 +44,31 @@ export async function enforceManagedIngress(
   }
   if (environment !== "production") return true;
   const expectedOrigin = exactHttpsOrigin(config.publicOrigin);
+  const mode = config.ingressMode;
   const secret = config.managedIngressSecret?.trim();
-  if (!expectedOrigin) {
+  if (!expectedOrigin || !["sites_native", "managed_assertion"].includes(mode ?? "")) {
+    throw new Error("Managed ingress configuration is incomplete.");
+  }
+  if (mode === "sites_native") {
+    const origin = new URL(expectedOrigin);
+    if (
+      !origin.hostname.endsWith(".chatgpt.site") || origin.port ||
+      config.managedIngressSecret !== undefined
+    ) {
+      throw new Error("Managed ingress configuration is invalid.");
+    }
+    if (new URL(request.url).origin !== expectedOrigin) return false;
+    // Sites dispatch authenticates the session. Identity presence does not replace
+    // the independent owner allowlist and same-origin checks in application routes.
+    return Boolean(
+      request.headers.get("oai-authenticated-user-id")?.trim() &&
+      request.headers.get("oai-authenticated-user-email")?.trim(),
+    );
+  }
+  if (!secret || new TextEncoder().encode(secret).byteLength < 32) {
     throw new Error("Managed ingress configuration is incomplete.");
   }
   if (new URL(request.url).origin !== expectedOrigin) return false;
-  if (!secret) return true;
-  if (secret.length < 32) {
-    throw new Error("Managed ingress configuration is incomplete.");
-  }
   const assertion = request.headers.get("x-lil-tweak-managed-ingress") ?? "";
   return equalSecret(assertion, secret);
 }
