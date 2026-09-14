@@ -162,6 +162,16 @@ function sourcesInput(values: SourceCreateInput[]) {
   return sources;
 }
 
+function storedGitSource(row: JobRow) {
+  if (!row.git_repository_url || !row.git_commit) return null;
+  try {
+    return parseGitSource({ repositoryUrl: row.git_repository_url, commit: row.git_commit });
+  } catch {
+    // Preserve access to historical jobs without authorizing an unsupported source.
+    return null;
+  }
+}
+
 function mapJob(row: JobRow): EngineeringJob {
   let approvalProposal: ApprovalProposal | null = null;
   if (row.approval_proposal_json) {
@@ -174,9 +184,7 @@ function mapJob(row: JobRow): EngineeringJob {
   return {
     id: row.id,
     projectId: row.project_id,
-    gitSource: row.git_repository_url && row.git_commit
-      ? parseGitSource({ repositoryUrl: row.git_repository_url, commit: row.git_commit })
-      : null,
+    gitSource: storedGitSource(row),
     mode: row.mode,
     promptPreview: row.prompt_preview,
     state: row.state,

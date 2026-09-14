@@ -576,7 +576,7 @@ test("keeps authentication, disabled-model, runner, and approval contracts intac
   assert.match(decisionRoute, /approvalProposal/);
 });
 
-test("keeps engineering source intake bounded and accessible", async () => {
+test("keeps dormant source utilities bounded while GitHub-only controls fail closed", async () => {
   const [workbench, sourceStaging] = await Promise.all([
     readFile(new URL("../app/workbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/source-staging.ts", import.meta.url), "utf8"),
@@ -585,6 +585,18 @@ test("keeps engineering source intake bounded and accessible", async () => {
     workbench.indexOf("function stageComposerFiles"),
     workbench.indexOf("function removeStagedFile"),
   );
+
+  assert.match(workbench, /GitHub projects only for this launch/);
+  assert.match(workbench, /GitHub repository \(required\)/);
+  assert.match(workbench, /Exact commit \(required\)/);
+  assert.doesNotMatch(workbench, /Git repository \(optional\)|optionally attach source|Source is uploaded only/);
+  for (const ref of ["composerPaperclipRef", "composerCameraRef", "composerFileInputRef", "composerCameraInputRef", "composerMenuFirstRef"]) {
+    const element = new RegExp(`<[^>]+ref=\\{${ref}\\}[^>]*>`).exec(workbench)?.[0];
+    assert.ok(element, ref);
+    assert.match(element, /\bdisabled(?:\s|>)/, ref);
+  }
+  assert.match(workbench, /className="attachment-section"/);
+  assert.match(workbench, /onAttach=\{attachFile\}/);
 
   assert.match(workbench, /document\.addEventListener\("pointerdown", closeComposerMenu\)/);
   assert.match(workbench, /key === "Escape"/);

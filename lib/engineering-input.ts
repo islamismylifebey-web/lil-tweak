@@ -31,6 +31,8 @@ export function parseGitSource(value: unknown): GitSourceInput | null {
   }
   const repositoryUrl = typeof input.repositoryUrl === "string" ? input.repositoryUrl.trim() : "";
   const commit = typeof input.commit === "string" ? input.commit.trim().toLowerCase() : "";
+  // Check the original path before URL normalization can erase dot segments.
+  const githubPath = /^https:\/\/github\.com(?::443)?\/([a-z\d_.-]+)\/([a-z\d_.-]+)\/?$/i.exec(repositoryUrl);
   let parsed: URL;
   try {
     parsed = new URL(repositoryUrl);
@@ -40,8 +42,10 @@ export function parseGitSource(value: unknown): GitSourceInput | null {
   if (
     repositoryUrl.length > 2_048 || parsed.protocol !== "https:" ||
     parsed.username || parsed.password || parsed.search || parsed.hash ||
-    !parsed.hostname || parsed.pathname === "/" || !GIT_COMMIT.test(commit)
-  ) throw new Error("Git source requires an HTTPS repository and exact commit.");
+    parsed.hostname !== "github.com" || !githubPath ||
+    [githubPath?.[1], githubPath?.[2]?.replace(/\.git$/i, "")].some((part) => !part || part === "." || part === "..") ||
+    !GIT_COMMIT.test(commit)
+  ) throw new Error("Git source requires a GitHub HTTPS repository and exact commit.");
   return { repositoryUrl: parsed.toString(), commit };
 }
 
@@ -51,7 +55,12 @@ export function enforceModeSourcePolicy(
   sources: unknown[],
   gitSource: GitSourceInput | null,
 ): void {
-  if (mode !== "chat") return;
+  if (mode !== "chat") {
+    if (sources.length) throw new Error("Git source is required; uploaded-project execution is unavailable for this launch.");
+    if (!gitSource) throw new Error("Git source is required for engineering jobs in this launch.");
+    parseGitSource(gitSource);
+    return;
+  }
   if (!projectId) throw new Error("Chat mode requires a selected project.");
   if (sources.length || gitSource) {
     throw new Error("Chat mode does not accept source uploads or Git sources.");

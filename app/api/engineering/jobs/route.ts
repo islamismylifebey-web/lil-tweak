@@ -48,9 +48,6 @@ export async function POST(request: Request) {
     const input = parseJobCreate(raw);
     const sources = sourceManifest((raw as Record<string, unknown>).sources);
     const gitSource = parseGitSource((raw as Record<string, unknown>).gitSource);
-    if (gitSource && sources.length) {
-      throw new Error("Engineering request must use uploaded sources or one Git source, not both.");
-    }
     enforceModeSourcePolicy(input.mode, input.projectId, sources, gitSource);
     const projectContext = input.projectId
       ? boundedProjectContext(await getProject(owner, input.projectId))
