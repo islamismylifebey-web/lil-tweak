@@ -70,14 +70,14 @@ test("accepts only the exact immutable source object described by D1", () => {
   );
 });
 
-test("binds the uploaded source digest through R2, D1, dispatch, and core", async () => {
+test("disabled uploads retain existing immutable-source defense behind the dispatch policy", async () => {
   const [uploadRoute, dispatchRoute] = await Promise.all([
     readFile(new URL("../app/api/engineering/jobs/[id]/sources/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/engineering/jobs/[id]/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(uploadRoute, /sha256Hex\(bytes\)/);
-  assert.match(uploadRoute, /customMetadata:\s*\{\s*sourceId,\s*jobId,\s*sha256\s*\}/);
-  assert.match(uploadRoute, /markSourceUploaded\([^;]+sha256\)/s);
+  assert.match(uploadRoute, /Uploaded-project execution is unavailable/);
+  assert.doesNotMatch(uploadRoute, /markSourceUploaded|putImmutableObject/);
+  assert.match(dispatchRoute, /enforceModeSourcePolicy\(job.mode, job.projectId, job.sources, job.gitSource\)/);
   assert.match(dispatchRoute, /files\(\)\.head\(r2Key\)/);
   assert.match(dispatchRoute, /immutableSourceMatches\(object,[^;]+sha256/s);
   assert.match(dispatchRoute, /sources:\s*verifiedSources/);

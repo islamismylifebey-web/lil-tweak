@@ -36,7 +36,7 @@ import {
   type EngineeringJob,
   type EngineeringJobDetail,
 } from "@/lib/engineering";
-import { parseGitSource } from "@/lib/engineering-input";
+import { enforceModeSourcePolicy, parseGitSource } from "@/lib/engineering-input";
 import {
   selectStagedSourceCandidates,
   type StagedSourceKind,
@@ -499,7 +499,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
           ? { repositoryUrl: gitRepositoryUrl, commit: gitCommit }
           : null,
       );
-      if (gitSource && files.length) throw new Error("Use uploaded files or a Git source, not both.");
+      enforceModeSourcePolicy(engineerMode, selected?.id ?? null, files, gitSource);
       const createFingerprint = JSON.stringify({
         mode: engineerMode,
         prompt: taskDraft.trim(),
@@ -640,6 +640,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
     setBusy(true);
     setError("");
     try {
+      enforceModeSourcePolicy(activeJob.mode, activeJob.projectId, activeJob.sources, activeJob.gitSource);
       const job = await dispatchEngineeringJob(activeJob);
       mergeEngineeringJob(job);
       setMessage("Dispatch reconciled with the secure code gateway");
@@ -1193,7 +1194,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                       </div>
                       <div className="job-card-actions">
                         <span className={`job-state job-state-${activeJob.state}`}>{activeJob.state.replaceAll("_", " ")}</span>
-                        {activeJob.state === "queued" && (
+                        {activeJob.state === "queued" && activeJob.sources.length === 0 && (activeJob.mode === "chat" || activeJob.gitSource) && (
                           <button type="button" className="secondary-action" disabled={busy} onClick={() => { void resumeActiveDispatch(); }}>Resume dispatch</button>
                         )}
                         {jobCanCancel(activeJob.state) && (
@@ -1259,7 +1260,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                 ) : (
                   <div className="engineering-empty">
                     <h1>No engineering jobs yet</h1>
-                    <p>Choose a mode, describe the outcome, and optionally attach source. Lil&apos;Tweak.AI works inside a disposable sandbox and returns a patch, tests, and evidence.</p>
+                    <p>Provide a GitHub repository and exact commit, then describe the outcome. Lil&apos;Tweak.AI works inside a disposable sandbox and returns a patch, tests, and evidence.</p>
                     <strong>External actions require your approval.</strong>
                   </div>
                 )}
@@ -1285,9 +1286,10 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                   ))}
                 </div>
                 {engineerMode !== "chat" && <div className="git-source-fields" aria-label="Immutable Git source">
-                  <label><span>Git repository (optional)</span><input type="url" inputMode="url" placeholder="https://github.com/owner/repository.git" value={gitRepositoryUrl} maxLength={2048} disabled={stagedFiles.length > 0} onChange={(event) => setGitRepositoryUrl(event.target.value)} /></label>
-                  <label><span>Exact commit</span><input type="text" spellCheck={false} placeholder="40- or 64-character commit" value={gitCommit} maxLength={64} disabled={stagedFiles.length > 0} onChange={(event) => setGitCommit(event.target.value)} /></label>
+                  <label><span>GitHub repository (required)</span><input type="url" inputMode="url" required placeholder="https://github.com/owner/repository.git" value={gitRepositoryUrl} maxLength={2048} onChange={(event) => setGitRepositoryUrl(event.target.value)} /></label>
+                  <label><span>Exact commit (required)</span><input type="text" spellCheck={false} required placeholder="40- or 64-character commit" value={gitCommit} maxLength={64} onChange={(event) => setGitCommit(event.target.value)} /></label>
                 </div>}
+                {engineerMode !== "chat" && <p className="launch-source-notice">GitHub projects only for this launch. Uploaded project files and camera sources cannot run as engineering jobs. Regular project attachments remain available in Work.</p>}
                 {stagedFiles.length > 0 && (
                   <div className="staged-files" aria-label="Private source files selected">
                     {stagedFiles.map((file) => (
@@ -1329,7 +1331,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     >
                       <Plus className="composer-icon" aria-hidden="true" focusable="false" strokeWidth={1.8} />
                     </button>
-                    <button ref={composerPaperclipRef} type="button" className="composer-icon-button" aria-label="Add files or photos" disabled={engineerMode === "chat"} onClick={openComposerFiles}>
+                    <button ref={composerPaperclipRef} type="button" className="composer-icon-button" aria-label="Add files or photos" title="Engineering uploads are unavailable for this launch" disabled onClick={openComposerFiles}>
                       <Paperclip className="composer-icon composer-paperclip" aria-hidden="true" focusable="false" strokeWidth={1.8} />
                     </button>
                     <button
@@ -1338,7 +1340,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                       className="composer-icon-button"
                       aria-label="Use camera for document photos, pictures, or video clips"
                       title="Camera"
-                      disabled={engineerMode === "chat"}
+                      disabled
                       onClick={openComposerCamera}
                     >
                       <Camera className="composer-icon" aria-hidden="true" focusable="false" strokeWidth={1.8} />
@@ -1357,7 +1359,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                       className="composer-file-input"
                       type="file"
                       multiple
-                      disabled={engineerMode === "chat"}
+                      disabled
                       tabIndex={-1}
                       aria-hidden="true"
                       onChange={(event) => {
@@ -1372,7 +1374,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                       type="file"
                       accept="image/*,video/*"
                       capture="environment"
-                      disabled={engineerMode === "chat"}
+                      disabled
                       tabIndex={-1}
                       aria-hidden="true"
                       onChange={(event) => {
@@ -1389,8 +1391,8 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                       aria-label="Tools and settings"
                       hidden={!composerMenuOpen}
                     >
-                      <button ref={composerMenuFirstRef} type="button" className="composer-menu-action" disabled={engineerMode === "chat"} onClick={openComposerFiles}>
-                        <span>Files &amp; photos</span><small>Private source</small>
+                      <button ref={composerMenuFirstRef} type="button" className="composer-menu-action" disabled onClick={openComposerFiles}>
+                        <span>Files &amp; photos</span><small>Unavailable for this launch</small>
                       </button>
                       <div className="composer-menu-row" aria-disabled="true"><span>Connectors</span><small>Approval gated</small></div>
                       <div className="composer-menu-row" aria-disabled="true"><span>Plugins</span><small>Unavailable</small></div>
@@ -1407,7 +1409,7 @@ export function LilTweakWorkbench({ signedIn }: LilTweakWorkbenchProps) {
                     </button>
                   </div>
                 </div>
-                <span id="task-connection-status" className="sr-only">{engineerMode === "chat" ? "Direct OpenAI chat. No tools are enabled." : "Secure code gateway. Source is uploaded only when the task is submitted."}</span>
+                <span id="task-connection-status" className="sr-only">{engineerMode === "chat" ? "Direct OpenAI chat. No tools are enabled." : "Secure code gateway. A GitHub repository and exact commit are required."}</span>
               </form>
             </div>
           </section>

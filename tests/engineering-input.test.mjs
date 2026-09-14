@@ -30,6 +30,30 @@ test("Chat accepts selected-project context only", () => {
   }), /does not accept source/i);
 });
 
+test("first launch accepts GitHub projects only for every engineering mode", () => {
+  const git = { repositoryUrl: "https://github.com/example/project", commit: "a".repeat(40) };
+  for (const mode of ["build", "debug", "refactor", "test", "architect"]) {
+    assert.doesNotThrow(() => enforceModeSourcePolicy(mode, null, [], git));
+    assert.throws(() => enforceModeSourcePolicy(mode, null, [], null), /Git source.*required/i);
+    assert.throws(() => enforceModeSourcePolicy(mode, null, [{ filename: "legacy.txt" }], git), /Git source.*uploaded-project/i);
+    assert.throws(() => enforceModeSourcePolicy(mode, null, [], { ...git, repositoryUrl: "https://example.com/owner/repo" }), /Git source/i);
+  }
+});
+
+test("GitHub repository URLs reject alternate hosts, extra paths and normalization aliases", () => {
+  for (const repositoryUrl of [
+    "https://example.com/owner/repo", "https://github.com.evil.example/owner/repo",
+    "https://github.com:8443/owner/repo", "https://github.com/owner/repo/tree/main",
+    "https://github.com/owner/%72epo", "https://github.com/owner/../repo",
+    "https://github.com/owner/./repo", "https://github.com/./repo",
+    "https://github.com/owner/..", "https://github.com/owner/.git",
+    "https://github.com/owner/repo?", "https://github.com/owner/repo#",
+    "https://github.com/owner\\repo", "https://github.com//owner/repo",
+  ]) assert.throws(() => parseGitSource({ repositoryUrl, commit: "a".repeat(40) }), /Git source/i, repositoryUrl);
+  assert.equal(parseGitSource({ repositoryUrl: "https://github.com:443/owner/repo.git/", commit: "a".repeat(40) }).repositoryUrl,
+    "https://github.com/owner/repo.git/");
+});
+
 test("builds bounded project context without attachment bodies", () => {
   const context = boundedProjectContext({
     id: "project:123",

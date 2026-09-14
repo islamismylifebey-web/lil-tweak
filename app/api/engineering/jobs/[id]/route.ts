@@ -4,6 +4,7 @@ import { validateEngineeringDispatchRequest } from "@/lib/create-request";
 import { engineeringObjectKey } from "@/lib/engineering";
 import { files, json, mirrorCoreSnapshotEvidence, ownerFor, ownerScope, publicError, requireJobId, requireSameOriginMutation, store } from "@/lib/engineering-api";
 import { immutableSourceMatches } from "@/lib/immutable-r2";
+import { enforceModeSourcePolicy } from "@/lib/engineering-input";
 
 function dispatchRevision(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Engineering request must be an object.");
@@ -49,6 +50,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const jobStore = store();
     const job = await jobStore.getJob(scope, jobId);
     if (!job) return json({ error: "Engineering job was not found." }, 404);
+    try {
+      enforceModeSourcePolicy(job.mode, job.projectId, job.sources, job.gitSource);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Git source is required for this launch." }, 409);
+    }
     if (job.state !== "queued") {
       return json({ error: "Engineering job is not ready for dispatch." }, 409);
     }

@@ -279,11 +279,11 @@ test("requires a finite exact upload length within its cap", () => {
   }
 });
 
-test("source upload streams through the actual-byte bound before R2", async () => {
+test("engineering upload endpoint has no body or storage operations during GitHub-only launch", async () => {
   const route = await readFile(
     new URL("../app/api/engineering/jobs/[id]/sources/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /readBoundedBytes\(request, MAX_SOURCE_BYTES\)/);
-  assert.doesNotMatch(route, /request\.arrayBuffer\(\)/);
+  assert.match(route, /Uploaded-project execution is unavailable/);
+  assert.doesNotMatch(route, /readBoundedBytes|request\.arrayBuffer|files\(\)|store\(\)/);
 });
