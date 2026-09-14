@@ -1,0 +1,58 @@
+name: Manual read-only package diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: read
+
+jobs:
+  diagnostic:
+    if: github.ref == 'refs/heads/main' && github.repository == 'islamismylifebey-web/lil-tweak'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Report bounded package API status without credentials
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          python3 -I -B - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ['REGISTRY_TOKEN']
+          root = 'https://api.github.com/users/islamismylifebey-web/packages'
+          probes = [
+              ('list-2022', root + '?package_type=container&per_page=100&page=1', '2022-11-28'),
+              ('list-2026', root + '?package_type=container&per_page=100&page=1', '2026-03-10'),
+              ('exact-core', root + '/container/lil-tweak-core', '2022-11-28'),
+          ]
+          for name, url, version in probes:
+              request = urllib.request.Request(url, method="GET", headers={
+                  'Accept': 'application/vnd.github+json',
+                  'Authorization': 'Bearer ' + token,
+                  'X-GitHub-Api-Version': version,
+              })
+              try:
+                  response = urllib.request.urlopen(request, timeout=20)
+              except urllib.error.HTTPError as error:
+                  response = error
+              with response:
+                  data = response.read(8193)
+                  result = {'probe': name, 'status': response.status}
+                  if len(data) > 8192:
+                      result['message'] = 'Response exceeds diagnostic size limit'
+                  else:
+                      try:
+                          payload = json.loads(data)
+                          if isinstance(payload, dict) and isinstance(payload.get('message'), str):
+                              result['message'] = payload['message'].replace(token, "[REDACTED]")[:300]
+                          elif isinstance(payload, list):
+                              result['result_count'] = len(payload)
+                      except (ValueError, UnicodeError):
+                          result['message'] = 'Non-JSON response withheld'
+                  print(json.dumps(result, ensure_ascii=True))
+          PY

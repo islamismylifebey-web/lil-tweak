@@ -6,6 +6,24 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml');
 
+test('manual package diagnostic is main-only, bounded and read-only', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-package-diagnostic.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(workflow.on, { workflow_dispatch: null });
+  assert.deepEqual(workflow.permissions, { packages: 'read' });
+  const job = workflow.jobs.diagnostic;
+  assert.equal(job['timeout-minutes'], 3);
+  assert.equal(job.steps.length, 1);
+  assert.equal(job.steps[0].uses, undefined);
+  assert.match(job.if, /refs\/heads\/main/);
+  assert.match(job.if, /islamismylifebey-web\/lil-tweak/);
+  assert.equal(job.steps[0].env.REGISTRY_TOKEN, '${{ github.token }}');
+  const body = job.steps[0].run;
+  assert.match(body, /method="GET"/);
+  assert.match(body, /read\(8193\)/);
+  assert.match(body, /replace\(token, "\[REDACTED\]"\)/);
+  assert.doesNotMatch(body, /docker|push|subprocess|write_text|write_bytes/);
+});
+
 test('manual release verification uses the same private temporary-root contract as CI', async () => {
   const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
   const verify = workflow.jobs.verify;
