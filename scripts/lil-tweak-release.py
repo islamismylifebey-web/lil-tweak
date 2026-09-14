@@ -33,6 +33,7 @@ IMAGE = re.compile(
 STATE_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 STATE_VALUE = re.compile(r"^[A-Za-z0-9._/:@+-]{1,4096}$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
+SITES_VERSION_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:~\-]{0,255}$")
 DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)$")
 MAX_MANIFEST_BYTES = 32 * 1024 * 1024
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
@@ -1433,7 +1434,10 @@ def _parse_state(path: Path) -> dict[str, str]:
         if (
             not STATE_KEY.fullmatch(key)
             or key in values
-            or not STATE_VALUE.fullmatch(value)
+            or not (
+                STATE_VALUE.fullmatch(value)
+                or (key == "SITES_VERSION_ID" and SITES_VERSION_IDENTIFIER.fullmatch(value))
+            )
             or any(word in key for word in ("PASSWORD", "SECRET", "TOKEN", "CREDENTIAL", "REGISTRY_AUTH"))
         ):
             raise ReleaseError("release_state_invalid")
@@ -1477,7 +1481,8 @@ def _https_origin(value: str) -> str:
 
 def _identifier(values: dict[str, str], name: str) -> str:
     value = _required_state(values, name)
-    if not IDENTIFIER.fullmatch(value):
+    pattern = SITES_VERSION_IDENTIFIER if name == "SITES_VERSION_ID" else IDENTIFIER
+    if not pattern.fullmatch(value):
         raise ReleaseError("release_state_invalid")
     return value
 
@@ -1591,6 +1596,62 @@ def _validated_runtime_manifest(runtime: Any) -> dict[str, Any]:
     return runtime
 
 
+def _native_sites_contract(
+    state: dict[str, str], production_url: str,
+) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    """Bind reviewed platform observations, never manufacture physical IDs."""
+    legacy_fields = {
+        "D1_DATABASE_ID", "D1_SCHEMA_REVISION", "D1_BINDING_REVISION",
+        "R2_ACCOUNT_ID", "R2_BUCKET_NAME", "R2_BINDING_REVISION",
+        "MANAGED_INGRESS_RULE_ID", "MANAGED_INGRESS_REVISION",
+    }
+    project_id = _required_state(state, "SITES_PROJECT_ID")
+    parsed = urlsplit(production_url)
+    if (
+        re.fullmatch(r"appgprj_[0-9a-f]{32}", project_id) is None
+        or not (parsed.hostname or "").endswith(".chatgpt.site")
+        or parsed.port is not None
+        or state["PRODUCTION_URL"] != production_url
+        or state["PUBLIC_ORIGIN"] != production_url
+        or _required_state(state, "SITES_DB_BINDING") != "DB"
+        or _required_state(state, "SITES_FILES_BINDING") != "FILES"
+        or legacy_fields.intersection(state)
+    ):
+        raise ReleaseError("sites_native_state_rejected")
+    binding_evidence = _file_receipt(
+        Path(_required_state(state, "SITES_BINDING_EVIDENCE")), required_mode=0o600
+    )
+    schema_evidence = _file_receipt(
+        Path(_required_state(state, "SITES_DB_SCHEMA_EVIDENCE")), required_mode=0o600
+    )
+    if not binding_evidence["size"] or not schema_evidence["size"]:
+        raise ReleaseError("sites_native_evidence_rejected")
+    expected = [
+        ("sites_project_id", project_id),
+        ("sites_ingress_mode", "sites_native"),
+        ("sites_environment_revision", _identifier(state, "SITES_ENVIRONMENT_REVISION")),
+        ("sites_access_revision", _identifier(state, "SITES_ACCESS_REVISION")),
+        ("sites_access_mode", "custom"),
+        ("sites_allowed_owner_count", "1"),
+        ("sites_allowed_group_count", "0"),
+        ("sites_allowed_visitor_count", "0"),
+        ("db_binding", "DB"),
+        ("files_binding", "FILES"),
+        ("binding_evidence_sha256", binding_evidence["sha256"]),
+        ("db_schema_evidence_sha256", schema_evidence["sha256"]),
+    ]
+    return {
+        "project_id": project_id,
+        "ingress_mode": "sites_native",
+        "storage": {
+            "ownership": "sites",
+            "binding_evidence": binding_evidence,
+            "db": {"binding": "DB", "schema_evidence": schema_evidence},
+            "files": {"binding": "FILES"},
+        },
+    }, expected
+
+
 def create_production_manifest(
     runtime_manifest: Path,
     release_state: Path,
@@ -1602,6 +1663,9 @@ def create_production_manifest(
     )
     _validated_runtime_manifest(runtime)
     state = _parse_state(Path(release_state))
+    ingress_mode = state.get("LIL_TWEAK_INGRESS_MODE", "managed_assertion")
+    if ingress_mode not in {"sites_native", "managed_assertion"}:
+        raise ReleaseError("ingress_mode_rejected")
     if Path(_required_state(state, "RUNTIME_MANIFEST")) != Path(runtime_manifest):
         raise ReleaseError("runtime_manifest_mismatch")
     if _required_state(state, "RUNTIME_MANIFEST_SHA256") != runtime_digest:
@@ -1614,8 +1678,13 @@ def create_production_manifest(
     if source.get("commit") != source_commit or source.get("tree") != source_tree:
         raise ReleaseError("runtime_manifest_mismatch")
     sites_source = _required_state(state, "SITES_SOURCE_COMMIT")
-    if sites_source != source_commit:
+    if ingress_mode == "managed_assertion" and sites_source != source_commit:
         raise ReleaseError("sites_source_mismatch")
+    sites_tree = None
+    if ingress_mode == "sites_native":
+        sites_tree = _required_state(state, "SITES_SOURCE_TREE")
+        if COMMIT.fullmatch(sites_source) is None or COMMIT.fullmatch(sites_tree) is None:
+            raise ReleaseError("sites_source_mismatch")
     production_url = _https_origin(_required_state(state, "PRODUCTION_URL"))
     if _https_origin(_required_state(state, "PUBLIC_ORIGIN")) != production_url:
         raise ReleaseError("production_origin_mismatch")
@@ -1633,10 +1702,19 @@ def create_production_manifest(
         raise ReleaseError("release_state_invalid")
     sites_version_id = _identifier(state, "SITES_VERSION_ID")
     sites_deployment_id = _identifier(state, "SITES_DEPLOYMENT_ID")
+    native_sites: dict[str, Any] = {}
+    native_expected: list[tuple[str, str]] = []
+    if ingress_mode == "sites_native":
+        native_sites, native_expected = _native_sites_contract(state, production_url)
+        native_sites["source_tree"] = sites_tree
+        native_expected.extend([
+            ("sites_source_commit", sites_source),
+            ("sites_source_tree", sites_tree),
+        ])
     owner_flow = _decision_receipt(
         Path(owner_flow_receipt),
         [
-            ("schema", "lil-tweak-owner-flow-receipt-v2"),
+            ("schema", "lil-tweak-owner-flow-receipt-v3" if native_sites else "lil-tweak-owner-flow-receipt-v2"),
             ("decision", "PASS"),
             ("runtime_manifest_sha256", runtime_digest),
             ("source_commit", source_commit),
@@ -1646,38 +1724,44 @@ def create_production_manifest(
             ("sites_deployment_id", sites_deployment_id),
             ("sites_archive_sha256", archive_hash),
             ("production_url", production_url),
+            *native_expected,
         ],
         "owner_flow_receipt_rejected",
     )
+    cloudflare: dict[str, Any] = {
+        "ingress": {
+            "core_origin": core_origin,
+            "tunnel_id": _identifier(state, "LIL_TWEAK_TUNNEL_ID"),
+            "access_application_id": _identifier(state, "ACCESS_APPLICATION_ID"),
+            "access_policy_id": _identifier(state, "ACCESS_POLICY_ID"),
+            "access_policy_revision": _identifier(state, "ACCESS_POLICY_REVISION"),
+        },
+    }
+    if not native_sites:
+        cloudflare["d1"] = {
+            "database_id": _identifier(state, "D1_DATABASE_ID"),
+            "schema_revision": _identifier(state, "D1_SCHEMA_REVISION"),
+            "binding_revision": _identifier(state, "D1_BINDING_REVISION"),
+        }
+        cloudflare["r2"] = {
+            "account_id": _identifier(state, "R2_ACCOUNT_ID"),
+            "bucket_name": _identifier(state, "R2_BUCKET_NAME"),
+            "binding_revision": _identifier(state, "R2_BINDING_REVISION"),
+        }
+        cloudflare["ingress"].update({
+            "managed_rule_id": _identifier(state, "MANAGED_INGRESS_RULE_ID"),
+            "managed_rule_revision": _identifier(state, "MANAGED_INGRESS_REVISION"),
+        })
     payload = {
-        "schema": PRODUCTION_SCHEMA,
+        "schema": "lil-tweak-production-manifest-v2" if native_sites else PRODUCTION_SCHEMA,
         "runtime": {
             "manifest_sha256": runtime_digest,
             "source_commit": source_commit,
             "source_tree": source_tree,
         },
-        "cloudflare": {
-            "d1": {
-                "database_id": _identifier(state, "D1_DATABASE_ID"),
-                "schema_revision": _identifier(state, "D1_SCHEMA_REVISION"),
-                "binding_revision": _identifier(state, "D1_BINDING_REVISION"),
-            },
-            "r2": {
-                "account_id": _identifier(state, "R2_ACCOUNT_ID"),
-                "bucket_name": _identifier(state, "R2_BUCKET_NAME"),
-                "binding_revision": _identifier(state, "R2_BINDING_REVISION"),
-            },
-            "ingress": {
-                "core_origin": core_origin,
-                "tunnel_id": _identifier(state, "LIL_TWEAK_TUNNEL_ID"),
-                "access_application_id": _identifier(state, "ACCESS_APPLICATION_ID"),
-                "access_policy_id": _identifier(state, "ACCESS_POLICY_ID"),
-                "access_policy_revision": _identifier(state, "ACCESS_POLICY_REVISION"),
-                "managed_rule_id": _identifier(state, "MANAGED_INGRESS_RULE_ID"),
-                "managed_rule_revision": _identifier(state, "MANAGED_INGRESS_REVISION"),
-            },
-        },
+        "cloudflare": cloudflare,
         "sites": {
+            **native_sites,
             "source_commit": sites_source,
             "version_id": sites_version_id,
             "version_number": version_number,

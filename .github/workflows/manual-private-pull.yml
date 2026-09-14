@@ -1,0 +1,99 @@
+name: Manual temporary private image pull
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact reviewed main commit used for the private images
+        required: true
+        type: string
+      recipient_public_key_base64:
+        description: One-use RSA4096 public key from the approved dedicated server
+        required: true
+        type: string
+      nonce:
+        description: Server-issued 64-lowerhex one-use nonce
+        required: true
+        type: string
+      recipient_expires_at:
+        description: Server-issued UTC deadline within twenty minutes
+        required: true
+        type: string
+      core_image:
+        description: Verified immutable private Core image
+        required: true
+        type: string
+      postgres_image:
+        description: Verified immutable private PostgreSQL image
+        required: true
+        type: string
+      runner_image:
+        description: Verified immutable private runner image
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: temporary-private-pull-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  lease:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'islamismylifebey-web/lil-tweak' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 21
+    permissions:
+      packages: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      RECIPIENT_PUBLIC_KEY_BASE64: ${{ inputs.recipient_public_key_base64 }}
+      NONCE: ${{ inputs.nonce }}
+      DEADLINE: ${{ inputs.recipient_expires_at }}
+      CORE_IMAGE: ${{ inputs.core_image }}
+      POSTGRES_IMAGE: ${{ inputs.postgres_image }}
+      RUNNER_IMAGE: ${{ inputs.runner_image }}
+    steps:
+      - name: Read the exact checksum-bound public helper without repository credentials
+        run: |
+          test "$SOURCE_COMMIT" = "$GITHUB_SHA"
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CORE_IMAGE" =~ ^ghcr\.io/islamismylifebey-web/lil-tweak-core@sha256:[0-9a-f]{64}$ ]]
+          [[ "$POSTGRES_IMAGE" =~ ^ghcr\.io/islamismylifebey-web/lil-tweak-postgres@sha256:[0-9a-f]{64}$ ]]
+          [[ "$RUNNER_IMAGE" =~ ^ghcr\.io/islamismylifebey-web/lil-tweak-runner@sha256:[0-9a-f]{64}$ ]]
+          helper="$RUNNER_TEMP/lil-tweak-private-pull-envelope.py"
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/scripts/lil-tweak-private-pull-envelope.py" \
+            --output "$helper"
+          printf 'a3cd2bbb5696f2ea90f0bdb4d197d9958fd2127c76c92b404075f97ba5f7e006  %s\n' "$helper" | sha256sum --check --status
+
+      - name: Encrypt the job-scoped read token only to the approved server
+        env:
+          LIL_TWEAK_GHCR_ACTOR: ${{ github.actor }}
+          LIL_TWEAK_GHCR_TOKEN: ${{ github.token }}
+        run: |
+          /usr/bin/python3 -I -B "$RUNNER_TEMP/lil-tweak-private-pull-envelope.py" issue \
+            --openssl /usr/bin/openssl \
+            --recipient-public-key-base64 "$RECIPIENT_PUBLIC_KEY_BASE64" \
+            --nonce "$NONCE" --recipient-expires-at "$DEADLINE" \
+            --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --workflow-ref "$GITHUB_REF" \
+            --workflow-sha "$GITHUB_SHA" --source-commit "$SOURCE_COMMIT" \
+            --core-image "$CORE_IMAGE" --postgres-image "$POSTGRES_IMAGE" \
+            --runner-image "$RUNNER_IMAGE"
+
+      - name: Keep the temporary read credential valid only until the deadline
+        run: |
+          /usr/bin/python3 -I -B - <<'PY'
+          from datetime import datetime, timezone
+          import os
+          import time
+          deadline = datetime.strptime(os.environ['DEADLINE'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+          seconds = (deadline - datetime.now(timezone.utc)).total_seconds()
+          if seconds <= 0 or seconds > 1200:
+              raise SystemExit('Invalid pull lease deadline')
+          time.sleep(seconds)
+          PY

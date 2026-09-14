@@ -1,0 +1,416 @@
+name: Manual private server images
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact 40-lowerhex commit selected on main
+        required: true
+        type: string
+      official_base_commit:
+        description: Exact 40-lowerhex reviewed official base commit
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: manual-server-images-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the exact source without package access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Validate manual release identity
+        run: |
+          python -B scripts/lil-tweak-private-release.py validate-context \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --repository "$GITHUB_REPOSITORY" \
+            --ref "$GITHUB_REF" \
+            --source-commit "$SOURCE_COMMIT" \
+            --github-sha "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.23.2"
+          cache: npm
+
+      - name: Verify the complete source tree
+        run: |
+          npm ci
+          npm run verify
+
+  publish:
+    name: Publish and record private image evidence
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+    env:
+      EXPECTED_REPOSITORY: islamismylifebey-web/lil-tweak
+      REGISTRY_OWNER: islamismylifebey-web
+      CORE_PACKAGE: lil-tweak-core
+      RUNNER_PACKAGE: lil-tweak-runner
+      POSTGRES_PACKAGE: lil-tweak-postgres
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      OFFICIAL_BASE_COMMIT: ${{ inputs.official_base_commit }}
+      VERIFICATION_RECEIPT: docs/verification/production-release-source-receipt.md
+      PYTHON_BASE_IMAGE: docker.io/library/python@sha256:9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef
+      RUNNER_BASE_IMAGE: docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
+      POSTGRES_PARENT_IMAGE: docker.io/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+      SYFT_IMAGE: ghcr.io/anchore/syft@sha256:600896ff278677fb13b16dc35999452f4e79636fc098c9fee6ce3cffef9858e2
+      GRYPE_IMAGE: ghcr.io/anchore/grype@sha256:461c87fefcd20d133f4d99db4623608637eecb439045f9fc8d6eebbb4149e766
+      LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Validate manual release identity
+        run: |
+          python -B scripts/lil-tweak-private-release.py validate-context \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --repository "$GITHUB_REPOSITORY" \
+            --ref "$GITHUB_REF" \
+            --source-commit "$SOURCE_COMMIT" \
+            --github-sha "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$OFFICIAL_BASE_COMMIT" != "$SOURCE_COMMIT"
+          [[ "$OFFICIAL_BASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Create source manifest and canonical archive
+        run: |
+          evidence="$RUNNER_TEMP/lil-tweak-server-images-$SOURCE_COMMIT"
+          install -d -m 0700 "$evidence"
+          echo "EVIDENCE_DIR=$evidence" >> "$GITHUB_ENV"
+          python -B scripts/lil-tweak-release.py source-manifest \
+            --repo . \
+            --base "$OFFICIAL_BASE_COMMIT" \
+            --commit "$SOURCE_COMMIT" \
+            --verification-receipt "$VERIFICATION_RECEIPT" \
+            --output "$evidence/source-manifest.json"
+          git -c tar.umask=0022 archive \
+            --format=tar.gz \
+            --output="$evidence/source-archive.tar.gz" \
+            "$SOURCE_COMMIT"
+          build_source="$RUNNER_TEMP/lil-tweak-build-source-$SOURCE_COMMIT"
+          python -B scripts/lil-tweak-release.py verify-extract \
+            --archive "$evidence/source-archive.tar.gz" \
+            --source-manifest "$evidence/source-manifest.json" \
+            --destination "$build_source"
+          echo "BUILD_SOURCE=$build_source" >> "$GITHUB_ENV"
+          chmod 0444 "$evidence/source-manifest.json"
+          chmod 0600 "$evidence/source-archive.tar.gz"
+
+      - name: Check package state before publication
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          output="$EVIDENCE_DIR/pre.package-inventory.json"
+          headers="$EVIDENCE_DIR/pre.package-inventory.headers"
+          status="$(curl \
+            --silent --show-error --location \
+            --connect-timeout 10 --max-time 30 --retry 2 --retry-all-errors \
+            --dump-header "$headers" \
+            --output "$output" --write-out '%{http_code}' \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $REGISTRY_TOKEN" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$GITHUB_API_URL/users/$REGISTRY_OWNER/packages?package_type=container&per_page=100&page=1")"
+          if [[ "$status" != 200 ]]; then
+            printf 'package inventory preflight failed (HTTP %s)\n' "$status" >&2
+            exit 1
+          fi
+          if grep -Eiq '^link:.*rel="next"' "$headers"; then
+            printf 'package inventory exceeds the bounded first page\n' >&2
+            exit 1
+          fi
+          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" package-inventory \
+            --metadata "$output"
+          chmod 0600 "$output" "$headers"
+
+      - name: Authenticate to the private registry
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish the Core linux/amd64 child manifest
+        id: core
+        run: |
+          tag="ghcr.io/$REGISTRY_OWNER/$CORE_PACKAGE:candidate-$SOURCE_COMMIT"
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --pull \
+            --file "$BUILD_SOURCE/deploy/Containerfile.core" \
+            --build-arg "PYTHON_BASE_IMAGE=$PYTHON_BASE_IMAGE" \
+            --label "org.opencontainers.image.source=https://github.com/$EXPECTED_REPOSITORY" \
+            --tag "$tag" \
+            --metadata-file "$EVIDENCE_DIR/core.build-metadata.json" \
+            --push "$BUILD_SOURCE"
+          docker buildx imagetools inspect --raw "$tag" > "$EVIDENCE_DIR/core.manifest.json"
+          reference="$(python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" image-reference \
+            --package "$CORE_PACKAGE" \
+            --metadata "$EVIDENCE_DIR/core.build-metadata.json" \
+            --manifest "$EVIDENCE_DIR/core.manifest.json")"
+          printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
+          chmod 0600 "$EVIDENCE_DIR/core.build-metadata.json" "$EVIDENCE_DIR/core.manifest.json"
+
+      - name: Publish the runner linux/amd64 child manifest
+        id: runner
+        run: |
+          tag="ghcr.io/$REGISTRY_OWNER/$RUNNER_PACKAGE:candidate-$SOURCE_COMMIT"
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --pull \
+            --file "$BUILD_SOURCE/deploy/Containerfile.runner" \
+            --build-arg "RUNNER_BASE_IMAGE=$RUNNER_BASE_IMAGE" \
+            --label "org.opencontainers.image.source=https://github.com/$EXPECTED_REPOSITORY" \
+            --tag "$tag" \
+            --metadata-file "$EVIDENCE_DIR/runner.build-metadata.json" \
+            --push "$BUILD_SOURCE"
+          docker buildx imagetools inspect --raw "$tag" > "$EVIDENCE_DIR/runner.manifest.json"
+          reference="$(python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" image-reference \
+            --package "$RUNNER_PACKAGE" \
+            --metadata "$EVIDENCE_DIR/runner.build-metadata.json" \
+            --manifest "$EVIDENCE_DIR/runner.manifest.json")"
+          printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
+          chmod 0600 "$EVIDENCE_DIR/runner.build-metadata.json" "$EVIDENCE_DIR/runner.manifest.json"
+
+      - name: Mirror the exact official PostgreSQL linux/amd64 child manifest
+        id: postgres
+        run: |
+          tag="ghcr.io/$REGISTRY_OWNER/$POSTGRES_PACKAGE:candidate-$SOURCE_COMMIT"
+          expected_digest="${POSTGRES_PARENT_IMAGE##*@}"
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "$tag" \
+            "$POSTGRES_PARENT_IMAGE"
+          docker buildx imagetools inspect --raw "$tag" > "$EVIDENCE_DIR/postgres.manifest.json"
+          reference="$(python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" image-reference \
+            --package "$POSTGRES_PACKAGE" \
+            --manifest "$EVIDENCE_DIR/postgres.manifest.json" \
+            --expected-digest "$expected_digest")"
+          printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
+          chmod 0600 "$EVIDENCE_DIR/postgres.manifest.json"
+
+      - name: Require private packages linked to this exact repository
+        env:
+          CORE_IMAGE: ${{ steps.core.outputs.reference }}
+          RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          check_package() {
+            local package="$1"
+            local output="$EVIDENCE_DIR/$package.post.package.json"
+            local status
+            status="$(curl \
+              --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 --retry 2 --retry-all-errors \
+              --output "$output" --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer $REGISTRY_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "$GITHUB_API_URL/users/$REGISTRY_OWNER/packages/container/$package")"
+            if [[ "$status" != 200 ]]; then
+              printf 'package metadata verification failed for %s (HTTP %s)\n' "$package" "$status" >&2
+              exit 1
+            fi
+            python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" package-metadata \
+              --package "$package" --metadata "$output"
+            chmod 0600 "$output"
+          }
+          check_package "$CORE_PACKAGE"
+          check_package "$RUNNER_PACKAGE"
+          check_package "$POSTGRES_PACKAGE"
+
+      - name: Pull and inspect the exact authenticated digests
+        env:
+          CORE_IMAGE: ${{ steps.core.outputs.reference }}
+          RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
+        run: |
+          docker pull --platform linux/amd64 "$CORE_IMAGE"
+          docker image inspect "$CORE_IMAGE" > "$EVIDENCE_DIR/core.pull-inspect.json"
+          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" pull-evidence \
+            --reference "$CORE_IMAGE" --inspect "$EVIDENCE_DIR/core.pull-inspect.json"
+          docker pull --platform linux/amd64 "$RUNNER_IMAGE"
+          docker image inspect "$RUNNER_IMAGE" > "$EVIDENCE_DIR/runner.pull-inspect.json"
+          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" pull-evidence \
+            --reference "$RUNNER_IMAGE" --inspect "$EVIDENCE_DIR/runner.pull-inspect.json"
+          docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
+          docker image inspect "$POSTGRES_IMAGE" > "$EVIDENCE_DIR/postgres.pull-inspect.json"
+          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" pull-evidence \
+            --reference "$POSTGRES_IMAGE" --inspect "$EVIDENCE_DIR/postgres.pull-inspect.json"
+          chmod 0600 "$EVIDENCE_DIR/core.pull-inspect.json" \
+            "$EVIDENCE_DIR/runner.pull-inspect.json" \
+            "$EVIDENCE_DIR/postgres.pull-inspect.json"
+
+      - name: Require anonymous pulls to be denied
+        env:
+          CORE_IMAGE: ${{ steps.core.outputs.reference }}
+          RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
+        run: |
+          check_anonymous_denial() {
+            local role="$1"
+            local reference="$2"
+            local clean_config="$RUNNER_TEMP/anonymous-docker-$role"
+            local status
+            install -d -m 0700 "$clean_config"
+            set +e
+            DOCKER_CONFIG="$clean_config" docker manifest inspect "$reference" \
+              > "$EVIDENCE_DIR/$role.anonymous.stdout" \
+              2> "$EVIDENCE_DIR/$role.anonymous.stderr"
+            status=$?
+            set -e
+            python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" anonymous-denial \
+              --exit-code "$status" --stderr "$EVIDENCE_DIR/$role.anonymous.stderr"
+            chmod 0600 "$EVIDENCE_DIR/$role.anonymous.stdout" "$EVIDENCE_DIR/$role.anonymous.stderr"
+          }
+          check_anonymous_denial core "$CORE_IMAGE"
+          check_anonymous_denial runner "$RUNNER_IMAGE"
+          check_anonymous_denial postgres "$POSTGRES_IMAGE"
+
+      - name: Generate final-digest SBOM and Grype evidence
+        env:
+          CORE_IMAGE: ${{ steps.core.outputs.reference }}
+          RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+        run: |
+          grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
+          install -d -m 0700 "$grype_cache"
+          docker pull --platform linux/amd64 "$SYFT_IMAGE"
+          docker pull --platform linux/amd64 "$GRYPE_IMAGE"
+          docker run --rm --platform linux/amd64 \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            "$SYFT_IMAGE" "docker:$CORE_IMAGE" --output cyclonedx-json \
+            > "$EVIDENCE_DIR/core.sbom.json"
+          docker run --rm --platform linux/amd64 \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            "$SYFT_IMAGE" "docker:$RUNNER_IMAGE" --output cyclonedx-json \
+            > "$EVIDENCE_DIR/runner.sbom.json"
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            "$GRYPE_IMAGE" db update
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            "$GRYPE_IMAGE" db status --output json \
+            > "$EVIDENCE_DIR/grype-db-status.json"
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            --volume "$EVIDENCE_DIR:/evidence:ro" \
+            "$GRYPE_IMAGE" "sbom:/evidence/core.sbom.json" --output json \
+            > "$EVIDENCE_DIR/core.grype.json"
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            --volume "$EVIDENCE_DIR:/evidence:ro" \
+            "$GRYPE_IMAGE" "sbom:/evidence/runner.sbom.json" --output json \
+            > "$EVIDENCE_DIR/runner.grype.json"
+          chmod 0600 "$EVIDENCE_DIR"/*.sbom.json "$EVIDENCE_DIR"/*.grype.json \
+            "$EVIDENCE_DIR/grype-db-status.json"
+
+      - name: Write release-compatible image receipts
+        env:
+          CORE_IMAGE: ${{ steps.core.outputs.reference }}
+          RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
+        run: |
+          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" write-receipts \
+            --directory "$EVIDENCE_DIR" \
+            --source-commit "$SOURCE_COMMIT" \
+            --core-image "$CORE_IMAGE" \
+            --runner-image "$RUNNER_IMAGE" \
+            --postgres-image "$POSTGRES_IMAGE"
+
+      - name: Bundle evidence with preserved modes
+        id: bundle
+        run: |
+          source_epoch="$(git show -s --format=%ct "$SOURCE_COMMIT")"
+          bundle="$RUNNER_TEMP/lil-tweak-server-images-$SOURCE_COMMIT.tar.gz"
+          chmod 0444 "$EVIDENCE_DIR/source-manifest.json"
+          find "$EVIDENCE_DIR" -type f ! -name source-manifest.json -exec chmod 0600 {} +
+          tar \
+            --sort=name \
+            --format=posix \
+            --owner=0 --group=0 --numeric-owner \
+            --mtime="@$source_epoch" \
+            --pax-option=delete=atime,delete=ctime \
+            --directory "$(dirname "$EVIDENCE_DIR")" \
+            --create --gzip --file "$bundle" \
+            "$(basename "$EVIDENCE_DIR")"
+          chmod 0600 "$bundle"
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum "$(basename "$bundle")" > "$(basename "$bundle").sha256"
+            chmod 0600 "$(basename "$bundle").sha256"
+          )
+          printf 'archive=%s\n' "$bundle" >> "$GITHUB_OUTPUT"
+          printf 'checksum=%s.sha256\n' "$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Upload private release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lil-tweak-server-images-${{ inputs.source_commit }}
+          path: |
+            ${{ steps.bundle.outputs.archive }}
+            ${{ steps.bundle.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove registry credentials from the runner
+        if: always()
+        run: docker logout ghcr.io || true
+
