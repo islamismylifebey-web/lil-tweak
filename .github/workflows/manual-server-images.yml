@@ -156,28 +156,35 @@ jobs:
         env:
           REGISTRY_TOKEN: ${{ github.token }}
         run: |
-          output="$EVIDENCE_DIR/pre.package-inventory.json"
-          headers="$EVIDENCE_DIR/pre.package-inventory.headers"
-          status="$(curl \
-            --silent --show-error --location \
-            --connect-timeout 10 --max-time 30 --retry 2 --retry-all-errors \
-            --dump-header "$headers" \
-            --output "$output" --write-out '%{http_code}' \
-            --header 'Accept: application/vnd.github+json' \
-            --header "Authorization: Bearer $REGISTRY_TOKEN" \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            "$GITHUB_API_URL/user/packages?package_type=container&per_page=100&page=1")"
-          if [[ "$status" != 200 ]]; then
-            printf 'package inventory preflight failed (HTTP %s)\n' "$status" >&2
-            exit 1
-          fi
-          if grep -Eiq '^link:.*rel="next"' "$headers"; then
-            printf 'package inventory exceeds the bounded first page\n' >&2
-            exit 1
-          fi
-          python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" package-inventory \
-            --metadata "$output"
-          chmod 0600 "$output" "$headers"
+          check_package() {
+            local package="$1"
+            local output="$EVIDENCE_DIR/$package.pre.package.json"
+            local status
+            status="$(curl \
+              --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 --retry 2 --retry-all-errors \
+              --output "$output" --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer $REGISTRY_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "$GITHUB_API_URL/users/$REGISTRY_OWNER/packages/container/$package")"
+            case "$status" in
+              200)
+                python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" package-metadata \
+                  --package "$package" --metadata "$output"
+                ;;
+              404)
+                ;;
+              *)
+                printf 'package preflight failed for %s (HTTP %s)\n' "$package" "$status" >&2
+                exit 1
+                ;;
+            esac
+            chmod 0600 "$output"
+          }
+          for package in "$CORE_PACKAGE" "$RUNNER_PACKAGE" "$POSTGRES_PACKAGE"; do
+            check_package "$package"
+          done
 
       - name: Authenticate to the private registry
         env:
@@ -267,7 +274,7 @@ jobs:
               --header 'Accept: application/vnd.github+json' \
               --header "Authorization: Bearer $REGISTRY_TOKEN" \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
-              "$GITHUB_API_URL/user/packages/container/$package")"
+              "$GITHUB_API_URL/users/$REGISTRY_OWNER/packages/container/$package")"
             if [[ "$status" != 200 ]]; then
               printf 'package metadata verification failed for %s (HTTP %s)\n' "$package" "$status" >&2
               exit 1
