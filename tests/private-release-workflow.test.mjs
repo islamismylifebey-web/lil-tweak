@@ -37,3 +37,23 @@ test('manual release verification uses the same private temporary-root contract 
   assert.deepEqual(verify.permissions, { contents: 'read' });
   assert.deepEqual(workflow.jobs.publish.needs, 'verify');
 });
+
+test('manual image release probes named packages without a user-namespace listing', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
+  const publish = workflow.jobs.publish;
+  const preflight = publish.steps.find(step => step.name === 'Check package state before publication').run;
+  const postflight = publish.steps.find(step => step.name === 'Require private packages linked to this exact repository').run;
+
+  assert.doesNotMatch(preflight, /\/user\/packages/);
+  assert.doesNotMatch(preflight, /\/users\/\$REGISTRY_OWNER\/packages\?/);
+  assert.match(preflight, /for package in "\$CORE_PACKAGE" "\$RUNNER_PACKAGE" "\$POSTGRES_PACKAGE"/);
+  assert.match(preflight, /\/users\/\$REGISTRY_OWNER\/packages\/container\/\$package/);
+  assert.match(preflight, /case "\$status" in/);
+  assert.match(preflight, /200\)/);
+  assert.match(preflight, /404\)/);
+  assert.match(preflight, /package-metadata/);
+
+  assert.doesNotMatch(postflight, /\/user\/packages/);
+  assert.match(postflight, /\/users\/\$REGISTRY_OWNER\/packages\/container\/\$package/);
+  assert.match(postflight, /"\$status" != 200/);
+});
