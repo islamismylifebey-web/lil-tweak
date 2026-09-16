@@ -100,3 +100,29 @@ test('private release blocks fixable high and critical vulnerabilities after pre
   assert.match(gate.run, /--fail-on high/);
   assert.match(gate.run, /\$role\.grype\.fixable\.txt/);
 });
+
+test('failed image security gate uploads diagnostics but never release evidence', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
+  const steps = workflow.jobs.publish.steps;
+  const gateIndex = steps.findIndex(step => step.name === 'Reject fixable high or critical vulnerabilities');
+  const diagnosticIndex = steps.findIndex(step => step.name === 'Upload blocked-release security diagnostics');
+  const receiptsIndex = steps.findIndex(step => step.name === 'Write release-compatible image receipts');
+  const diagnostic = steps[diagnosticIndex];
+  const gate = steps[gateIndex];
+
+  assert.ok(gateIndex >= 0);
+  assert.equal(gate.id, 'security_gate');
+  assert.ok(diagnosticIndex > gateIndex && diagnosticIndex < receiptsIndex);
+  assert.match(String(diagnostic.if), /failure\(\)/);
+  assert.match(String(diagnostic.if), /steps\.security_gate\.outcome/);
+  assert.equal(diagnostic.uses, 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+  assert.equal(diagnostic.with.name, 'lil-tweak-security-diagnostics-${{ inputs.source_commit }}');
+  assert.match(diagnostic.with.path, /core\.grype\.fixable\.txt/);
+  assert.match(diagnostic.with.path, /runner\.grype\.fixable\.txt/);
+  assert.match(diagnostic.with.path, /postgres\.grype\.fixable\.txt/);
+  assert.match(diagnostic.with.path, /core\.grype\.json/);
+  assert.match(diagnostic.with.path, /runner\.grype\.json/);
+  assert.match(diagnostic.with.path, /postgres\.grype\.json/);
+  assert.equal(diagnostic.with['if-no-files-found'], 'error');
+  assert.ok(Number(diagnostic.with['retention-days']) <= 3);
+});

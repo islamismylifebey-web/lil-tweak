@@ -388,6 +388,7 @@ jobs:
             "$EVIDENCE_DIR/grype-db-status.json"
 
       - name: Reject fixable high or critical vulnerabilities
+        id: security_gate
         run: |
           grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
           gate_failed=0
@@ -411,6 +412,22 @@ jobs:
             printf 'fixable High/Critical vulnerabilities block private image release\n' >&2
             exit 1
           fi
+
+      - name: Upload blocked-release security diagnostics
+        if: ${{ failure() && steps.security_gate.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lil-tweak-security-diagnostics-${{ inputs.source_commit }}
+          path: |
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/core.grype.fixable.txt
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/runner.grype.fixable.txt
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/postgres.grype.fixable.txt
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/core.grype.json
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/runner.grype.json
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/postgres.grype.json
+            ${{ runner.temp }}/lil-tweak-server-images-${{ inputs.source_commit }}/grype-db-status.json
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Write release-compatible image receipts
         env:
