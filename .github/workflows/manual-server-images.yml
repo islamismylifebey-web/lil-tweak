@@ -94,9 +94,9 @@ jobs:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       OFFICIAL_BASE_COMMIT: ${{ inputs.official_base_commit }}
       VERIFICATION_RECEIPT: docs/verification/production-release-source-receipt.md
-      PYTHON_BASE_IMAGE: docker.io/library/python@sha256:9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef
-      RUNNER_BASE_IMAGE: docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
-      POSTGRES_PARENT_IMAGE: docker.io/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+      PYTHON_BASE_IMAGE: docker.io/library/python@sha256:2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79
+      RUNNER_BASE_IMAGE: docker.io/library/node@sha256:a05717adfe7289e2a0fa36a694dc430a510adab6467c7036e51551198935abef
+      POSTGRES_PARENT_IMAGE: docker.io/library/postgres@sha256:d13db94ae661d517c5ed57c509a578d5ea64aae639871ba25294f4f42d83de28
       SYFT_IMAGE: ghcr.io/anchore/syft@sha256:600896ff278677fb13b16dc35999452f4e79636fc098c9fee6ce3cffef9858e2
       GRYPE_IMAGE: ghcr.io/anchore/grype@sha256:461c87fefcd20d133f4d99db4623608637eecb439045f9fc8d6eebbb4149e766
       LIL_TWEAK_DEPLOY_TEST_AS_ROOT: "1"
@@ -339,6 +339,7 @@ jobs:
         env:
           CORE_IMAGE: ${{ steps.core.outputs.reference }}
           RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
         run: |
           grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
           install -d -m 0700 "$grype_cache"
@@ -352,6 +353,10 @@ jobs:
             --volume /var/run/docker.sock:/var/run/docker.sock \
             "$SYFT_IMAGE" "docker:$RUNNER_IMAGE" --output cyclonedx-json \
             > "$EVIDENCE_DIR/runner.sbom.json"
+          docker run --rm --platform linux/amd64 \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            "$SYFT_IMAGE" "docker:$POSTGRES_IMAGE" --output cyclonedx-json \
+            > "$EVIDENCE_DIR/postgres.sbom.json"
           docker run --rm --platform linux/amd64 \
             --env GRYPE_DB_CACHE_DIR=/grype-db \
             --volume "$grype_cache:/grype-db" \
@@ -373,8 +378,39 @@ jobs:
             --volume "$EVIDENCE_DIR:/evidence:ro" \
             "$GRYPE_IMAGE" "sbom:/evidence/runner.sbom.json" --output json \
             > "$EVIDENCE_DIR/runner.grype.json"
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            --volume "$EVIDENCE_DIR:/evidence:ro" \
+            "$GRYPE_IMAGE" "sbom:/evidence/postgres.sbom.json" --output json \
+            > "$EVIDENCE_DIR/postgres.grype.json"
           chmod 0600 "$EVIDENCE_DIR"/*.sbom.json "$EVIDENCE_DIR"/*.grype.json \
             "$EVIDENCE_DIR/grype-db-status.json"
+
+      - name: Reject fixable high or critical vulnerabilities
+        run: |
+          grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
+          gate_failed=0
+          for role in core runner postgres; do
+            set +e
+            docker run --rm --platform linux/amd64 \
+              --env GRYPE_DB_CACHE_DIR=/grype-db \
+              --volume "$grype_cache:/grype-db" \
+              --volume "$EVIDENCE_DIR:/evidence:ro" \
+              "$GRYPE_IMAGE" "sbom:/evidence/$role.sbom.json" \
+              --only-fixed --fail-on high \
+              > "$EVIDENCE_DIR/$role.grype.fixable.txt"
+            status=$?
+            set -e
+            if [[ "$status" -ne 0 ]]; then
+              gate_failed=1
+            fi
+          done
+          chmod 0600 "$EVIDENCE_DIR"/*.grype.fixable.txt
+          if [[ "$gate_failed" -ne 0 ]]; then
+            printf 'fixable High/Critical vulnerabilities block private image release\n' >&2
+            exit 1
+          fi
 
       - name: Write release-compatible image receipts
         env:

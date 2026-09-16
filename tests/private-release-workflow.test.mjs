@@ -57,3 +57,46 @@ test('manual image release probes named packages without a user-namespace listin
   assert.match(postflight, /\/users\/\$REGISTRY_OWNER\/packages\/container\/\$package/);
   assert.match(postflight, /"\$status" != 200/);
 });
+
+test('private release pins the reviewed patched runtime bases by linux amd64 digest', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
+  const env = workflow.jobs.publish.env;
+  assert.equal(
+    env.PYTHON_BASE_IMAGE,
+    'docker.io/library/python@sha256:2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79',
+  );
+  assert.equal(
+    env.RUNNER_BASE_IMAGE,
+    'docker.io/library/node@sha256:a05717adfe7289e2a0fa36a694dc430a510adab6467c7036e51551198935abef',
+  );
+  assert.equal(
+    env.POSTGRES_PARENT_IMAGE,
+    'docker.io/library/postgres@sha256:d13db94ae661d517c5ed57c509a578d5ea64aae639871ba25294f4f42d83de28',
+  );
+
+  const core = await readFile(new URL('../deploy/Containerfile.core', import.meta.url), 'utf8');
+  const runner = await readFile(new URL('../deploy/Containerfile.runner', import.meta.url), 'utf8');
+  assert.match(core, /apt-get update\s*\\\n\s*&& apt-get upgrade --yes/);
+  assert.match(runner, /apt-get update\s*\\\n\s*&& apt-get upgrade --yes/);
+});
+
+test('private release blocks fixable high and critical vulnerabilities after preserving full scan evidence', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
+  const publish = workflow.jobs.publish;
+  const evidence = publish.steps.find(step => step.name === 'Generate final-digest SBOM and Grype evidence');
+  const gate = publish.steps.find(step => step.name === 'Reject fixable high or critical vulnerabilities');
+
+  assert.ok(evidence);
+  assert.equal(evidence.env.POSTGRES_IMAGE, '${{ steps.postgres.outputs.reference }}');
+  assert.match(evidence.run, /core\.sbom\.json/);
+  assert.match(evidence.run, /runner\.sbom\.json/);
+  assert.match(evidence.run, /postgres\.sbom\.json/);
+  assert.match(evidence.run, /core\.grype\.json/);
+  assert.match(evidence.run, /runner\.grype\.json/);
+  assert.match(evidence.run, /postgres\.grype\.json/);
+  assert.ok(gate);
+  assert.match(gate.run, /for role in core runner postgres/);
+  assert.match(gate.run, /--only-fixed/);
+  assert.match(gate.run, /--fail-on high/);
+  assert.match(gate.run, /\$role\.grype\.fixable\.txt/);
+});
