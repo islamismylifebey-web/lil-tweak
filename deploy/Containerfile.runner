@@ -5,6 +5,7 @@ LABEL org.opencontainers.image.title="Lil Tweak sandbox runner" \
       org.opencontainers.image.description="Credential-free, network-disabled code execution toolchain"
 
 RUN apt-get update \
+    && apt-get upgrade --yes \
     && apt-get purge --yes git git-man \
     && apt-get install --yes --no-install-recommends \
         cargo \
