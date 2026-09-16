@@ -1,0 +1,42 @@
+ARG POSTGRES_PARENT_IMAGE
+FROM ${POSTGRES_PARENT_IMAGE} AS gosu-builder
+
+USER root
+
+ARG GO_VERSION=1.27.1
+ARG GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
+ARG GOSU_COMMIT=6456aaa0f3c854d199d0f037f068eb97515b7513
+ARG GOSU_SOURCE_SHA256=33d7537d588ea49458b9509bcf4554bdf5ceacc66da71e5caa1058ea3b689c3b
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates curl \
+    && curl --fail --location --proto '=https' --tlsv1.2 \
+        "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+        --output "/tmp/go${GO_VERSION}.linux-amd64.tar.gz" \
+    && echo "${GO_SHA256}  /tmp/go${GO_VERSION}.linux-amd64.tar.gz" | sha256sum --check \
+    && curl --fail --location --proto '=https' --tlsv1.2 \
+        "https://github.com/tianon/gosu/archive/${GOSU_COMMIT}.tar.gz" \
+        --output /tmp/gosu-source.tar.gz \
+    && echo "${GOSU_SOURCE_SHA256}  /tmp/gosu-source.tar.gz" | sha256sum --check \
+    && rm -rf /usr/local/go /src/gosu \
+    && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64.tar.gz" \
+    && mkdir -p /src/gosu \
+    && tar -C /src/gosu --strip-components=1 -xzf /tmp/gosu-source.tar.gz
+
+WORKDIR /src/gosu
+RUN CGO_ENABLED=0 /usr/local/go/bin/go build \
+        -buildvcs=false -trimpath -ldflags='-d -w' \
+        -o /gosu github.com/tianon/gosu \
+    && /usr/local/go/bin/go version -m /gosu \
+    && /gosu --version
+
+FROM ${POSTGRES_PARENT_IMAGE}
+
+USER root
+RUN apt-get update \
+    && apt-get upgrade --yes \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=gosu-builder /gosu /usr/local/bin/gosu
+RUN chmod 0755 /usr/local/bin/gosu \
+    && /usr/local/bin/gosu --version
