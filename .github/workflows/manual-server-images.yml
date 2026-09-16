@@ -239,22 +239,28 @@ jobs:
           printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
           chmod 0600 "$EVIDENCE_DIR/runner.build-metadata.json" "$EVIDENCE_DIR/runner.manifest.json"
 
-      - name: Mirror the exact official PostgreSQL linux/amd64 child manifest
+      - name: Publish the patched PostgreSQL linux/amd64 child manifest
         id: postgres
         run: |
           tag="ghcr.io/$REGISTRY_OWNER/$POSTGRES_PACKAGE:candidate-$SOURCE_COMMIT"
-          expected_digest="${POSTGRES_PARENT_IMAGE##*@}"
-          docker buildx imagetools create \
-            --prefer-index=false \
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --pull \
+            --file "$BUILD_SOURCE/deploy/Containerfile.postgres" \
+            --build-arg "POSTGRES_PARENT_IMAGE=$POSTGRES_PARENT_IMAGE" \
+            --label "org.opencontainers.image.source=https://github.com/$EXPECTED_REPOSITORY" \
             --tag "$tag" \
-            "$POSTGRES_PARENT_IMAGE"
+            --metadata-file "$EVIDENCE_DIR/postgres.build-metadata.json" \
+            --push "$BUILD_SOURCE"
           docker buildx imagetools inspect --raw "$tag" > "$EVIDENCE_DIR/postgres.manifest.json"
           reference="$(python -B "$BUILD_SOURCE/scripts/lil-tweak-private-release.py" image-reference \
             --package "$POSTGRES_PACKAGE" \
-            --manifest "$EVIDENCE_DIR/postgres.manifest.json" \
-            --expected-digest "$expected_digest")"
+            --metadata "$EVIDENCE_DIR/postgres.build-metadata.json" \
+            --manifest "$EVIDENCE_DIR/postgres.manifest.json")"
           printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
-          chmod 0600 "$EVIDENCE_DIR/postgres.manifest.json"
+          chmod 0600 "$EVIDENCE_DIR/postgres.build-metadata.json" "$EVIDENCE_DIR/postgres.manifest.json"
 
       - name: Require private packages linked to this exact repository
         env:
