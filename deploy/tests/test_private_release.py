@@ -23,19 +23,19 @@ RUNNER_IMAGE = f"ghcr.io/islamismylifebey-web/lil-tweak-runner@{RUNNER_DIGEST}"
 
 PYTHON_BASE = (
     "docker.io/library/python@sha256:"
-    "9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef"
+    "2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79"
 )
 RUNNER_BASE = (
     "docker.io/library/node@sha256:"
-    "4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96"
+    "a05717adfe7289e2a0fa36a694dc430a510adab6467c7036e51551198935abef"
 )
 POSTGRES_PARENT_IMAGE = (
     "docker.io/library/postgres@sha256:"
-    "7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6"
+    "d13db94ae661d517c5ed57c509a578d5ea64aae639871ba25294f4f42d83de28"
 )
 POSTGRES_IMAGE = (
     "ghcr.io/islamismylifebey-web/lil-tweak-postgres@sha256:"
-    "7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6"
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 )
 SYFT_IMAGE = (
     "ghcr.io/anchore/syft@sha256:"
