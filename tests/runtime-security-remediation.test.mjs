@@ -13,17 +13,25 @@ const PIP_SHA256 = '71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384
 const WHEEL_VERSION = '0.46.2';
 const WHEEL_SHA256 = '33ae60725d69eaa249bc1982e739943c23b34b58d51f1cb6253453773aca6e65';
 const PODMAN_VERSION = '6.1.2';
-const PODMAN_SHA256 = '6785e4dc11dad67000308749fed0f981698792309830a6b870bd5a97b3527182';
+const PODMAN_SOURCE_COMMIT = '04f3aa430e6df81bea059978bc5bafbc846ba3e7';
+const PODMAN_GRPC_VERSION = '1.83.1';
 const GOSU_COMMIT = '6456aaa0f3c854d199d0f037f068eb97515b7513';
 const GOSU_SOURCE_SHA256 = '33d7537d588ea49458b9509bcf4554bdf5ceacc66da71e5caa1058ea3b689c3b';
 
-test('core uses only the checksum-pinned Podman remote client', async () => {
+test('core rebuilds the exact Podman remote source with the reviewed fixed gRPC pin', async () => {
   const core = await readFile(new URL('../deploy/Containerfile.core', import.meta.url), 'utf8');
 
   assert.match(core, new RegExp(`PODMAN_REMOTE_VERSION=${PODMAN_VERSION.replaceAll('.', '\\.')}`));
-  assert.match(core, new RegExp(`PODMAN_REMOTE_SHA256=${PODMAN_SHA256}`));
-  assert.match(core, /podman-remote-static-linux_amd64\.tar\.gz/);
-  assert.match(core, /sha256sum --check/);
+  assert.match(core, new RegExp(`PODMAN_SOURCE_COMMIT=${PODMAN_SOURCE_COMMIT}`));
+  assert.match(core, new RegExp(`PODMAN_GRPC_VERSION=${PODMAN_GRPC_VERSION.replaceAll('.', '\\.')}`));
+  assert.match(core, new RegExp(`GO_VERSION=${GO_VERSION.replaceAll('.', '\\.')}`));
+  assert.match(core, new RegExp(`GO_SHA256=${GO_SHA256}`));
+  assert.match(core, /git fetch --depth=1 origin "\$\{PODMAN_SOURCE_COMMIT\}"/);
+  assert.match(core, /test "\$\(git rev-parse HEAD\)" = "\$\{PODMAN_SOURCE_COMMIT\}"/);
+  assert.match(core, /go mod edit -require="google\.golang\.org\/grpc@v\$\{PODMAN_GRPC_VERSION\}"/);
+  assert.match(core, /go list -m google\.golang\.org\/grpc/);
+  assert.match(core, /make podman-remote-static-linux_amd64/);
+  assert.doesNotMatch(core, /podman-remote-static-linux_amd64\.tar\.gz/);
   assert.doesNotMatch(core, /apt-get install[^\n]*\bpodman\b/);
 });
 
