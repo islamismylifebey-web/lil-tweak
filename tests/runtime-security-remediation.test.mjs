@@ -8,6 +8,10 @@ const yaml = require('js-yaml');
 
 const GO_VERSION = '1.27.1';
 const GO_SHA256 = '63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445';
+const PIP_VERSION = '26.2.1';
+const PIP_SHA256 = '71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e';
+const WHEEL_VERSION = '0.46.2';
+const WHEEL_SHA256 = '33ae60725d69eaa249bc1982e739943c23b34b58d51f1cb6253453773aca6e65';
 const PODMAN_VERSION = '6.1.2';
 const PODMAN_SHA256 = '6785e4dc11dad67000308749fed0f981698792309830a6b870bd5a97b3527182';
 const GOSU_COMMIT = '6456aaa0f3c854d199d0f037f068eb97515b7513';
@@ -32,19 +36,26 @@ test('runner replaces vulnerable distro Go and bundled tool packages with review
   assert.match(runner, /sha256sum --check/);
   assert.doesNotMatch(runner, /\bgolang-go\b/);
   assert.match(runner, /npm@11\.19\.1/);
-  assert.match(runner, /wheel==0\.46\.2/);
-  assert.match(runner, /python3-wheel/);
-  assert.match(runner, /apt-get purge[^\n]*python3-wheel/);
+  assert.match(runner, new RegExp(`PIP_VERSION=${PIP_VERSION.replaceAll('.', '\\.')}`));
+  assert.match(runner, new RegExp(`PIP_SHA256=${PIP_SHA256}`));
+  assert.match(runner, new RegExp(`WHEEL_VERSION=${WHEEL_VERSION.replaceAll('.', '\\.')}`));
+  assert.match(runner, new RegExp(`WHEEL_SHA256=${WHEEL_SHA256}`));
 });
 
-test('runner removes Debian wheel before installing the reviewed pip wheel', async () => {
+test('runner installs reviewed pip and wheel before purging Debian pip and wheel', async () => {
   const runner = await readFile(new URL('../deploy/Containerfile.runner', import.meta.url), 'utf8');
-  const purge = runner.indexOf('apt-get purge --yes python3-wheel');
-  const install = runner.indexOf('python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2');
+  const install = runner.indexOf('python3 -m pip install --break-system-packages --ignore-installed --no-deps --no-index');
+  const purge = runner.indexOf('apt-get purge --yes python3-pip python3-wheel');
 
-  assert.ok(purge >= 0, 'Debian python3-wheel purge must exist');
-  assert.ok(install >= 0, 'reviewed wheel install must exist');
-  assert.ok(purge < install, 'Debian wheel must be removed before pip installs wheel 0.46.2');
+  assert.ok(install >= 0, 'reviewed pip/wheel local install must exist');
+  assert.ok(purge >= 0, 'Debian python3-pip/python3-wheel purge must exist');
+  assert.ok(install < purge, 'reviewed pip/wheel must be installed before Debian pip/wheel are purged');
+  assert.match(runner, /pip-\$\{PIP_VERSION\}-py3-none-any\.whl/);
+  assert.match(runner, /wheel-\$\{WHEEL_VERSION\}-py3-none-any\.whl/);
+  assert.match(runner, /echo "\$\{PIP_SHA256\}  \/tmp\/pip-\$\{PIP_VERSION\}-py3-none-any\.whl" \| sha256sum --check/);
+  assert.match(runner, /echo "\$\{WHEEL_SHA256\}  \/tmp\/wheel-\$\{WHEEL_VERSION\}-py3-none-any\.whl" \| sha256sum --check/);
+  assert.match(runner, /python3 -m pip --version/);
+  assert.match(runner, /python3 -c 'import wheel; assert wheel\.__version__ == "0\.46\.2"'/);
 });
 
 test('PostgreSQL is a patched child image with rebuilt gosu instead of a byte-for-byte mirror', async () => {
