@@ -37,6 +37,16 @@ test('runner replaces vulnerable distro Go and bundled tool packages with review
   assert.match(runner, /apt-get purge[^\n]*python3-wheel/);
 });
 
+test('runner removes Debian wheel before installing the reviewed pip wheel', async () => {
+  const runner = await readFile(new URL('../deploy/Containerfile.runner', import.meta.url), 'utf8');
+  const purge = runner.indexOf('apt-get purge --yes python3-wheel');
+  const install = runner.indexOf('python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2');
+
+  assert.ok(purge >= 0, 'Debian python3-wheel purge must exist');
+  assert.ok(install >= 0, 'reviewed wheel install must exist');
+  assert.ok(purge < install, 'Debian wheel must be removed before pip installs wheel 0.46.2');
+});
+
 test('PostgreSQL is a patched child image with rebuilt gosu instead of a byte-for-byte mirror', async () => {
   const postgres = await readFile(new URL('../deploy/Containerfile.postgres', import.meta.url), 'utf8');
   const workflow = yaml.load(await readFile(new URL('../.github/workflows/manual-server-images.yml', import.meta.url), 'utf8'));
