@@ -1,4 +1,18 @@
 ARG PYTHON_BASE_IMAGE
+FROM ${PYTHON_BASE_IMAGE} AS podman-client
+
+ARG PODMAN_REMOTE_VERSION=6.1.2
+ARG PODMAN_REMOTE_SHA256=6785e4dc11dad67000308749fed0f981698792309830a6b870bd5a97b3527182
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates curl \
+    && curl --fail --location --proto '=https' --tlsv1.2 \
+        "https://github.com/containers/podman/releases/download/v${PODMAN_REMOTE_VERSION}/podman-remote-static-linux_amd64.tar.gz" \
+        --output /tmp/podman-remote-static-linux_amd64.tar.gz \
+    && echo "${PODMAN_REMOTE_SHA256}  /tmp/podman-remote-static-linux_amd64.tar.gz" | sha256sum --check \
+    && tar -xzf /tmp/podman-remote-static-linux_amd64.tar.gz -C /tmp \
+    && install -m 0755 /tmp/bin/podman-remote-static-linux_amd64 /podman
+
 FROM ${PYTHON_BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,8 +22,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update \
     && apt-get upgrade --yes \
-    && apt-get install --yes --no-install-recommends ca-certificates git podman util-linux \
+    && apt-get install --yes --no-install-recommends ca-certificates git util-linux \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=podman-client /podman /usr/local/bin/podman
+RUN podman --version
 
 RUN groupadd --gid 10001 lil-tweak \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent lil-tweak
