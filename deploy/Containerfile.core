@@ -26,6 +26,7 @@ RUN apt-get update \
     && test "$(git rev-parse HEAD)" = "${PODMAN_SOURCE_COMMIT}" \
     && go mod edit -require="google.golang.org/grpc@v${PODMAN_GRPC_VERSION}" \
     && go mod tidy \
+    && go mod vendor \
     && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v${PODMAN_GRPC_VERSION}" \
     && make podman-remote-static-linux_amd64 \
     && install -m 0755 bin/podman-remote-static-linux_amd64 /podman \
