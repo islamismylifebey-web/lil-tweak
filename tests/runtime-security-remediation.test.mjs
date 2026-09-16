@@ -50,12 +50,12 @@ test('runner installs reviewed pip and wheel before purging Debian pip and wheel
   assert.ok(install >= 0, 'reviewed pip/wheel local install must exist');
   assert.ok(purge >= 0, 'Debian python3-pip/python3-wheel purge must exist');
   assert.ok(install < purge, 'reviewed pip/wheel must be installed before Debian pip/wheel are purged');
-  assert.match(runner, /pip-\$\{PIP_VERSION\}-py3-none-any\.whl/);
-  assert.match(runner, /wheel-\$\{WHEEL_VERSION\}-py3-none-any\.whl/);
-  assert.match(runner, /echo "\$\{PIP_SHA256\}  \/tmp\/pip-\$\{PIP_VERSION\}-py3-none-any\.whl" \| sha256sum --check/);
-  assert.match(runner, /echo "\$\{WHEEL_SHA256\}  \/tmp\/wheel-\$\{WHEEL_VERSION\}-py3-none-any\.whl" \| sha256sum --check/);
+  assert.match(runner, /PIP_ARCHIVE=pip-26\.2\.1-py3-none-any\.whl/);
+  assert.match(runner, /WHEEL_ARCHIVE=wheel-0\.46\.2-py3-none-any\.whl/);
+  assert.match(runner, /echo "\$\{PIP_SHA256\}  \/tmp\/\$\{PIP_ARCHIVE\}" \| sha256sum --check/);
+  assert.match(runner, /echo "\$\{WHEEL_SHA256\}  \/tmp\/\$\{WHEEL_ARCHIVE\}" \| sha256sum --check/);
   assert.match(runner, /python3 -m pip --version/);
-  assert.match(runner, /python3 -c 'import wheel; assert wheel\.__version__ == "0\.46\.2"'/);
+  assert.match(runner, /python3 -c 'import pip, wheel; assert pip\.__version__ == "26\.2\.1"; assert wheel\.__version__ == "0\.46\.2"'/);
 });
 
 test('PostgreSQL is a patched child image with rebuilt gosu instead of a byte-for-byte mirror', async () => {
