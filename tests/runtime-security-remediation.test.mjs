@@ -41,6 +41,15 @@ test('core rebuilds the exact Podman remote source with the reviewed fixed gRPC 
   assert.doesNotMatch(core, /apt-get install[^\n]*\bpodman\b/);
 });
 
+test('core verifies Podman Go build metadata using tab-separated module fields', async () => {
+  const core = await readFile(new URL('../deploy/Containerfile.core', import.meta.url), 'utf8');
+
+  assert.match(core, /go version -m \/podman \| awk -F '\\t'/);
+  assert.match(core, /\$2=="google\.golang\.org\/grpc"/);
+  assert.match(core, /\$3==version/);
+  assert.doesNotMatch(core, /grep -F "google\.golang\.org\/grpc v\$\{PODMAN_GRPC_VERSION\}"/);
+});
+
 test('runner replaces vulnerable distro Go and bundled tool packages with reviewed pins', async () => {
   const runner = await readFile(new URL('../deploy/Containerfile.runner', import.meta.url), 'utf8');
 
