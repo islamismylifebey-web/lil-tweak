@@ -29,7 +29,7 @@ test('core rebuilds the exact Podman remote source with the reviewed fixed gRPC 
   assert.match(core, /git fetch --depth=1 origin "\$\{PODMAN_SOURCE_COMMIT\}"/);
   assert.match(core, /test "\$\(git rev-parse HEAD\)" = "\$\{PODMAN_SOURCE_COMMIT\}"/);
   assert.match(core, /go mod edit -require="google\.golang\.org\/grpc@v\$\{PODMAN_GRPC_VERSION\}"/);
-  assert.match(core, /go list -m google\.golang\.org\/grpc/);
+  assert.match(core, /go list -m -f '\{\{\.Version\}\}' google\.golang\.org\/grpc/);
   assert.match(core, /make podman-remote-static-linux_amd64/);
   assert.doesNotMatch(core, /podman-remote-static-linux_amd64\.tar\.gz/);
   assert.doesNotMatch(core, /apt-get install[^\n]*\bpodman\b/);
