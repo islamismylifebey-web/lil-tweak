@@ -2,6 +2,7 @@ ARG RUNNER_BASE_IMAGE
 FROM ${RUNNER_BASE_IMAGE}
 
 ARG GO_VERSION=1.27.1
+ARG GO_ARCHIVE=go1.27.1.linux-amd64.tar.gz
 ARG GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
 
 LABEL org.opencontainers.image.title="Lil Tweak sandbox runner" \
@@ -26,14 +27,14 @@ RUN apt-get update \
         rustc \
     && npm install --global npm@11.19.1 \
     && curl --fail --location --proto '=https' --tlsv1.2 \
-        "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
-        --output "/tmp/go${GO_VERSION}.linux-amd64.tar.gz" \
-    && echo "${GO_SHA256}  /tmp/go${GO_VERSION}.linux-amd64.tar.gz" | sha256sum --check \
+        "https://go.dev/dl/${GO_ARCHIVE}" \
+        --output "/tmp/${GO_ARCHIVE}" \
+    && echo "${GO_SHA256}  /tmp/${GO_ARCHIVE}" | sha256sum --check \
     && rm -rf /usr/local/go \
-    && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64.tar.gz" \
+    && tar -C /usr/local -xzf "/tmp/${GO_ARCHIVE}" \
     && python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2 \
     && apt-get purge --yes python3-wheel \
-    && rm -rf /var/lib/apt/lists/* /tmp/go*.linux-amd64.tar.gz \
+    && rm -rf /var/lib/apt/lists/* "/tmp/${GO_ARCHIVE}" \
     && ! command -v git \
     && command -v patch \
     && /usr/local/go/bin/go version \
