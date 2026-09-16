@@ -90,7 +90,9 @@ test("ships a reproducible non-root multi-language sandbox image", () => {
   assert.match(runner, /^ARG RUNNER_BASE_IMAGE$/m);
   assert.match(runner, /^FROM \$\{RUNNER_BASE_IMAGE\}$/m);
   assert.match(runner, /python3-pytest/);
-  assert.match(runner, /golang-go/);
+  assert.match(runner, /^ARG GO_VERSION=1\.27\.1$/m);
+  assert.match(runner, /^ARG GO_ARCHIVE=go1\.27\.1\.linux-amd64\.tar\.gz$/m);
+  assert.doesNotMatch(runner, /\bgolang-go\b/);
   assert.match(runner, /cargo/);
   assert.match(runner, /default-jdk-headless/);
   assert.match(runner, /\bpatch\b/);
