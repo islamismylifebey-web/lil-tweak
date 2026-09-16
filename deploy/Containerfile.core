@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CONTAINER_HOST=unix:///run/podman/podman.sock
 
 RUN apt-get update \
+    && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends ca-certificates git podman util-linux \
     && rm -rf /var/lib/apt/lists/*
 
