@@ -87,10 +87,15 @@ test('private release blocks fixable high and critical vulnerabilities after pre
   const gate = publish.steps.find(step => step.name === 'Reject fixable high or critical vulnerabilities');
 
   assert.ok(evidence);
+  assert.equal(evidence.env.POSTGRES_IMAGE, '${{ steps.postgres.outputs.reference }}');
+  assert.match(evidence.run, /core\.sbom\.json/);
+  assert.match(evidence.run, /runner\.sbom\.json/);
+  assert.match(evidence.run, /postgres\.sbom\.json/);
   assert.match(evidence.run, /core\.grype\.json/);
   assert.match(evidence.run, /runner\.grype\.json/);
+  assert.match(evidence.run, /postgres\.grype\.json/);
   assert.ok(gate);
-  assert.match(gate.run, /for role in core runner/);
+  assert.match(gate.run, /for role in core runner postgres/);
   assert.match(gate.run, /--only-fixed/);
   assert.match(gate.run, /--fail-on high/);
   assert.match(gate.run, /\$role\.grype\.fixable\.txt/);
