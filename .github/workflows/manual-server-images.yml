@@ -339,6 +339,7 @@ jobs:
         env:
           CORE_IMAGE: ${{ steps.core.outputs.reference }}
           RUNNER_IMAGE: ${{ steps.runner.outputs.reference }}
+          POSTGRES_IMAGE: ${{ steps.postgres.outputs.reference }}
         run: |
           grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
           install -d -m 0700 "$grype_cache"
@@ -352,6 +353,10 @@ jobs:
             --volume /var/run/docker.sock:/var/run/docker.sock \
             "$SYFT_IMAGE" "docker:$RUNNER_IMAGE" --output cyclonedx-json \
             > "$EVIDENCE_DIR/runner.sbom.json"
+          docker run --rm --platform linux/amd64 \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            "$SYFT_IMAGE" "docker:$POSTGRES_IMAGE" --output cyclonedx-json \
+            > "$EVIDENCE_DIR/postgres.sbom.json"
           docker run --rm --platform linux/amd64 \
             --env GRYPE_DB_CACHE_DIR=/grype-db \
             --volume "$grype_cache:/grype-db" \
@@ -373,6 +378,12 @@ jobs:
             --volume "$EVIDENCE_DIR:/evidence:ro" \
             "$GRYPE_IMAGE" "sbom:/evidence/runner.sbom.json" --output json \
             > "$EVIDENCE_DIR/runner.grype.json"
+          docker run --rm --platform linux/amd64 \
+            --env GRYPE_DB_CACHE_DIR=/grype-db \
+            --volume "$grype_cache:/grype-db" \
+            --volume "$EVIDENCE_DIR:/evidence:ro" \
+            "$GRYPE_IMAGE" "sbom:/evidence/postgres.sbom.json" --output json \
+            > "$EVIDENCE_DIR/postgres.grype.json"
           chmod 0600 "$EVIDENCE_DIR"/*.sbom.json "$EVIDENCE_DIR"/*.grype.json \
             "$EVIDENCE_DIR/grype-db-status.json"
 
@@ -380,7 +391,7 @@ jobs:
         run: |
           grype_cache="$RUNNER_TEMP/grype-db-$SOURCE_COMMIT"
           gate_failed=0
-          for role in core runner; do
+          for role in core runner postgres; do
             set +e
             docker run --rm --platform linux/amd64 \
               --env GRYPE_DB_CACHE_DIR=/grype-db \
