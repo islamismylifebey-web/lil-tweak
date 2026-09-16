@@ -350,15 +350,17 @@ class PrivateReleaseHelperTests(unittest.TestCase):
                     self.assertEqual(rejected.returncode, 2)
                     self.assertEqual(rejected.stderr, "anonymous_pull_check_invalid\n")
 
-    def test_receipts_bind_frozen_bases_tools_final_images_and_four_scans(self) -> None:
+    def test_receipts_bind_frozen_bases_tools_final_images_and_six_scans(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = Path(temporary) / "evidence"
             evidence.mkdir()
             scan_bytes = {
                 "core.sbom.json": b'{"core":"sbom"}\n',
                 "runner.sbom.json": b'{"runner":"sbom"}\n',
+                "postgres.sbom.json": b'{"postgres":"sbom"}\n',
                 "core.grype.json": b'{"core":"grype"}\n',
                 "runner.grype.json": b'{"runner":"grype"}\n',
+                "postgres.grype.json": b'{"postgres":"grype"}\n',
             }
             for name, contents in scan_bytes.items():
                 (evidence / name).write_bytes(contents)
@@ -382,15 +384,17 @@ class PrivateReleaseHelperTests(unittest.TestCase):
                 (evidence / "base-image-receipt.txt").read_text(encoding="ascii"),
                 f"{PYTHON_BASE} {PYTHON_BASE.rsplit('@', 1)[1]}\n"
                 f"{RUNNER_BASE} {RUNNER_BASE.rsplit('@', 1)[1]}\n"
-                f"{POSTGRES_IMAGE} {POSTGRES_IMAGE.rsplit('@', 1)[1]}\n",
+                f"{POSTGRES_PARENT_IMAGE} {POSTGRES_PARENT_IMAGE.rsplit('@', 1)[1]}\n",
             )
             expected_hash_lines = "".join(
                 f"{hashlib.sha256(scan_bytes[name]).hexdigest()}  {name}\n"
                 for name in (
                     "core.sbom.json",
                     "runner.sbom.json",
+                    "postgres.sbom.json",
                     "core.grype.json",
                     "runner.grype.json",
+                    "postgres.grype.json",
                 )
             )
             self.assertEqual(
