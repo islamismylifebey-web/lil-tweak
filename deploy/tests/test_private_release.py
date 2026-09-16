@@ -23,19 +23,19 @@ RUNNER_IMAGE = f"ghcr.io/islamismylifebey-web/lil-tweak-runner@{RUNNER_DIGEST}"
 
 PYTHON_BASE = (
     "docker.io/library/python@sha256:"
-    "9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef"
+    "2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79"
 )
 RUNNER_BASE = (
     "docker.io/library/node@sha256:"
-    "4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96"
+    "a05717adfe7289e2a0fa36a694dc430a510adab6467c7036e51551198935abef"
 )
 POSTGRES_PARENT_IMAGE = (
     "docker.io/library/postgres@sha256:"
-    "7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6"
+    "d13db94ae661d517c5ed57c509a578d5ea64aae639871ba25294f4f42d83de28"
 )
 POSTGRES_IMAGE = (
     "ghcr.io/islamismylifebey-web/lil-tweak-postgres@sha256:"
-    "7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6"
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 )
 SYFT_IMAGE = (
     "ghcr.io/anchore/syft@sha256:"
@@ -350,15 +350,17 @@ class PrivateReleaseHelperTests(unittest.TestCase):
                     self.assertEqual(rejected.returncode, 2)
                     self.assertEqual(rejected.stderr, "anonymous_pull_check_invalid\n")
 
-    def test_receipts_bind_frozen_bases_tools_final_images_and_four_scans(self) -> None:
+    def test_receipts_bind_frozen_bases_tools_final_images_and_six_scans(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = Path(temporary) / "evidence"
             evidence.mkdir()
             scan_bytes = {
                 "core.sbom.json": b'{"core":"sbom"}\n',
                 "runner.sbom.json": b'{"runner":"sbom"}\n',
+                "postgres.sbom.json": b'{"postgres":"sbom"}\n',
                 "core.grype.json": b'{"core":"grype"}\n',
                 "runner.grype.json": b'{"runner":"grype"}\n',
+                "postgres.grype.json": b'{"postgres":"grype"}\n',
             }
             for name, contents in scan_bytes.items():
                 (evidence / name).write_bytes(contents)
@@ -382,15 +384,17 @@ class PrivateReleaseHelperTests(unittest.TestCase):
                 (evidence / "base-image-receipt.txt").read_text(encoding="ascii"),
                 f"{PYTHON_BASE} {PYTHON_BASE.rsplit('@', 1)[1]}\n"
                 f"{RUNNER_BASE} {RUNNER_BASE.rsplit('@', 1)[1]}\n"
-                f"{POSTGRES_IMAGE} {POSTGRES_IMAGE.rsplit('@', 1)[1]}\n",
+                f"{POSTGRES_PARENT_IMAGE} {POSTGRES_PARENT_IMAGE.rsplit('@', 1)[1]}\n",
             )
             expected_hash_lines = "".join(
                 f"{hashlib.sha256(scan_bytes[name]).hexdigest()}  {name}\n"
                 for name in (
                     "core.sbom.json",
                     "runner.sbom.json",
+                    "postgres.sbom.json",
                     "core.grype.json",
                     "runner.grype.json",
+                    "postgres.grype.json",
                 )
             )
             self.assertEqual(

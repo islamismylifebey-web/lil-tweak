@@ -17,15 +17,15 @@ PACKAGES = {"lil-tweak-core", "lil-tweak-runner", "lil-tweak-postgres"}
 
 PYTHON_BASE_IMAGE = (
     "docker.io/library/python@sha256:"
-    "9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef"
+    "2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79"
 )
 RUNNER_BASE_IMAGE = (
     "docker.io/library/node@sha256:"
-    "4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96"
+    "a05717adfe7289e2a0fa36a694dc430a510adab6467c7036e51551198935abef"
 )
 POSTGRES_PARENT_IMAGE = (
     "docker.io/library/postgres@sha256:"
-    "7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6"
+    "d13db94ae661d517c5ed57c509a578d5ea64aae639871ba25294f4f42d83de28"
 )
 SYFT_IMAGE = (
     "ghcr.io/anchore/syft@sha256:"
@@ -42,8 +42,10 @@ MAX_JSON_BYTES = 16 * 1024 * 1024
 SCAN_NAMES = (
     "core.sbom.json",
     "runner.sbom.json",
+    "postgres.sbom.json",
     "core.grype.json",
     "runner.grype.json",
+    "postgres.grype.json",
 )
 
 
@@ -282,7 +284,7 @@ def write_receipts(
     _image_reference(core_image, "lil-tweak-core", error)
     _image_reference(runner_image, "lil-tweak-runner", error)
     _image_reference(postgres_image, "lil-tweak-postgres", error)
-    if postgres_image.rsplit("@", 1)[1] != POSTGRES_PARENT_IMAGE.rsplit("@", 1)[1]:
+    if postgres_image.rsplit("@", 1)[1] == POSTGRES_PARENT_IMAGE.rsplit("@", 1)[1]:
         _fail(error)
     try:
         if directory.is_symlink() or not directory.is_dir():
@@ -304,7 +306,7 @@ def write_receipts(
     outputs = {
         "base-image-receipt.txt": "".join(
             f"{reference} {reference.rsplit('@', 1)[1]}\n"
-            for reference in (PYTHON_BASE_IMAGE, RUNNER_BASE_IMAGE, postgres_image)
+            for reference in (PYTHON_BASE_IMAGE, RUNNER_BASE_IMAGE, POSTGRES_PARENT_IMAGE)
         ).encode("ascii"),
         "image-scan-hashes.txt": "".join(
             f"{hashlib.sha256(scan_data[name]).hexdigest()}  {name}\n" for name in SCAN_NAMES
