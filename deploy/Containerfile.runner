@@ -32,8 +32,8 @@ RUN apt-get update \
     && echo "${GO_SHA256}  /tmp/${GO_ARCHIVE}" | sha256sum --check \
     && rm -rf /usr/local/go \
     && tar -C /usr/local -xzf "/tmp/${GO_ARCHIVE}" \
-    && python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2 \
     && apt-get purge --yes python3-wheel \
+    && python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2 \
     && rm -rf /var/lib/apt/lists/* "/tmp/${GO_ARCHIVE}" \
     && ! command -v git \
     && command -v patch \
