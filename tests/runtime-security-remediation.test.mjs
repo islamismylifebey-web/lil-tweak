@@ -29,6 +29,12 @@ test('core rebuilds the exact Podman remote source with the reviewed fixed gRPC 
   assert.match(core, /git fetch --depth=1 origin "\$\{PODMAN_SOURCE_COMMIT\}"/);
   assert.match(core, /test "\$\(git rev-parse HEAD\)" = "\$\{PODMAN_SOURCE_COMMIT\}"/);
   assert.match(core, /go mod edit -require="google\.golang\.org\/grpc@v\$\{PODMAN_GRPC_VERSION\}"/);
+  const tidy = core.indexOf('go mod tidy');
+  const vendor = core.indexOf('go mod vendor');
+  const build = core.indexOf('make podman-remote-static-linux_amd64');
+  assert.ok(tidy >= 0, 'Podman module tidy step must exist');
+  assert.ok(vendor >= 0, 'Podman vendor synchronization must exist');
+  assert.ok(tidy < vendor && vendor < build, 'Podman vendor tree must be synchronized before the remote build');
   assert.match(core, /go list -m -f '\{\{\.Version\}\}' google\.golang\.org\/grpc/);
   assert.match(core, /make podman-remote-static-linux_amd64/);
   assert.doesNotMatch(core, /podman-remote-static-linux_amd64\.tar\.gz/);
