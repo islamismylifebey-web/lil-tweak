@@ -41,8 +41,12 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 MAX_JSON_BYTES = 16 * 1024 * 1024
 SCAN_NAMES = (
     "core.sbom.json",
-    "runner.sbom.json",`n    "postgres.sbom.json",`n    "core.grype.json",
-    "runner.grype.json",`n    "postgres.grype.json",`n)
+    "runner.sbom.json",
+    "postgres.sbom.json",
+    "core.grype.json",
+    "runner.grype.json",
+    "postgres.grype.json",
+)
 
 
 class ReleaseError(Exception):
