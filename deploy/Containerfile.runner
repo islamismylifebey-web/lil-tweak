@@ -4,6 +4,12 @@ FROM ${RUNNER_BASE_IMAGE}
 ARG GO_VERSION=1.27.1
 ARG GO_ARCHIVE=go1.27.1.linux-amd64.tar.gz
 ARG GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
+ARG PIP_VERSION=26.2.1
+ARG PIP_ARCHIVE=pip-26.2.1-py3-none-any.whl
+ARG PIP_SHA256=71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e
+ARG WHEEL_VERSION=0.46.2
+ARG WHEEL_ARCHIVE=wheel-0.46.2-py3-none-any.whl
+ARG WHEEL_SHA256=33ae60725d69eaa249bc1982e739943c23b34b58d51f1cb6253453773aca6e65
 
 LABEL org.opencontainers.image.title="Lil Tweak sandbox runner" \
       org.opencontainers.image.description="Credential-free, network-disabled code execution toolchain"
@@ -32,14 +38,20 @@ RUN apt-get update \
     && echo "${GO_SHA256}  /tmp/${GO_ARCHIVE}" | sha256sum --check \
     && rm -rf /usr/local/go \
     && tar -C /usr/local -xzf "/tmp/${GO_ARCHIVE}" \
-    && apt-get purge --yes python3-wheel \
-    && python3 -m pip install --break-system-packages --no-cache-dir wheel==0.46.2 \
-    && rm -rf /var/lib/apt/lists/* "/tmp/${GO_ARCHIVE}" \
+    && python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: \
+        --dest /tmp "pip==${PIP_VERSION}" "wheel==${WHEEL_VERSION}" \
+    && echo "${PIP_SHA256}  /tmp/${PIP_ARCHIVE}" | sha256sum --check \
+    && echo "${WHEEL_SHA256}  /tmp/${WHEEL_ARCHIVE}" | sha256sum --check \
+    && python3 -m pip install --break-system-packages --ignore-installed --no-deps --no-index \
+        "/tmp/${PIP_ARCHIVE}" "/tmp/${WHEEL_ARCHIVE}" \
+    && apt-get purge --yes python3-pip python3-wheel \
+    && rm -rf /var/lib/apt/lists/* "/tmp/${GO_ARCHIVE}" "/tmp/${PIP_ARCHIVE}" "/tmp/${WHEEL_ARCHIVE}" \
     && ! command -v git \
     && command -v patch \
     && /usr/local/go/bin/go version \
     && test "$(npm --version)" = "11.19.1" \
-    && python3 -c 'import wheel; assert wheel.__version__ == "0.46.2"'
+    && python3 -m pip --version \
+    && python3 -c 'import pip, wheel; assert pip.__version__ == "26.2.1"; assert wheel.__version__ == "0.46.2"'
 
 ENV HOME=/tmp \
     PATH=/usr/local/go/bin:${PATH} \
