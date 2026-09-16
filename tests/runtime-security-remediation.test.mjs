@@ -52,8 +52,8 @@ test('runner installs reviewed pip and wheel before purging Debian pip and wheel
   assert.ok(install < purge, 'reviewed pip/wheel must be installed before Debian pip/wheel are purged');
   assert.match(runner, /PIP_ARCHIVE=pip-26\.2\.1-py3-none-any\.whl/);
   assert.match(runner, /WHEEL_ARCHIVE=wheel-0\.46\.2-py3-none-any\.whl/);
-  assert.match(runner, /echo "\$\{PIP_SHA256\}  \/tmp\/\$\{PIP_ARCHIVE\}" \| sha256sum --check/);
-  assert.match(runner, /echo "\$\{WHEEL_SHA256\}  \/tmp\/\$\{WHEEL_ARCHIVE\}" \| sha256sum --check/);
+  assert.match(runner, /echo "\$\{PIP_SHA256\} {2}\/tmp\/\$\{PIP_ARCHIVE\}" \| sha256sum --check/);
+  assert.match(runner, /echo "\$\{WHEEL_SHA256\} {2}\/tmp\/\$\{WHEEL_ARCHIVE\}" \| sha256sum --check/);
   assert.match(runner, /python3 -m pip --version/);
   assert.match(runner, /python3 -c 'import pip, wheel; assert pip\.__version__ == "26\.2\.1"; assert wheel\.__version__ == "0\.46\.2"'/);
 });
