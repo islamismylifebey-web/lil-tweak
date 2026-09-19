@@ -88,8 +88,8 @@ def transition(
         proposal_digest
         and approved_digest
         and hmac_digest_equal(proposal_digest, approved_digest)
-        and approval_recorded
-        and not approval_consumed
+        and approval_recorded is True
+        and approval_consumed is False
     ):
         raise ApprovalRequired()
     return target_state
@@ -100,4 +100,10 @@ def hmac_digest_equal(left: str, right: str) -> bool:
     # still avoids making the approval boundary depend on early string mismatch.
     import hmac
 
-    return hmac.compare_digest(left, right)
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        return hmac.compare_digest(left, right)
+    except TypeError:
+        # Non-ASCII or malformed digests are not evidence of approval.
+        return False
