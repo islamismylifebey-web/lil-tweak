@@ -169,3 +169,7 @@ class MiniBridgeTests(unittest.TestCase):
                 "files",
             },
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
