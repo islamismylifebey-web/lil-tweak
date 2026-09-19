@@ -46,9 +46,21 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
         values.update(overrides)
         return EngineeringIQResult(**values)
 
+    def grade(self, result, *, source="a" * 40, elapsed=1, verified=None):
+        return score(
+            self.challenge(),
+            result,
+            expected_source_revision=source,
+            elapsed_wall_seconds=elapsed,
+            verified_evidence_refs=(
+                frozenset({"root-cause-proof", "regression-proof"})
+                if verified is None else verified
+            ),
+        )
+
     def test_zero_attempt_result_cannot_pass(self):
         self.assertEqual(
-            score(self.challenge(), self.clean_result(attempts_used=0)).verdict,
+            self.grade(self.clean_result(attempts_used=0)).verdict,
             Verdict.FAIL,
         )
 
@@ -56,32 +68,30 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
         challenge = self.challenge()
         result = self.clean_result(source_revision="b" * 40)
         with self.assertRaisesRegex(ValueError, "engineering_iq_source_binding_mismatch"):
-            score(challenge, result, expected_source_revision="a" * 40)
+            score(
+                challenge,
+                result,
+                expected_source_revision="a" * 40,
+                elapsed_wall_seconds=1,
+                verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
+            )
 
     def test_elapsed_wall_clock_is_enforced(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_wall_time_exceeded"):
-            score(self.challenge(), self.clean_result(), elapsed_wall_seconds=11)
+            self.grade(self.clean_result(), elapsed=11)
 
     def test_negative_elapsed_wall_clock_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_wall_time_invalid"):
-            score(self.challenge(), self.clean_result(), elapsed_wall_seconds=-1)
+            self.grade(self.clean_result(), elapsed=-1)
 
     def test_fake_evidence_names_do_not_count_without_authoritative_registry(self):
         result = self.clean_result()
         with self.assertRaisesRegex(ValueError, "engineering_iq_evidence_unverified"):
-            score(
-                self.challenge(),
-                result,
-                verified_evidence_refs=frozenset(),
-            )
+            self.grade(result, verified=frozenset())
 
     def test_only_authoritatively_verified_evidence_counts(self):
         result = self.clean_result()
-        scored = score(
-            self.challenge(),
-            result,
-            verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
-        )
+        scored = self.grade(result)
         self.assertEqual(scored.verdict, Verdict.PASS)
 
     def test_hidden_checks_are_not_present_in_public_challenge_view(self):
@@ -90,11 +100,7 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
         self.assertEqual(public.challenge_id, "attack-001")
 
     def test_score_dimension_coverage_is_immutable(self):
-        scored = score(
-            self.challenge(),
-            self.clean_result(),
-            verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
-        )
+        scored = self.grade(self.clean_result())
         with self.assertRaises(TypeError):
             scored.dimension_coverage[EngineeringDimension.CAUSAL_DEBUGGING] = False
 
@@ -139,27 +145,15 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
 
     def test_path_traversal_changed_file_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_changed_path_invalid"):
-            score(
-                self.challenge(),
-                self.clean_result(changed_files=("../escape.py",)),
-                verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
-            )
+            self.grade(self.clean_result(changed_files=("../escape.py",)))
 
     def test_absolute_changed_file_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_changed_path_invalid"):
-            score(
-                self.challenge(),
-                self.clean_result(changed_files=("/tmp/escape.py",)),
-                verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
-            )
+            self.grade(self.clean_result(changed_files=("/tmp/escape.py",)))
 
     def test_duplicate_changed_file_entries_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_changed_path_duplicate"):
-            score(
-                self.challenge(),
-                self.clean_result(changed_files=("a.py", "a.py")),
-                verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
-            )
+            self.grade(self.clean_result(changed_files=("a.py", "a.py")))
 
     def test_unknown_claimed_verdict_type_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_claimed_verdict_invalid"):
