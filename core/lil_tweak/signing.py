@@ -30,6 +30,8 @@ class ReplayError(ValueError):
 
 
 def _canonical_target(path_and_query: str) -> str:
+    if not isinstance(path_and_query, str):
+        raise ValueError("invalid request target")
     if not path_and_query.startswith("/") or "\n" in path_and_query or "\r" in path_and_query:
         raise ValueError("invalid request target")
     parsed = urlsplit(path_and_query)
@@ -124,6 +126,8 @@ def verify_request(
     """
 
     try:
+        if not isinstance(signature, str):
+            raise ValueError("invalid signature")
         timestamp = int(str(fields["timestamp"]))
         supplied_digest = str(fields["body_sha256"]).lower()
         actual_digest = hashlib.sha256(body).hexdigest()
@@ -141,6 +145,6 @@ def verify_request(
     if not valid:
         raise AuthenticationError()
     nonce = str(fields["nonce"])
-    if not consume_nonce(key_id, nonce, timestamp):
+    if consume_nonce(key_id, nonce, timestamp) is not True:
         raise ReplayError()
     return True
