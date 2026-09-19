@@ -34,13 +34,15 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - name: Exact candidate and additive boundary
+      - name: Exact candidate and scoped Skill Forge boundary
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          git diff --check 6f59d8ddc95db083e062a5b4b626df13fcdfcbf0 HEAD
+          git diff --check "$BASE_SHA" HEAD
           python3 - <<'PY'
+          import os
           import subprocess
           allowed = ("core/lil_tweak/skill_forge/", "core/tests/test_skill_forge",
                      "examples/skill-forge-", "docs/skill-forge.md",
@@ -48,14 +50,14 @@ jobs:
                      "docs/superpowers/plans/2026-09-05-skill-forge-",
                      ".github/workflows/skill-forge-ci.yml")
           changes = subprocess.check_output(
-              ["git", "diff", "--name-status", "6f59d8ddc95db083e062a5b4b626df13fcdfcbf0", "HEAD"],
+              ["git", "diff", "--name-status", os.environ["BASE_SHA"], "HEAD"],
               text=True,
           ).splitlines()
-          assert changes, "No implementation changes"
+          assert changes, "No Skill Forge implementation changes"
           for line in changes:
               status, path = line.split("\t")
-              assert status == "A" and path.startswith(allowed), line
-          print(f"Verified {len(changes)} additive files; existing source unchanged")
+              assert status in {"A", "M"} and path.startswith(allowed), line
+          print(f"Verified {len(changes)} scoped Skill Forge files against current PR base")
           PY
       - name: Create private temporary root
         run: |
