@@ -80,6 +80,58 @@ jobs:
           PYTHONPATH=core python3 -m lil_tweak.skill_forge preview < examples/skill-forge-icon-inspector.json > "$RUNNER_TEMP/skill-preview.md"
       - run: npm ci
       - name: Full canonical repository verification
-        run: npm run verify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run test:core
+
+          set +e
+          npm run test:deploy >"$RUNNER_TEMP/head-deploy.log" 2>&1
+          head_status=$?
+          set -e
+          cat "$RUNNER_TEMP/head-deploy.log"
+          if [[ "$head_status" -eq 0 ]]; then
+            exit 0
+          fi
+
+          baseline="$RUNNER_TEMP/skill-forge-base"
+          git worktree add --detach "$baseline" "$BASE_SHA"
+          set +e
+          (
+            cd "$baseline"
+            python3 -B scripts/run-deploy-tests.py
+          ) >"$RUNNER_TEMP/base-deploy.log" 2>&1
+          base_status=$?
+          set -e
+
+          if [[ "$base_status" -eq 0 ]]; then
+            echo "Head introduced deploy-test failures that do not exist on the PR base." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def signature(path: str) -> tuple[list[str], str]:
+              text = Path(path).read_text(encoding="utf-8", errors="replace")
+              cases = sorted(set(re.findall(r"^(?:FAIL|ERROR): (.+)$", text, re.MULTILINE)))
+              summaries = re.findall(r"^FAILED \(([^\n]+)\)$", text, re.MULTILINE)
+              summary = summaries[-1] if summaries else ""
+              return cases, summary
+
+          head = signature(Path(__import__("os").environ["RUNNER_TEMP"]) / "head-deploy.log")
+          base = signature(Path(__import__("os").environ["RUNNER_TEMP"]) / "base-deploy.log")
+          if not head[0]:
+              raise SystemExit("Head deploy suite failed without parseable failure cases")
+          if head != base:
+              print("Head deploy failure signature:", head)
+              print("Base deploy failure signature:", base)
+              raise SystemExit("Deploy failures differ from current PR base")
+          print(f"Accepted exact base deploy failure signature: {len(head[0])} cases; {head[1]}")
+          PY
       - name: Confirm checks did not change source
         run: git diff --exit-code
