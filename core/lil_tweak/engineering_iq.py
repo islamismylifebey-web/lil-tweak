@@ -54,7 +54,7 @@ def _tuple_tokens(values: object, code: str) -> tuple[str, ...]:
 
 
 def _changed_path(value: object) -> str:
-    if not isinstance(value, str) or not value or len(value) > 512 or "\" in value:
+    if not isinstance(value, str) or not value or len(value) > 512 or chr(92) in value:
         raise ValueError("engineering_iq_changed_path_invalid")
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts or "." in path.parts:
