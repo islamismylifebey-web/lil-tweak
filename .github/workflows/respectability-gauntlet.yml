@@ -1,0 +1,106 @@
+name: Super Geek Respectability Gauntlet
+
+on:
+  pull_request:
+    paths:
+      - 'core/**'
+      - 'scripts/run-respectability-gauntlet.py'
+      - 'docs/respectability-super-geek.md'
+      - '.github/workflows/respectability-gauntlet.yml'
+  push:
+    branches: [main, exercise/super-geek-respectability-20260918]
+    paths:
+      - 'core/**'
+      - 'scripts/run-respectability-gauntlet.py'
+      - 'docs/respectability-super-geek.md'
+      - '.github/workflows/respectability-gauntlet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: respectability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exercise:
+    name: Offline ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: focused
+            repeat: 3
+          - suite: core
+            repeat: 1
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Bind source and prepare private temporary directories
+        id: source
+        run: |
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/respectability" "$RUNNER_TEMP/respectability-red" respectability-results
+          chmod 700 "$RUNNER_TEMP/respectability" "$RUNNER_TEMP/respectability-red"
+          git diff --check f3023620f4d13f51001e7934f433ab56cc3dd712...HEAD
+          python3 -m compileall -q core/lil_tweak/state.py core/lil_tweak/signing.py core/tests/test_respectability_*.py scripts/run-respectability-gauntlet.py
+      - name: Reproduce immutable pre-fix failures
+        if: matrix.suite == 'focused'
+        run: |
+          set -euo pipefail
+          git archive d956966c94ecc46d8488bf9b1fba2f637ae8b491 \
+            core/lil_tweak/contracts.py core/lil_tweak/state.py core/lil_tweak/signing.py \
+            core/tests/test_respectability_gauntlet.py | tar -x -C "$RUNNER_TEMP/respectability-red"
+          PYTHON="$(command -v python3)"
+          USER_NAME="$(id -un)"
+          set +e
+          (cd "$RUNNER_TEMP/respectability-red" && sudo unshare --net -- \
+            runuser -u "$USER_NAME" -- "$PYTHON" -B -m unittest core.tests.test_respectability_gauntlet) \
+            > respectability-results/pre-fix-red.log 2>&1
+          result=$?
+          set -e
+          cat respectability-results/pre-fix-red.log
+          test "$result" -eq 1
+          grep -E '^Ran 19 tests in ' respectability-results/pre-fix-red.log
+          grep -Fx 'FAILED (failures=22, errors=14)' respectability-results/pre-fix-red.log
+      - name: Exercise exact head without external networking
+        env:
+          TMPDIR: ${{ runner.temp }}/respectability
+          TMP: ${{ runner.temp }}/respectability
+          TEMP: ${{ runner.temp }}/respectability
+          SUITE: ${{ matrix.suite }}
+          REPEAT: ${{ matrix.repeat }}
+        run: |
+          set -euo pipefail
+          # No fallback: if network isolation fails, this step fails.
+          # Loopback remains available for the repository's local HTTP tests.
+          sudo unshare --net -- bash -ceu '
+            ip link set lo up
+            exec runuser -u "$1" -- env TMPDIR="$7" TMP="$7" TEMP="$7" PYTHONDONTWRITEBYTECODE=1 \
+              "$2" -B "$3" --suite "$4" --repeat "$5" --output "$6"
+          ' _ "$(id -un)" "$(command -v python3)" \
+            "$GITHUB_WORKSPACE/scripts/run-respectability-gauntlet.py" "$SUITE" "$REPEAT" \
+            "$GITHUB_WORKSPACE/respectability-results/$SUITE.json" "$RUNNER_TEMP/respectability" \
+            2>&1 | tee "respectability-results/$SUITE.log"
+      - name: Confirm tracked source was not changed by tests
+        if: always()
+        run: git diff --exit-code && git diff --cached --exit-code
+      - name: Publish execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: super-geek-${{ matrix.suite }}-${{ steps.source.outputs.head }}
+          path: respectability-results/
+          if-no-files-found: error
+          retention-days: 14
