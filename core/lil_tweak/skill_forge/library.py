@@ -329,6 +329,26 @@ class Library:
             raise ForgeError("required_tools_missing")
         return self._consume(owner, digest, audience, token, "activate")[0].instruction_files()
 
+    def activate_for_mini(self, owner: str, digest: str, audience: str, token: str,
+                          available_tools: tuple[str, ...]) -> bytes:
+        """Return one approved, qualified activation envelope for Mini.
+
+        The envelope carries instructions and qualification evidence only. It does
+        not grant tools, credentials, permissions, or execution authority.
+        """
+        _, package = self._row(owner, digest)
+        if not isinstance(available_tools, tuple) or not set(package.requirements).issubset(available_tools):
+            raise ForgeError("required_tools_missing")
+        release_digest, files, _ = self._release(owner, digest)
+        consumed, _ = self._consume(owner, digest, audience, token, "activate")
+        if consumed.digest != package.digest:
+            raise ForgeError("mini_bridge_stale_package")
+        return build_mini_activation_envelope(
+            files,
+            audience=audience,
+            release_digest=release_digest,
+        )
+
     def revoke(self, owner: str, digest: str) -> None:
         """Authenticated owner/host operation; never an untrusted skill instruction."""
         with self._db:
