@@ -18,6 +18,7 @@ from .contracts import (
 
 
 _CORRUPT = "recovery_history_corrupt"
+_MAX_CHECKS_JSON_BYTES = 65_536
 
 
 class RecoveryHistoryStore(Protocol):
@@ -361,6 +362,8 @@ def _decode(row: tuple[object, ...]) -> RecoveryHistoryEntry:
     if progress_raw is not None and (type(progress_raw) is not int or progress_raw not in (0, 1)):
         raise ValueError(_CORRUPT)
     if not isinstance(checks_raw, str):
+        raise ValueError(_CORRUPT)
+    if len(checks_raw.encode("utf-8")) > _MAX_CHECKS_JSON_BYTES:
         raise ValueError(_CORRUPT)
 
     checks = json.loads(checks_raw)

@@ -15,6 +15,8 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REVISION = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
 _REASON = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
+_MAX_STRING_ITEMS = 256
+_MAX_STRING_BYTES = 65_536
 
 
 class FailureClass(StrEnum):
@@ -161,7 +163,11 @@ def _freeze(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
 
 
 def _normalize_strings(values: tuple[str, ...], code: str) -> tuple[str, ...]:
+    if len(values) > _MAX_STRING_ITEMS:
+        raise ValueError(code)
     if any(not isinstance(value, str) or not value or len(value) > 256 for value in values):
+        raise ValueError(code)
+    if sum(len(value.encode("utf-8")) for value in values) > _MAX_STRING_BYTES:
         raise ValueError(code)
     return tuple(sorted(set(values)))
 
