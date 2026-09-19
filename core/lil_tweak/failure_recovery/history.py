@@ -17,6 +17,9 @@ from .contracts import (
 )
 
 
+_CORRUPT = "recovery_history_corrupt"
+
+
 class RecoveryHistoryStore(Protocol):
     def append_decision(
         self,
@@ -153,20 +156,21 @@ class SQLiteRecoveryHistoryStore:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                if outcome is None and self.contains_decision(decision):
+                entries = self._validated_entries(decision.owner_id)
+                issued = _matching_decisions(entries, decision)
+                recorded_outcomes = _matching_outcomes(entries, decision)
+
+                if outcome is None and issued:
                     raise ValueError("recovery_decision_already_issued")
                 if outcome is not None:
-                    if not self.contains_decision(decision):
+                    if not issued:
                         raise ValueError("recovery_decision_not_issued")
-                    if self._has_outcome(decision):
+                    if recorded_outcomes:
                         raise ValueError("recovery_outcome_already_recorded")
-                row = self._connection.execute(
-                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM recovery_history WHERE owner_id = ?",
-                    (decision.owner_id,),
-                ).fetchone()
+
                 entry = _entry(
                     decision,
-                    int(row[0]),
+                    len(entries) + 1,
                     outcome=outcome,
                     initial_failed_checks=initial_failed_checks,
                 )
@@ -187,33 +191,12 @@ class SQLiteRecoveryHistoryStore:
 
     def contains_decision(self, decision: RecoveryDecision) -> bool:
         with self._lock:
-            row = self._connection.execute(
-                """SELECT target_resource_id FROM recovery_history
-                WHERE owner_id = ? AND decision_digest = ? AND fingerprint = ?
-                AND task_id = ? AND node_id = ? AND attempt = ?
-                AND outcome_status IS NULL LIMIT 1""",
-                (
-                    decision.owner_id,
-                    decision.decision_digest,
-                    decision.fingerprint,
-                    decision.task_id,
-                    decision.node_id,
-                    decision.attempt,
-                ),
-            ).fetchone()
-            return row is not None and row[0] == decision.target_resource_id
+            entries = self._validated_entries(decision.owner_id)
+            return bool(_matching_decisions(entries, decision))
 
     def list(self, owner_id: str) -> list[RecoveryHistoryEntry]:
         with self._lock:
-            rows = self._connection.execute(
-                """SELECT owner_id, sequence, task_id, node_id, attempt, fingerprint,
-                action, decision_digest, target_resource_id, outcome_status, progress,
-                remaining_failed_checks, resulting_plan_digest,
-                resulting_candidate_digest, resulting_resource_id
-                FROM recovery_history WHERE owner_id = ? ORDER BY sequence""",
-                (owner_id,),
-            ).fetchall()
-        return [_decode(row) for row in rows]
+            return list(self._validated_entries(owner_id))
 
     def for_fingerprint(
         self, owner_id: str, fingerprint: str
@@ -221,15 +204,102 @@ class SQLiteRecoveryHistoryStore:
         return [item for item in self.list(owner_id) if item.fingerprint == fingerprint]
 
     def _has_outcome(self, decision: RecoveryDecision) -> bool:
-        row = self._connection.execute(
-            "SELECT 1 FROM recovery_history WHERE owner_id = ? AND decision_digest = ? AND outcome_status IS NOT NULL LIMIT 1",
-            (decision.owner_id, decision.decision_digest),
-        ).fetchone()
-        return row is not None
+        with self._lock:
+            entries = self._validated_entries(decision.owner_id)
+            return bool(_matching_outcomes(entries, decision))
+
+    def _validated_entries(self, owner_id: str) -> list[RecoveryHistoryEntry]:
+        rows = self._connection.execute(
+            """SELECT owner_id, sequence, task_id, node_id, attempt, fingerprint,
+            action, decision_digest, target_resource_id, outcome_status, progress,
+            remaining_failed_checks, resulting_plan_digest,
+            resulting_candidate_digest, resulting_resource_id
+            FROM recovery_history WHERE owner_id = ? ORDER BY sequence""",
+            (owner_id,),
+        ).fetchall()
+        try:
+            entries = [_decode(row) for row in rows]
+            _validate_lineage(owner_id, entries)
+            return entries
+        except (TypeError, ValueError, json.JSONDecodeError, OverflowError):
+            raise ValueError(_CORRUPT) from None
 
     def close(self) -> None:
         with self._lock:
             self._connection.close()
+
+
+def _matching_decisions(
+    entries: list[RecoveryHistoryEntry], decision: RecoveryDecision
+) -> list[RecoveryHistoryEntry]:
+    return [
+        item
+        for item in entries
+        if item.decision_digest == decision.decision_digest
+        and item.fingerprint == decision.fingerprint
+        and item.task_id == decision.task_id
+        and item.node_id == decision.node_id
+        and item.attempt == decision.attempt
+        and item.target_resource_id == decision.target_resource_id
+        and item.outcome_status is None
+    ]
+
+
+def _matching_outcomes(
+    entries: list[RecoveryHistoryEntry], decision: RecoveryDecision
+) -> list[RecoveryHistoryEntry]:
+    return [
+        item
+        for item in entries
+        if item.decision_digest == decision.decision_digest
+        and item.outcome_status is not None
+    ]
+
+
+def _validate_lineage(owner_id: str, entries: list[RecoveryHistoryEntry]) -> None:
+    if [entry.sequence for entry in entries] != list(range(1, len(entries) + 1)):
+        raise ValueError(_CORRUPT)
+
+    issued: dict[str, RecoveryHistoryEntry] = {}
+    completed: set[str] = set()
+
+    for entry in entries:
+        if entry.owner_id != owner_id:
+            raise ValueError(_CORRUPT)
+
+        if entry.outcome_status is None:
+            if (
+                entry.progress is not None
+                or entry.resulting_plan_digest is not None
+                or entry.resulting_candidate_digest is not None
+                or entry.resulting_resource_id is not None
+            ):
+                raise ValueError(_CORRUPT)
+            if entry.decision_digest in issued or entry.decision_digest in completed:
+                raise ValueError(_CORRUPT)
+            issued[entry.decision_digest] = entry
+            continue
+
+        if entry.progress is None:
+            raise ValueError(_CORRUPT)
+        if entry.outcome_status is RecoveryOutcomeStatus.SUCCEEDED and entry.progress is not True:
+            raise ValueError(_CORRUPT)
+        if entry.decision_digest in completed:
+            raise ValueError(_CORRUPT)
+
+        decision = issued.get(entry.decision_digest)
+        if decision is None:
+            raise ValueError(_CORRUPT)
+        if (
+            entry.task_id != decision.task_id
+            or entry.node_id != decision.node_id
+            or entry.attempt != decision.attempt
+            or entry.fingerprint != decision.fingerprint
+            or entry.action is not decision.action
+            or entry.target_resource_id != decision.target_resource_id
+        ):
+            raise ValueError(_CORRUPT)
+        completed.add(entry.decision_digest)
 
 
 def _entry(
@@ -281,22 +351,48 @@ def _encode(entry: RecoveryHistoryEntry) -> tuple[object, ...]:
 
 
 def _decode(row: tuple[object, ...]) -> RecoveryHistoryEntry:
+    if len(row) != 15:
+        raise ValueError(_CORRUPT)
+
+    owner_id, sequence, task_id, node_id, attempt, fingerprint, action_value, decision_digest, target_resource_id, outcome_value, progress_raw, checks_raw, plan_digest, candidate_digest, resource_id = row
+
+    if type(sequence) is not int or type(attempt) is not int:
+        raise ValueError(_CORRUPT)
+    if progress_raw is not None and (type(progress_raw) is not int or progress_raw not in (0, 1)):
+        raise ValueError(_CORRUPT)
+    if not isinstance(checks_raw, str):
+        raise ValueError(_CORRUPT)
+
+    checks = json.loads(checks_raw)
+    if not isinstance(checks, list) or any(not isinstance(item, str) for item in checks):
+        raise ValueError(_CORRUPT)
+
+    for value in (owner_id, task_id, node_id, fingerprint, action_value, decision_digest):
+        if not isinstance(value, str):
+            raise ValueError(_CORRUPT)
+    for value in (target_resource_id, outcome_value, plan_digest, candidate_digest, resource_id):
+        if value is not None and not isinstance(value, str):
+            raise ValueError(_CORRUPT)
+
+    action = RecoveryAction(action_value)
+    outcome_status = (
+        RecoveryOutcomeStatus(outcome_value) if outcome_value is not None else None
+    )
+
     return RecoveryHistoryEntry(
-        owner_id=str(row[0]),
-        sequence=int(row[1]),
-        task_id=str(row[2]),
-        node_id=str(row[3]),
-        attempt=int(row[4]),
-        fingerprint=str(row[5]),
-        action=RecoveryAction(str(row[6])),
-        decision_digest=str(row[7]),
-        target_resource_id=str(row[8]) if row[8] is not None else None,
-        outcome_status=(
-            RecoveryOutcomeStatus(str(row[9])) if row[9] is not None else None
-        ),
-        progress=None if row[10] is None else bool(row[10]),
-        remaining_failed_checks=tuple(json.loads(str(row[11]))),
-        resulting_plan_digest=str(row[12]) if row[12] is not None else None,
-        resulting_candidate_digest=str(row[13]) if row[13] is not None else None,
-        resulting_resource_id=str(row[14]) if row[14] is not None else None,
+        owner_id=owner_id,
+        sequence=sequence,
+        task_id=task_id,
+        node_id=node_id,
+        attempt=attempt,
+        fingerprint=fingerprint,
+        action=action,
+        decision_digest=decision_digest,
+        target_resource_id=target_resource_id,
+        outcome_status=outcome_status,
+        progress=None if progress_raw is None else progress_raw == 1,
+        remaining_failed_checks=tuple(checks),
+        resulting_plan_digest=plan_digest,
+        resulting_candidate_digest=candidate_digest,
+        resulting_resource_id=resource_id,
     )
