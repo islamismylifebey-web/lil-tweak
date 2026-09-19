@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping
 import zipfile
 
 from .evaluation import Adapter, Case, Report, evaluate
+from .mini_bridge import build_mini_activation_envelope
 from .package import (
     ForgeError, Package, attach_evidence, canonical, compile_draft, digest_value,
     identifier, parse_json, sha, verify_package,
