@@ -43,6 +43,15 @@ class EngineeringIQContractTests(unittest.TestCase):
             claimed_verdict=claimed,
         )
 
+    def grade(self, result):
+        return score(
+            self.challenge(),
+            result,
+            expected_source_revision="a" * 40,
+            elapsed_wall_seconds=1,
+            verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
+        )
+
     def test_agent_cannot_self_grade_a_failure_into_a_pass(self):
         checks = (
             CheckResult("architecture", True, ("root-cause-proof",)),
@@ -50,8 +59,7 @@ class EngineeringIQContractTests(unittest.TestCase):
             CheckResult("repair", True),
             CheckResult("regression", True, ("regression-proof",)),
         )
-        scored = score(self.challenge(), self.result(claimed=Verdict.PASS, checks=checks))
-        self.assertEqual(scored.verdict, Verdict.FAIL)
+        self.assertEqual(self.grade(self.result(claimed=Verdict.PASS, checks=checks)).verdict, Verdict.FAIL)
 
     def test_hidden_check_omission_fails_closed(self):
         checks = (
@@ -59,7 +67,7 @@ class EngineeringIQContractTests(unittest.TestCase):
             CheckResult("cause", True),
             CheckResult("repair", True, ("regression-proof",)),
         )
-        self.assertEqual(score(self.challenge(), self.result(checks=checks)).verdict, Verdict.FAIL)
+        self.assertEqual(self.grade(self.result(checks=checks)).verdict, Verdict.FAIL)
 
     def test_required_evidence_is_mandatory(self):
         checks = (
@@ -68,17 +76,17 @@ class EngineeringIQContractTests(unittest.TestCase):
             CheckResult("repair", True),
             CheckResult("regression", True),
         )
-        self.assertEqual(score(self.challenge(), self.result(checks=checks)).verdict, Verdict.FAIL)
+        self.assertEqual(self.grade(self.result(checks=checks)).verdict, Verdict.FAIL)
 
     def test_attempt_budget_is_authoritative(self):
-        self.assertEqual(score(self.challenge(), self.result(attempts=4)).verdict, Verdict.FAIL)
+        self.assertEqual(self.grade(self.result(attempts=4)).verdict, Verdict.FAIL)
 
     def test_changed_file_budget_is_authoritative(self):
         files = tuple(f"f{index}.py" for index in range(9))
-        self.assertEqual(score(self.challenge(), self.result(changed=files)).verdict, Verdict.FAIL)
+        self.assertEqual(self.grade(self.result(changed=files)).verdict, Verdict.FAIL)
 
     def test_clean_complete_result_passes(self):
-        scored = score(self.challenge(), self.result())
+        scored = self.grade(self.result())
         self.assertEqual(scored.verdict, Verdict.PASS)
         self.assertEqual(scored.passed_checks, 4)
         self.assertEqual(scored.total_checks, 4)
@@ -91,7 +99,7 @@ class EngineeringIQContractTests(unittest.TestCase):
             CheckResult("regression", True, ("regression-proof",)),
         )
         with self.assertRaisesRegex(ValueError, "engineering_iq_duplicate_check_result"):
-            score(self.challenge(), self.result(checks=checks))
+            self.grade(self.result(checks=checks))
 
 
 if __name__ == "__main__":
