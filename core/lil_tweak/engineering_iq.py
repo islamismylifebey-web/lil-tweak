@@ -227,12 +227,14 @@ class CheckResult:
 @dataclass(frozen=True, slots=True)
 class VerifiedEvidence:
     evidence_ref: str
+    evidence_sha256: str
     challenge_digest: str
     run_id: str
     source_revision: str
 
     def __post_init__(self) -> None:
         _token(self.evidence_ref, "engineering_iq_evidence_registry_invalid")
+        _digest(self.evidence_sha256, "engineering_iq_evidence_digest_invalid")
         _digest(self.challenge_digest, "engineering_iq_evidence_registry_invalid")
         _token(self.run_id, "engineering_iq_run_id_invalid")
         _revision(self.source_revision, "engineering_iq_evidence_registry_invalid")
@@ -276,6 +278,11 @@ class AuthoritativeScore:
     passed_checks: int
     total_checks: int
     dimension_coverage: Mapping[EngineeringDimension, bool]
+    evidence_digests: Mapping[str, str]
+    challenge_digest: str
+    run_id: str
+    source_revision: str
+    score_digest: str
 
 
 def _validate_dimension_bindings(challenge: EngineeringChallenge) -> None:
@@ -356,46 +363,136 @@ def score(
     _validate_dimension_bindings(challenge)
 
     if result.attempts_used < 1 or result.attempts_used > challenge.budget.max_attempts:
-        return _fail(challenge, result)
+        return _fail(
+            challenge,
+            result,
+            evidence=verified,
+            challenge_digest_value=digest,
+            run_id=expected_run_id,
+            source_revision=expected_source_revision,
+        )
     if len(result.changed_files) > challenge.budget.max_changed_files:
-        return _fail(challenge, result)
+        return _fail(
+            challenge,
+            result,
+            evidence=verified,
+            challenge_digest_value=digest,
+            run_id=expected_run_id,
+            source_revision=expected_source_revision,
+        )
 
     by_id = {item.check_id: item for item in result.check_results}
     if len(by_id) != len(result.check_results):
         raise ValueError("engineering_iq_duplicate_check_result")
     if set(by_id) != set(challenge.hidden_check_ids):
-        return _fail(challenge, result)
+        return _fail(
+            challenge,
+            result,
+            evidence=verified,
+            challenge_digest_value=digest,
+            run_id=expected_run_id,
+            source_revision=expected_source_revision,
+        )
 
     claimed_evidence = {ref for item in result.check_results for ref in item.evidence_refs}
     if not claimed_evidence.issubset(verified):
         raise ValueError("engineering_iq_evidence_unverified")
     if any(required not in verified for required in challenge.required_evidence):
-        return _fail(challenge, result)
+        return _fail(
+            challenge,
+            result,
+            evidence=verified,
+            challenge_digest_value=digest,
+            run_id=expected_run_id,
+            source_revision=expected_source_revision,
+        )
     if any(required not in claimed_evidence for required in challenge.required_evidence):
-        return _fail(challenge, result)
+        return _fail(
+            challenge,
+            result,
+            evidence=verified,
+            challenge_digest_value=digest,
+            run_id=expected_run_id,
+            source_revision=expected_source_revision,
+        )
 
     passed = sum(1 for item in result.check_results if item.passed)
     verdict = Verdict.PASS if passed == len(challenge.hidden_check_ids) else Verdict.FAIL
-    coverage = MappingProxyType(
-        {
-            dimension: all(
-                by_id[check_id].passed
-                for check_id in challenge.dimension_check_ids[dimension]
-            )
-            for dimension in challenge.dimensions
-        }
+    coverage = {
+        dimension: all(
+            by_id[check_id].passed
+            for check_id in challenge.dimension_check_ids[dimension]
+        )
+        for dimension in challenge.dimensions
+    }
+    return _make_score(
+        verdict=verdict,
+        passed=passed,
+        total=len(challenge.hidden_check_ids),
+        coverage=coverage,
+        evidence=verified,
+        challenge_digest_value=digest,
+        run_id=expected_run_id,
+        source_revision=expected_source_revision,
     )
-    return AuthoritativeScore(verdict, passed, len(challenge.hidden_check_ids), coverage)
+
+
+def _make_score(
+    *,
+    verdict: Verdict,
+    passed: int,
+    total: int,
+    coverage: Mapping[EngineeringDimension, bool],
+    evidence: Mapping[str, VerifiedEvidence],
+    challenge_digest_value: str,
+    run_id: str,
+    source_revision: str,
+) -> AuthoritativeScore:
+    coverage_dict = {dimension: bool(coverage[dimension]) for dimension in sorted(coverage, key=lambda item: item.value)}
+    evidence_dict = {ref: evidence[ref].evidence_sha256 for ref in sorted(evidence)}
+    material = {
+        "verdict": verdict.value,
+        "passed_checks": passed,
+        "total_checks": total,
+        "dimension_coverage": {dimension.value: coverage_dict[dimension] for dimension in coverage_dict},
+        "evidence_digests": evidence_dict,
+        "challenge_digest": challenge_digest_value,
+        "run_id": run_id,
+        "source_revision": source_revision,
+    }
+    receipt = hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    return AuthoritativeScore(
+        verdict=verdict,
+        passed_checks=passed,
+        total_checks=total,
+        dimension_coverage=MappingProxyType(coverage_dict),
+        evidence_digests=MappingProxyType(evidence_dict),
+        challenge_digest=challenge_digest_value,
+        run_id=run_id,
+        source_revision=source_revision,
+        score_digest=receipt,
+    )
 
 
 def _fail(
     challenge: EngineeringChallenge,
     result: EngineeringIQResult,
+    *,
+    evidence: Mapping[str, VerifiedEvidence],
+    challenge_digest_value: str,
+    run_id: str,
+    source_revision: str,
 ) -> AuthoritativeScore:
     passed = sum(1 for item in result.check_results if item.passed)
-    return AuthoritativeScore(
-        Verdict.FAIL,
-        passed,
-        len(challenge.hidden_check_ids),
-        MappingProxyType({dimension: False for dimension in challenge.dimensions}),
+    return _make_score(
+        verdict=Verdict.FAIL,
+        passed=passed,
+        total=len(challenge.hidden_check_ids),
+        coverage={dimension: False for dimension in challenge.dimensions},
+        evidence=evidence,
+        challenge_digest_value=challenge_digest_value,
+        run_id=run_id,
+        source_revision=source_revision,
     )

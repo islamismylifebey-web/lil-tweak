@@ -47,6 +47,7 @@ class EngineeringIQReplayAttackTests(unittest.TestCase):
         return (
             VerifiedEvidence(
                 evidence_ref="proof",
+                evidence_sha256="b" * 64,
                 challenge_digest=digest or challenge_digest(challenge),
                 run_id=run_id,
                 source_revision=source,

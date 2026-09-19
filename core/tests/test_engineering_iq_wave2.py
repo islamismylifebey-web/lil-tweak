@@ -47,7 +47,7 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
         )
 
     def evidence(self, challenge):
-        return (VerifiedEvidence("proof", challenge_digest(challenge), "run-1", "a" * 40),)
+        return (VerifiedEvidence("proof", "4" * 64, challenge_digest(challenge), "run-1", "a" * 40),)
 
     def grade(self, challenge=None, *, elapsed=1, evidence=None):
         challenge = challenge or self.challenge()
@@ -75,7 +75,7 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
     def test_verified_evidence_registry_is_count_bounded(self):
         challenge = self.challenge()
         huge = tuple(
-            VerifiedEvidence(f"proof-{index}", challenge_digest(challenge), "run-1", "a" * 40)
+            VerifiedEvidence(f"proof-{index}", "5" * 64, challenge_digest(challenge), "run-1", "a" * 40)
             for index in range(300)
         )
         with self.assertRaisesRegex(ValueError, "engineering_iq_evidence_registry_invalid"):
@@ -83,7 +83,7 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
 
     def test_verified_evidence_registry_tokens_are_bounded(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_evidence_registry_invalid"):
-            VerifiedEvidence("x" * 1000, "a" * 64, "run-1", "a" * 40)
+            VerifiedEvidence("x" * 1000, "6" * 64, "a" * 64, "run-1", "a" * 40)
 
     def test_hidden_check_tokens_reject_whitespace_and_control_characters(self):
         for bad in (" cause", "cause ", "cause\n", "cause\t", "cause check"):

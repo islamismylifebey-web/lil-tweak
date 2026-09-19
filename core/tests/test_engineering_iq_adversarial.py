@@ -53,7 +53,7 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
     def evidence(self, refs=("root-cause-proof", "regression-proof")):
         challenge = self.challenge()
         digest = challenge_digest(challenge)
-        return tuple(VerifiedEvidence(ref, digest, "run-1", "a" * 40) for ref in refs)
+        return tuple(VerifiedEvidence(ref, "3" * 64, digest, "run-1", "a" * 40) for ref in refs)
 
     def grade(self, result, *, source="a" * 40, elapsed=1, evidence=None):
         return score(

@@ -57,8 +57,8 @@ class EngineeringIQContractTests(unittest.TestCase):
         challenge = self.challenge()
         digest = challenge_digest(challenge)
         return (
-            VerifiedEvidence("root-cause-proof", digest, "run-1", "a" * 40),
-            VerifiedEvidence("regression-proof", digest, "run-1", "a" * 40),
+            VerifiedEvidence("root-cause-proof", "1" * 64, digest, "run-1", "a" * 40),
+            VerifiedEvidence("regression-proof", "2" * 64, digest, "run-1", "a" * 40),
         )
 
     def grade(self, result):
