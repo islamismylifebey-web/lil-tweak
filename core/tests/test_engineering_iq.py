@@ -25,6 +25,11 @@ class EngineeringIQContractTests(unittest.TestCase):
             required_evidence=("root-cause-proof", "regression-proof"),
             hidden_check_ids=("architecture", "cause", "repair", "regression"),
             budget=ChallengeBudget(max_attempts=3, max_wall_seconds=1800, max_changed_files=8),
+            dimension_check_ids={
+                EngineeringDimension.ARCHITECTURE_RECONSTRUCTION: ("architecture",),
+                EngineeringDimension.CAUSAL_DEBUGGING: ("cause", "repair"),
+                EngineeringDimension.EVIDENCE_DISCIPLINE: ("regression",),
+            },
         )
 
     def result(self, *, claimed=Verdict.PASS, attempts=1, changed=("a.py",), checks=None):

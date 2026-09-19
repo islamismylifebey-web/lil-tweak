@@ -35,6 +35,9 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
             required_evidence=("proof",),
             hidden_check_ids=("cause", "repair"),
             budget=ChallengeBudget(2, 10, 3),
+            dimension_check_ids={
+                EngineeringDimension.CAUSAL_DEBUGGING: ("cause", "repair"),
+            },
         )
         values.update(overrides)
         return EngineeringChallenge(**values)

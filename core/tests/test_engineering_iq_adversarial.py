@@ -29,6 +29,10 @@ class EngineeringIQAdversarialTests(unittest.TestCase):
                 max_wall_seconds=10,
                 max_changed_files=2,
             ),
+            dimension_check_ids={
+                EngineeringDimension.CAUSAL_DEBUGGING: ("cause", "repair"),
+                EngineeringDimension.EVIDENCE_DISCIPLINE: ("cause",),
+            },
         )
 
     def clean_result(self, **overrides):

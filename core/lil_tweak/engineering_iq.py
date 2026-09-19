@@ -1,13 +1,15 @@
 """Deterministic contracts for Lil' Tueeq Engineering IQ evaluation.
 
 The reasoning model may attempt a challenge, but it never owns challenge secrecy,
-source binding, evidence verification, budgets, or the authoritative verdict.
+source binding, evidence verification, budgets, dimension proof, or the verdict.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import math
 from pathlib import PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Mapping
 
@@ -15,6 +17,7 @@ from typing import Mapping
 _MAX_TOKEN = 128
 _MAX_TEXT = 4_000
 _MAX_ITEMS = 256
+_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
 class EngineeringDimension(StrEnum):
@@ -39,7 +42,7 @@ class Verdict(StrEnum):
 
 
 def _token(value: object, code: str) -> str:
-    if not isinstance(value, str) or not value or len(value) > _MAX_TOKEN:
+    if not isinstance(value, str) or not _TOKEN.fullmatch(value):
         raise ValueError(code)
     return value
 
@@ -75,7 +78,11 @@ class ChallengeBudget:
         for value in (self.max_attempts, self.max_wall_seconds, self.max_changed_files):
             if type(value) is not int or value < 1:
                 raise ValueError("engineering_iq_budget_invalid")
-        if self.max_attempts > 100 or self.max_wall_seconds > 86_400 or self.max_changed_files > 10_000:
+        if (
+            self.max_attempts > 100
+            or self.max_wall_seconds > 86_400
+            or self.max_changed_files > 10_000
+        ):
             raise ValueError("engineering_iq_budget_invalid")
 
 
@@ -98,17 +105,20 @@ class EngineeringChallenge:
     required_evidence: tuple[str, ...]
     hidden_check_ids: tuple[str, ...]
     budget: ChallengeBudget
+    dimension_check_ids: Mapping[EngineeringDimension, tuple[str, ...]] | None = None
 
     def __post_init__(self) -> None:
         _token(self.challenge_id, "engineering_iq_challenge_invalid")
         if not isinstance(self.title, str) or not self.title or len(self.title) > 512:
             raise ValueError("engineering_iq_challenge_invalid")
-        if not isinstance(self.public_brief, str) or not self.public_brief or len(self.public_brief) > _MAX_TEXT:
+        if (
+            not isinstance(self.public_brief, str)
+            or not self.public_brief
+            or len(self.public_brief) > _MAX_TEXT
+        ):
             raise ValueError("engineering_iq_challenge_invalid")
         if not isinstance(self.dimensions, tuple) or not self.dimensions:
             raise ValueError("engineering_iq_challenge_incomplete")
-        if len(self.dimensions) > len(EngineeringDimension):
-            raise ValueError("engineering_iq_dimension_duplicate")
         if any(not isinstance(item, EngineeringDimension) for item in self.dimensions):
             raise ValueError("engineering_iq_dimension_invalid")
         if len(set(self.dimensions)) != len(self.dimensions):
@@ -127,6 +137,22 @@ class EngineeringChallenge:
             raise ValueError("engineering_iq_challenge_incomplete")
         if not isinstance(self.budget, ChallengeBudget):
             raise ValueError("engineering_iq_budget_invalid")
+
+        if self.dimension_check_ids is None:
+            frozen = MappingProxyType({})
+        else:
+            if not isinstance(self.dimension_check_ids, Mapping):
+                raise ValueError("engineering_iq_dimension_binding_invalid")
+            normalized: dict[EngineeringDimension, tuple[str, ...]] = {}
+            for dimension, checks in self.dimension_check_ids.items():
+                if not isinstance(dimension, EngineeringDimension):
+                    raise ValueError("engineering_iq_dimension_binding_invalid")
+                bound = _tuple_tokens(checks, "engineering_iq_dimension_binding_invalid")
+                if not bound:
+                    raise ValueError("engineering_iq_dimension_binding_invalid")
+                normalized[dimension] = bound
+            frozen = MappingProxyType(normalized)
+        object.__setattr__(self, "dimension_check_ids", frozen)
 
     def public_view(self) -> PublicEngineeringChallenge:
         return PublicEngineeringChallenge(
@@ -197,6 +223,28 @@ class AuthoritativeScore:
     dimension_coverage: Mapping[EngineeringDimension, bool]
 
 
+def _validate_dimension_bindings(challenge: EngineeringChallenge) -> None:
+    mapping = challenge.dimension_check_ids
+    if set(mapping) != set(challenge.dimensions):
+        raise ValueError("engineering_iq_dimension_unbound")
+    hidden = set(challenge.hidden_check_ids)
+    for dimension in challenge.dimensions:
+        bound = mapping.get(dimension, ())
+        if not bound or not set(bound).issubset(hidden):
+            raise ValueError("engineering_iq_dimension_unbound")
+
+
+def _verified_registry(values: object) -> frozenset[str]:
+    if not isinstance(values, frozenset) or len(values) > _MAX_ITEMS:
+        raise ValueError("engineering_iq_evidence_registry_invalid")
+    try:
+        return frozenset(
+            _token(item, "engineering_iq_evidence_registry_invalid") for item in values
+        )
+    except TypeError:
+        raise ValueError("engineering_iq_evidence_registry_invalid") from None
+
+
 def score(
     challenge: EngineeringChallenge,
     result: EngineeringIQResult,
@@ -211,14 +259,19 @@ def score(
         raise ValueError("engineering_iq_challenge_binding_mismatch")
     if result.source_revision != expected_source_revision:
         raise ValueError("engineering_iq_source_binding_mismatch")
-    if isinstance(elapsed_wall_seconds, bool) or not isinstance(elapsed_wall_seconds, (int, float)) or elapsed_wall_seconds < 0:
+    if (
+        isinstance(elapsed_wall_seconds, bool)
+        or not isinstance(elapsed_wall_seconds, (int, float))
+        or not math.isfinite(elapsed_wall_seconds)
+        or elapsed_wall_seconds < 0
+    ):
         raise ValueError("engineering_iq_wall_time_invalid")
     if elapsed_wall_seconds > challenge.budget.max_wall_seconds:
         raise ValueError("engineering_iq_wall_time_exceeded")
-    if not isinstance(verified_evidence_refs, frozenset) or any(
-        not isinstance(item, str) or not item for item in verified_evidence_refs
-    ):
-        raise ValueError("engineering_iq_evidence_unverified")
+
+    verified = _verified_registry(verified_evidence_refs)
+    _validate_dimension_bindings(challenge)
+
     if result.attempts_used < 1 or result.attempts_used > challenge.budget.max_attempts:
         return _fail(challenge, result)
     if len(result.changed_files) > challenge.budget.max_changed_files:
@@ -231,9 +284,9 @@ def score(
         return _fail(challenge, result)
 
     claimed_evidence = {ref for item in result.check_results for ref in item.evidence_refs}
-    if not claimed_evidence.issubset(verified_evidence_refs):
+    if not claimed_evidence.issubset(verified):
         raise ValueError("engineering_iq_evidence_unverified")
-    if any(required not in verified_evidence_refs for required in challenge.required_evidence):
+    if any(required not in verified for required in challenge.required_evidence):
         return _fail(challenge, result)
     if any(required not in claimed_evidence for required in challenge.required_evidence):
         return _fail(challenge, result)
@@ -241,7 +294,13 @@ def score(
     passed = sum(1 for item in result.check_results if item.passed)
     verdict = Verdict.PASS if passed == len(challenge.hidden_check_ids) else Verdict.FAIL
     coverage = MappingProxyType(
-        {dimension: verdict is Verdict.PASS for dimension in challenge.dimensions}
+        {
+            dimension: all(
+                by_id[check_id].passed
+                for check_id in challenge.dimension_check_ids[dimension]
+            )
+            for dimension in challenge.dimensions
+        }
     )
     return AuthoritativeScore(verdict, passed, len(challenge.hidden_check_ids), coverage)
 
