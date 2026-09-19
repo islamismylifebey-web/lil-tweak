@@ -6,7 +6,9 @@ from core.lil_tweak.engineering_iq import (
     EngineeringChallenge,
     EngineeringDimension,
     EngineeringIQResult,
+    VerifiedEvidence,
     Verdict,
+    challenge_digest,
     score,
 )
 
@@ -33,6 +35,7 @@ class EngineeringIQContractTests(unittest.TestCase):
         )
 
     def result(self, *, claimed=Verdict.PASS, attempts=1, changed=("a.py",), checks=None):
+        challenge = self.challenge()
         checks = checks or (
             CheckResult("architecture", True, ("root-cause-proof",)),
             CheckResult("cause", True),
@@ -40,7 +43,9 @@ class EngineeringIQContractTests(unittest.TestCase):
             CheckResult("regression", True, ("regression-proof",)),
         )
         return EngineeringIQResult(
-            challenge_id="unfamiliar-system-001",
+            challenge_id=challenge.challenge_id,
+            challenge_digest=challenge_digest(challenge),
+            run_id="run-1",
             source_revision="a" * 40,
             attempts_used=attempts,
             changed_files=changed,
@@ -48,13 +53,22 @@ class EngineeringIQContractTests(unittest.TestCase):
             claimed_verdict=claimed,
         )
 
+    def evidence(self):
+        challenge = self.challenge()
+        digest = challenge_digest(challenge)
+        return (
+            VerifiedEvidence("root-cause-proof", digest, "run-1", "a" * 40),
+            VerifiedEvidence("regression-proof", digest, "run-1", "a" * 40),
+        )
+
     def grade(self, result):
         return score(
             self.challenge(),
             result,
             expected_source_revision="a" * 40,
+            expected_run_id="run-1",
             elapsed_wall_seconds=1,
-            verified_evidence_refs=frozenset({"root-cause-proof", "regression-proof"}),
+            verified_evidence=self.evidence(),
         )
 
     def test_agent_cannot_self_grade_a_failure_into_a_pass(self):

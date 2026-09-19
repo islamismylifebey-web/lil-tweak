@@ -1,4 +1,3 @@
-import math
 import unittest
 
 from core.lil_tweak.engineering_iq import (
@@ -7,25 +6,14 @@ from core.lil_tweak.engineering_iq import (
     EngineeringChallenge,
     EngineeringDimension,
     EngineeringIQResult,
+    VerifiedEvidence,
     Verdict,
+    challenge_digest,
     score,
 )
 
 
 class EngineeringIQSecondWaveTests(unittest.TestCase):
-    def result(self):
-        return EngineeringIQResult(
-            challenge_id="wave2",
-            source_revision="a" * 40,
-            attempts_used=1,
-            changed_files=("fix.py",),
-            check_results=(
-                CheckResult("cause", True, ("proof",)),
-                CheckResult("repair", True),
-            ),
-            claimed_verdict=Verdict.PASS,
-        )
-
     def challenge(self, **overrides):
         values = dict(
             challenge_id="wave2",
@@ -42,13 +30,34 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
         values.update(overrides)
         return EngineeringChallenge(**values)
 
-    def grade(self, challenge=None, *, elapsed=1, verified=frozenset({"proof"})):
+    def result(self, challenge=None):
+        challenge = challenge or self.challenge()
+        checks = [CheckResult("cause", True, ("proof",)), CheckResult("repair", True)]
+        if "security" in challenge.hidden_check_ids:
+            checks.append(CheckResult("security", False))
+        return EngineeringIQResult(
+            challenge_id="wave2",
+            challenge_digest=challenge_digest(challenge),
+            run_id="run-1",
+            source_revision="a" * 40,
+            attempts_used=1,
+            changed_files=("fix.py",),
+            check_results=tuple(checks),
+            claimed_verdict=Verdict.PASS,
+        )
+
+    def evidence(self, challenge):
+        return (VerifiedEvidence("proof", challenge_digest(challenge), "run-1", "a" * 40),)
+
+    def grade(self, challenge=None, *, elapsed=1, evidence=None):
+        challenge = challenge or self.challenge()
         return score(
-            challenge or self.challenge(),
-            self.result(),
+            challenge,
+            self.result(challenge),
             expected_source_revision="a" * 40,
+            expected_run_id="run-1",
             elapsed_wall_seconds=elapsed,
-            verified_evidence_refs=verified,
+            verified_evidence=self.evidence(challenge) if evidence is None else evidence,
         )
 
     def test_nan_wall_clock_cannot_bypass_budget(self):
@@ -64,13 +73,17 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
             self.grade(elapsed=float("-inf"))
 
     def test_verified_evidence_registry_is_count_bounded(self):
-        huge = frozenset(f"proof-{index}" for index in range(300))
+        challenge = self.challenge()
+        huge = tuple(
+            VerifiedEvidence(f"proof-{index}", challenge_digest(challenge), "run-1", "a" * 40)
+            for index in range(300)
+        )
         with self.assertRaisesRegex(ValueError, "engineering_iq_evidence_registry_invalid"):
-            self.grade(verified=huge)
+            self.grade(challenge, evidence=huge)
 
     def test_verified_evidence_registry_tokens_are_bounded(self):
         with self.assertRaisesRegex(ValueError, "engineering_iq_evidence_registry_invalid"):
-            self.grade(verified=frozenset({"x" * 1000, "proof"}))
+            VerifiedEvidence("x" * 1000, "a" * 64, "run-1", "a" * 40)
 
     def test_hidden_check_tokens_reject_whitespace_and_control_characters(self):
         for bad in (" cause", "cause ", "cause\n", "cause\t", "cause check"):
@@ -86,45 +99,21 @@ class EngineeringIQSecondWaveTests(unittest.TestCase):
 
     def test_dimension_cannot_be_claimed_without_a_private_check_binding(self):
         challenge = self.challenge(
-            dimensions=(
-                EngineeringDimension.CAUSAL_DEBUGGING,
-                EngineeringDimension.SECURITY_REASONING,
-            ),
+            dimensions=(EngineeringDimension.CAUSAL_DEBUGGING, EngineeringDimension.SECURITY_REASONING),
         )
         with self.assertRaisesRegex(ValueError, "engineering_iq_dimension_unbound"):
             self.grade(challenge)
 
     def test_dimension_coverage_is_derived_from_its_own_bound_checks(self):
         challenge = self.challenge(
-            dimensions=(
-                EngineeringDimension.CAUSAL_DEBUGGING,
-                EngineeringDimension.SECURITY_REASONING,
-            ),
+            dimensions=(EngineeringDimension.CAUSAL_DEBUGGING, EngineeringDimension.SECURITY_REASONING),
             hidden_check_ids=("cause", "repair", "security"),
             dimension_check_ids={
                 EngineeringDimension.CAUSAL_DEBUGGING: ("cause", "repair"),
                 EngineeringDimension.SECURITY_REASONING: ("security",),
             },
         )
-        result = EngineeringIQResult(
-            challenge_id="wave2",
-            source_revision="a" * 40,
-            attempts_used=1,
-            changed_files=("fix.py",),
-            check_results=(
-                CheckResult("cause", True, ("proof",)),
-                CheckResult("repair", True),
-                CheckResult("security", False),
-            ),
-            claimed_verdict=Verdict.PASS,
-        )
-        scored = score(
-            challenge,
-            result,
-            expected_source_revision="a" * 40,
-            elapsed_wall_seconds=1,
-            verified_evidence_refs=frozenset({"proof"}),
-        )
+        scored = self.grade(challenge)
         self.assertTrue(scored.dimension_coverage[EngineeringDimension.CAUSAL_DEBUGGING])
         self.assertFalse(scored.dimension_coverage[EngineeringDimension.SECURITY_REASONING])
         self.assertEqual(scored.verdict, Verdict.FAIL)

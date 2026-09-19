@@ -1,12 +1,14 @@
 """Deterministic contracts for Lil' Tueeq Engineering IQ evaluation.
 
 The reasoning model may attempt a challenge, but it never owns challenge secrecy,
-source binding, evidence verification, budgets, dimension proof, or the verdict.
+source binding, evidence verification, budgets, dimension proof, provenance, or verdict.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import hashlib
+import json
 import math
 from pathlib import PurePosixPath
 import re
@@ -18,6 +20,8 @@ _MAX_TOKEN = 128
 _MAX_TEXT = 4_000
 _MAX_ITEMS = 256
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_REVISION = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
 
 class EngineeringDimension(StrEnum):
@@ -43,6 +47,18 @@ class Verdict(StrEnum):
 
 def _token(value: object, code: str) -> str:
     if not isinstance(value, str) or not _TOKEN.fullmatch(value):
+        raise ValueError(code)
+    return value
+
+
+def _digest(value: object, code: str) -> str:
+    if not isinstance(value, str) or not _SHA256.fullmatch(value):
+        raise ValueError(code)
+    return value
+
+
+def _revision(value: object, code: str) -> str:
+    if not isinstance(value, str) or not _REVISION.fullmatch(value):
         raise ValueError(code)
     return value
 
@@ -165,6 +181,32 @@ class EngineeringChallenge:
         )
 
 
+def challenge_digest(challenge: EngineeringChallenge) -> str:
+    if not isinstance(challenge, EngineeringChallenge):
+        raise ValueError("engineering_iq_challenge_invalid")
+    material = {
+        "challenge_id": challenge.challenge_id,
+        "title": challenge.title,
+        "dimensions": [item.value for item in challenge.dimensions],
+        "public_brief": challenge.public_brief,
+        "required_evidence": list(challenge.required_evidence),
+        "hidden_check_ids": list(challenge.hidden_check_ids),
+        "budget": {
+            "max_attempts": challenge.budget.max_attempts,
+            "max_wall_seconds": challenge.budget.max_wall_seconds,
+            "max_changed_files": challenge.budget.max_changed_files,
+        },
+        "dimension_check_ids": {
+            dimension.value: list(challenge.dimension_check_ids[dimension])
+            for dimension in sorted(challenge.dimension_check_ids, key=lambda item: item.value)
+        },
+    }
+    encoded = json.dumps(
+        material, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class CheckResult:
     check_id: str
@@ -183,8 +225,24 @@ class CheckResult:
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedEvidence:
+    evidence_ref: str
+    challenge_digest: str
+    run_id: str
+    source_revision: str
+
+    def __post_init__(self) -> None:
+        _token(self.evidence_ref, "engineering_iq_evidence_registry_invalid")
+        _digest(self.challenge_digest, "engineering_iq_evidence_registry_invalid")
+        _token(self.run_id, "engineering_iq_run_id_invalid")
+        _revision(self.source_revision, "engineering_iq_evidence_registry_invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class EngineeringIQResult:
     challenge_id: str
+    challenge_digest: str
+    run_id: str
     source_revision: str
     attempts_used: int
     changed_files: tuple[str, ...]
@@ -193,12 +251,9 @@ class EngineeringIQResult:
 
     def __post_init__(self) -> None:
         _token(self.challenge_id, "engineering_iq_result_invalid")
-        if (
-            not isinstance(self.source_revision, str)
-            or len(self.source_revision) not in (40, 64)
-            or any(char not in "0123456789abcdef" for char in self.source_revision)
-        ):
-            raise ValueError("engineering_iq_result_invalid")
+        _digest(self.challenge_digest, "engineering_iq_challenge_digest_invalid")
+        _token(self.run_id, "engineering_iq_run_id_invalid")
+        _revision(self.source_revision, "engineering_iq_result_invalid")
         if type(self.attempts_used) is not int or self.attempts_used < 0:
             raise ValueError("engineering_iq_attempt_count_invalid")
         if not isinstance(self.changed_files, tuple) or len(self.changed_files) > 10_000:
@@ -234,15 +289,29 @@ def _validate_dimension_bindings(challenge: EngineeringChallenge) -> None:
             raise ValueError("engineering_iq_dimension_unbound")
 
 
-def _verified_registry(values: object) -> frozenset[str]:
-    if not isinstance(values, frozenset) or len(values) > _MAX_ITEMS:
+def _verified_registry(
+    values: object,
+    *,
+    digest: str,
+    run_id: str,
+    source_revision: str,
+) -> Mapping[str, VerifiedEvidence]:
+    if not isinstance(values, tuple) or len(values) > _MAX_ITEMS:
         raise ValueError("engineering_iq_evidence_registry_invalid")
-    try:
-        return frozenset(
-            _token(item, "engineering_iq_evidence_registry_invalid") for item in values
-        )
-    except TypeError:
-        raise ValueError("engineering_iq_evidence_registry_invalid") from None
+    registry: dict[str, VerifiedEvidence] = {}
+    for item in values:
+        if not isinstance(item, VerifiedEvidence):
+            raise ValueError("engineering_iq_evidence_registry_invalid")
+        if item.evidence_ref in registry:
+            raise ValueError("engineering_iq_evidence_duplicate")
+        if (
+            item.challenge_digest != digest
+            or item.run_id != run_id
+            or item.source_revision != source_revision
+        ):
+            raise ValueError("engineering_iq_evidence_binding_mismatch")
+        registry[item.evidence_ref] = item
+    return MappingProxyType(registry)
 
 
 def score(
@@ -250,13 +319,22 @@ def score(
     result: EngineeringIQResult,
     *,
     expected_source_revision: str,
+    expected_run_id: str,
     elapsed_wall_seconds: int | float,
-    verified_evidence_refs: frozenset[str],
+    verified_evidence: tuple[VerifiedEvidence, ...],
 ) -> AuthoritativeScore:
     if not isinstance(challenge, EngineeringChallenge) or not isinstance(result, EngineeringIQResult):
         raise ValueError("engineering_iq_input_invalid")
+    _revision(expected_source_revision, "engineering_iq_source_binding_mismatch")
+    _token(expected_run_id, "engineering_iq_run_id_invalid")
+
+    digest = challenge_digest(challenge)
     if result.challenge_id != challenge.challenge_id:
         raise ValueError("engineering_iq_challenge_binding_mismatch")
+    if result.challenge_digest != digest:
+        raise ValueError("engineering_iq_challenge_digest_mismatch")
+    if result.run_id != expected_run_id:
+        raise ValueError("engineering_iq_run_binding_mismatch")
     if result.source_revision != expected_source_revision:
         raise ValueError("engineering_iq_source_binding_mismatch")
     if (
@@ -269,7 +347,12 @@ def score(
     if elapsed_wall_seconds > challenge.budget.max_wall_seconds:
         raise ValueError("engineering_iq_wall_time_exceeded")
 
-    verified = _verified_registry(verified_evidence_refs)
+    verified = _verified_registry(
+        verified_evidence,
+        digest=digest,
+        run_id=expected_run_id,
+        source_revision=expected_source_revision,
+    )
     _validate_dimension_bindings(challenge)
 
     if result.attempts_used < 1 or result.attempts_used > challenge.budget.max_attempts:
