@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-import pytest
+import unittest
 
 from lil_tweak.skill_forge import Decision, ForgeError, Library
 from lil_tweak.skill_forge.package import canonical, parse_json, sha
@@ -82,7 +82,8 @@ def qualified_library() -> tuple[Library, str]:
     return library, digest
 
 
-def test_mini_activation_requires_owner_activation_and_emits_verifiable_envelope():
+class MiniBridgeTests(unittest.TestCase):
+    def test_mini_activation_requires_owner_activation_and_emits_verifiable_envelope(self):
     library, digest = qualified_library()
     token = library.approve("owner-1", digest, "lil-tueiq-mini", "activate")
 
@@ -112,15 +113,15 @@ def test_mini_activation_requires_owner_activation_and_emits_verifiable_envelope
     assert evidence["permission_notice"] == "No credentials or execution permissions are transferred."
 
 
-def test_mini_activation_fails_closed_without_required_tools():
+    def test_mini_activation_fails_closed_without_required_tools(self):
     library, digest = qualified_library()
     token = library.approve("owner-1", digest, "lil-tueiq-mini", "activate")
 
-    with pytest.raises(ForgeError, match="required_tools_missing"):
-        library.activate_for_mini("owner-1", digest, "lil-tueiq-mini", token, ("inspect_file",))
+        with self.assertRaisesRegex(ForgeError, "required_tools_missing"):
+            library.activate_for_mini("owner-1", digest, "lil-tueiq-mini", token, ("inspect_file",))
 
 
-def test_mini_activation_does_not_create_new_authority_fields():
+    def test_mini_activation_does_not_create_new_authority_fields(self):
     library, digest = qualified_library()
     token = library.approve("owner-1", digest, "lil-tueiq-mini", "activate")
     envelope = parse_json(
