@@ -278,7 +278,11 @@ class AuthoritativeScore:
     passed_checks: int
     total_checks: int
     dimension_coverage: Mapping[EngineeringDimension, bool]
+    check_results: Mapping[str, bool]
     evidence_digests: Mapping[str, str]
+    attempts_used: int
+    elapsed_wall_seconds: float
+    changed_files: tuple[str, ...]
     challenge_digest: str
     run_id: str
     source_revision: str
@@ -370,6 +374,7 @@ def score(
             challenge_digest_value=digest,
             run_id=expected_run_id,
             source_revision=expected_source_revision,
+            elapsed_wall_seconds=elapsed_wall_seconds,
         )
     if len(result.changed_files) > challenge.budget.max_changed_files:
         return _fail(
@@ -379,6 +384,7 @@ def score(
             challenge_digest_value=digest,
             run_id=expected_run_id,
             source_revision=expected_source_revision,
+            elapsed_wall_seconds=elapsed_wall_seconds,
         )
 
     by_id = {item.check_id: item for item in result.check_results}
@@ -392,6 +398,7 @@ def score(
             challenge_digest_value=digest,
             run_id=expected_run_id,
             source_revision=expected_source_revision,
+            elapsed_wall_seconds=elapsed_wall_seconds,
         )
 
     claimed_evidence = {ref for item in result.check_results for ref in item.evidence_refs}
@@ -405,6 +412,7 @@ def score(
             challenge_digest_value=digest,
             run_id=expected_run_id,
             source_revision=expected_source_revision,
+            elapsed_wall_seconds=elapsed_wall_seconds,
         )
     if any(required not in claimed_evidence for required in challenge.required_evidence):
         return _fail(
@@ -414,6 +422,7 @@ def score(
             challenge_digest_value=digest,
             run_id=expected_run_id,
             source_revision=expected_source_revision,
+            elapsed_wall_seconds=elapsed_wall_seconds,
         )
 
     passed = sum(1 for item in result.check_results if item.passed)
@@ -434,7 +443,49 @@ def score(
         challenge_digest_value=digest,
         run_id=expected_run_id,
         source_revision=expected_source_revision,
+        result=result,
+        elapsed_wall_seconds=elapsed_wall_seconds,
     )
+
+
+def _score_material(
+    *,
+    verdict: Verdict,
+    passed: int,
+    total: int,
+    coverage: Mapping[EngineeringDimension, bool],
+    checks: Mapping[str, bool],
+    evidence_digests: Mapping[str, str],
+    attempts_used: int,
+    elapsed_wall_seconds: float,
+    changed_files: tuple[str, ...],
+    challenge_digest_value: str,
+    run_id: str,
+    source_revision: str,
+) -> dict[str, object]:
+    return {
+        "verdict": verdict.value,
+        "passed_checks": passed,
+        "total_checks": total,
+        "dimension_coverage": {
+            dimension.value: bool(coverage[dimension])
+            for dimension in sorted(coverage, key=lambda item: item.value)
+        },
+        "check_results": {check_id: bool(checks[check_id]) for check_id in sorted(checks)},
+        "evidence_digests": {ref: evidence_digests[ref] for ref in sorted(evidence_digests)},
+        "attempts_used": attempts_used,
+        "elapsed_wall_seconds": elapsed_wall_seconds,
+        "changed_files": list(changed_files),
+        "challenge_digest": challenge_digest_value,
+        "run_id": run_id,
+        "source_revision": source_revision,
+    }
+
+
+def _receipt_digest(material: Mapping[str, object]) -> str:
+    return hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
 
 
 def _make_score(
@@ -447,33 +498,70 @@ def _make_score(
     challenge_digest_value: str,
     run_id: str,
     source_revision: str,
+    result: EngineeringIQResult,
+    elapsed_wall_seconds: int | float,
 ) -> AuthoritativeScore:
-    coverage_dict = {dimension: bool(coverage[dimension]) for dimension in sorted(coverage, key=lambda item: item.value)}
-    evidence_dict = {ref: evidence[ref].evidence_sha256 for ref in sorted(evidence)}
-    material = {
-        "verdict": verdict.value,
-        "passed_checks": passed,
-        "total_checks": total,
-        "dimension_coverage": {dimension.value: coverage_dict[dimension] for dimension in coverage_dict},
-        "evidence_digests": evidence_dict,
-        "challenge_digest": challenge_digest_value,
-        "run_id": run_id,
-        "source_revision": source_revision,
+    coverage_dict = {
+        dimension: bool(coverage[dimension])
+        for dimension in sorted(coverage, key=lambda item: item.value)
     }
-    receipt = hashlib.sha256(
-        json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    ).hexdigest()
+    check_dict = {
+        item.check_id: item.passed
+        for item in sorted(result.check_results, key=lambda item: item.check_id)
+    }
+    evidence_dict = {ref: evidence[ref].evidence_sha256 for ref in sorted(evidence)}
+    elapsed = float(elapsed_wall_seconds)
+    material = _score_material(
+        verdict=verdict,
+        passed=passed,
+        total=total,
+        coverage=coverage_dict,
+        checks=check_dict,
+        evidence_digests=evidence_dict,
+        attempts_used=result.attempts_used,
+        elapsed_wall_seconds=elapsed,
+        changed_files=result.changed_files,
+        challenge_digest_value=challenge_digest_value,
+        run_id=run_id,
+        source_revision=source_revision,
+    )
     return AuthoritativeScore(
         verdict=verdict,
         passed_checks=passed,
         total_checks=total,
         dimension_coverage=MappingProxyType(coverage_dict),
+        check_results=MappingProxyType(check_dict),
         evidence_digests=MappingProxyType(evidence_dict),
+        attempts_used=result.attempts_used,
+        elapsed_wall_seconds=elapsed,
+        changed_files=result.changed_files,
         challenge_digest=challenge_digest_value,
         run_id=run_id,
         source_revision=source_revision,
-        score_digest=receipt,
+        score_digest=_receipt_digest(material),
     )
+
+
+def verify_score(score_value: AuthoritativeScore) -> bool:
+    if not isinstance(score_value, AuthoritativeScore):
+        raise ValueError("engineering_iq_score_invalid")
+    material = _score_material(
+        verdict=score_value.verdict,
+        passed=score_value.passed_checks,
+        total=score_value.total_checks,
+        coverage=score_value.dimension_coverage,
+        checks=score_value.check_results,
+        evidence_digests=score_value.evidence_digests,
+        attempts_used=score_value.attempts_used,
+        elapsed_wall_seconds=score_value.elapsed_wall_seconds,
+        changed_files=score_value.changed_files,
+        challenge_digest_value=score_value.challenge_digest,
+        run_id=score_value.run_id,
+        source_revision=score_value.source_revision,
+    )
+    if _receipt_digest(material) != score_value.score_digest:
+        raise ValueError("engineering_iq_score_digest_mismatch")
+    return True
 
 
 def _fail(
@@ -484,6 +572,7 @@ def _fail(
     challenge_digest_value: str,
     run_id: str,
     source_revision: str,
+    elapsed_wall_seconds: int | float,
 ) -> AuthoritativeScore:
     passed = sum(1 for item in result.check_results if item.passed)
     return _make_score(
@@ -495,4 +584,6 @@ def _fail(
         challenge_digest_value=challenge_digest_value,
         run_id=run_id,
         source_revision=source_revision,
+        result=result,
+        elapsed_wall_seconds=elapsed_wall_seconds,
     )
