@@ -209,6 +209,20 @@ class RecoveryPersistenceStress(unittest.TestCase):
             FROM recovery_history WHERE sequence=2""")
         self.assert_corruption_blocks_authority(decision)
 
+    def test_ten_thousand_failed_checks_are_rejected_before_persistence(self):
+        store = self.open_store()
+        decision = make_decision()
+        checks = tuple(f"check-{index}" for index in range(10_000))
+        with self.assertRaises(ValueError):
+            store.append_decision(decision, failed_checks=checks)
+        self.assertEqual(store.list("stress-owner"), [])
+
+    def test_oversized_persisted_check_array_blocks_authority(self):
+        decision = self.seed()
+        payload = "[" + ",".join(f'"check-{index}"' for index in range(10_000)) + "]"
+        self.mutate("UPDATE recovery_history SET remaining_failed_checks=?", (payload,))
+        self.assert_corruption_blocks_authority(decision)
+
     def test_corruption_in_one_owner_does_not_rewrite_another_owner(self):
         self.seed(outcome=True)
         store = self.open_store()
