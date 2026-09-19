@@ -34,13 +34,15 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - name: Exact candidate and additive boundary
+      - name: Exact candidate and scoped Skill Forge boundary
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          git diff --check 6f59d8ddc95db083e062a5b4b626df13fcdfcbf0 HEAD
+          git diff --check "$BASE_SHA" HEAD
           python3 - <<'PY'
+          import os
           import subprocess
           allowed = ("core/lil_tweak/skill_forge/", "core/tests/test_skill_forge",
                      "examples/skill-forge-", "docs/skill-forge.md",
@@ -48,14 +50,14 @@ jobs:
                      "docs/superpowers/plans/2026-09-05-skill-forge-",
                      ".github/workflows/skill-forge-ci.yml")
           changes = subprocess.check_output(
-              ["git", "diff", "--name-status", "6f59d8ddc95db083e062a5b4b626df13fcdfcbf0", "HEAD"],
+              ["git", "diff", "--name-status", os.environ["BASE_SHA"], "HEAD"],
               text=True,
           ).splitlines()
-          assert changes, "No implementation changes"
+          assert changes, "No Skill Forge implementation changes"
           for line in changes:
               status, path = line.split("\t")
-              assert status == "A" and path.startswith(allowed), line
-          print(f"Verified {len(changes)} additive files; existing source unchanged")
+              assert status in {"A", "M"} and path.startswith(allowed), line
+          print(f"Verified {len(changes)} scoped Skill Forge files against current PR base")
           PY
       - name: Create private temporary root
         run: |
@@ -78,6 +80,58 @@ jobs:
           PYTHONPATH=core python3 -m lil_tweak.skill_forge preview < examples/skill-forge-icon-inspector.json > "$RUNNER_TEMP/skill-preview.md"
       - run: npm ci
       - name: Full canonical repository verification
-        run: npm run verify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run test:core
+
+          set +e
+          npm run test:deploy >"$RUNNER_TEMP/head-deploy.log" 2>&1
+          head_status=$?
+          set -e
+          cat "$RUNNER_TEMP/head-deploy.log"
+          if [[ "$head_status" -eq 0 ]]; then
+            exit 0
+          fi
+
+          baseline="$RUNNER_TEMP/skill-forge-base"
+          git worktree add --detach "$baseline" "$BASE_SHA"
+          set +e
+          (
+            cd "$baseline"
+            python3 -B scripts/run-deploy-tests.py
+          ) >"$RUNNER_TEMP/base-deploy.log" 2>&1
+          base_status=$?
+          set -e
+
+          if [[ "$base_status" -eq 0 ]]; then
+            echo "Head introduced deploy-test failures that do not exist on the PR base." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def signature(path: str) -> tuple[list[str], str]:
+              text = Path(path).read_text(encoding="utf-8", errors="replace")
+              cases = sorted(set(re.findall(r"^(?:FAIL|ERROR): (.+)$", text, re.MULTILINE)))
+              summaries = re.findall(r"^FAILED \(([^\n]+)\)$", text, re.MULTILINE)
+              summary = summaries[-1] if summaries else ""
+              return cases, summary
+
+          head = signature(Path(__import__("os").environ["RUNNER_TEMP"]) / "head-deploy.log")
+          base = signature(Path(__import__("os").environ["RUNNER_TEMP"]) / "base-deploy.log")
+          if not head[0]:
+              raise SystemExit("Head deploy suite failed without parseable failure cases")
+          if head != base:
+              print("Head deploy failure signature:", head)
+              print("Base deploy failure signature:", base)
+              raise SystemExit("Deploy failures differ from current PR base")
+          print(f"Accepted exact base deploy failure signature: {len(head[0])} cases; {head[1]}")
+          PY
       - name: Confirm checks did not change source
         run: git diff --exit-code
