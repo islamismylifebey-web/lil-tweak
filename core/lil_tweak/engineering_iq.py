@@ -76,10 +76,10 @@ def _changed_path(value: object) -> str:
     if not isinstance(value, str) or not value or len(value) > 512 or chr(92) in value:
         raise ValueError("engineering_iq_changed_path_invalid")
     path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or "." in path.parts:
+    if value == "." or path.is_absolute() or ".." in path.parts or "." in path.parts:
         raise ValueError("engineering_iq_changed_path_invalid")
     normalized = path.as_posix()
-    if normalized != value or normalized.startswith("/"):
+    if normalized == "." or normalized != value or normalized.startswith("/"):
         raise ValueError("engineering_iq_changed_path_invalid")
     return normalized
 
@@ -187,17 +187,17 @@ def challenge_digest(challenge: EngineeringChallenge) -> str:
     material = {
         "challenge_id": challenge.challenge_id,
         "title": challenge.title,
-        "dimensions": [item.value for item in challenge.dimensions],
+        "dimensions": sorted(item.value for item in challenge.dimensions),
         "public_brief": challenge.public_brief,
-        "required_evidence": list(challenge.required_evidence),
-        "hidden_check_ids": list(challenge.hidden_check_ids),
+        "required_evidence": sorted(challenge.required_evidence),
+        "hidden_check_ids": sorted(challenge.hidden_check_ids),
         "budget": {
             "max_attempts": challenge.budget.max_attempts,
             "max_wall_seconds": challenge.budget.max_wall_seconds,
             "max_changed_files": challenge.budget.max_changed_files,
         },
         "dimension_check_ids": {
-            dimension.value: list(challenge.dimension_check_ids[dimension])
+            dimension.value: sorted(challenge.dimension_check_ids[dimension])
             for dimension in sorted(challenge.dimension_check_ids, key=lambda item: item.value)
         },
     }
